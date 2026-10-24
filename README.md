@@ -71,7 +71,7 @@ Sessions last 30 days and renew while in use. App updates that add database fiel
 ```bash
 python -m pytest -q
 ```
-There are 59 tests covering:
+There are 60 tests covering:
 - safety: injection blocking, invented-course removal and spend caps
 - accounts and web security: login enumeration, CSRF and the CSP header
 - planning rules: clash logic, spring core units, the 16-unit window, non-MBA programs, Global Studies data, the make-up day, and planned-vs-done requirements
@@ -100,6 +100,7 @@ The dev UI runs on http://127.0.0.1:5173 and forwards `/api` to `API_PORT` (defa
 | **Dan's Desk** (home) | A 2–3 sentence brief written by the Chief of Staff agent *only* from decision cards that code computes (clashes, the 16-unit minimum, SOM deadlines, Global Studies, Leadership, bid split). Each card has a due date, a cited source, and approve / snooze / done. Below it: **best fits**, ranked in code with a label (Strong fit / Good fit / Worth a look), up to two reasons, demand shown separately, "Not for me", and a "Why?" panel quoting the course description. A side pane shows what's next, plan meters and an **undoable action log**. |
 | 🎓 **Every SOM program** | Rules from the 2026–27 Yale Bulletin for the full-time MBA, joint-degree MBA, MBA for Executives, MAM, every MMS track (Asset Management, Global Business & Society, Systemic Risk, Technology Management, Public Education Management), and PhD students. Each program gets its own course eligibility, unit limits, required-course checklist and calendar. Gaps in the official data are listed in `docs/programs_data_audit.md`. |
 | ✨ **Find my courses** | A 5-step quiz (program, background, interests, short- and long-term goals, schedule vibe) leads to a shortlist of real courses. Each pick comes with a reason, a quoted line from the course description, a clash check, and backups in the same slot. |
+| 🐶 **Dan, on every page** | A floating chat with the bulldog in the corner of every page, including the public home page. Signed-in students get the full plan-aware Dan. Visitors can ask about courses, programs or AI news without an account: nothing is stored, each IP gets 15 questions a day, and all visitors share a $1/day budget (`PUBLIC_MESSAGES_PER_DAY`, `PUBLIC_DAILY_BUDGET_USD`). |
 | 🐶 **Ask Dan** | Chat that routes each question to one specialist: Course Scout, Planner, Bid Coach, Career Coach or SOM Guide. Specialists use tools that read real data and can offer one-click "add to plan" buttons.<ul><li>**Personal:** every answer sees your program, goals and plan.</li><li>**Memory:** Dan remembers the whole conversation. Older turns are folded into a summary by a Memory Keeper agent, and lasting facts about you are kept. You can see and delete those facts.</li><li>**Honest:** when the catalog and the sourced Yale facts base don't cover a question, Dan says "I don't know" and links the official page.</li></ul> |
 | 📰 **AI News Desk** | Answers about current AI news using web search, with sources, and finishes with the SOM course where you can learn the topic. |
 | 🗓️ **My plan** | A weekly timetable with session-1 and session-2 views, clash detection based on real session dates, section switching, a unit check (16-unit minimum, approval needed above 24), and status tracking (planned, bidding, enrolled, completed). |

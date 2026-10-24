@@ -38,6 +38,9 @@ STORAGE_IS_EPHEMERAL = ON_HOSTED_PLATFORM and DATABASE_URL.startswith("sqlite")
 # Spend guard rails (USD). Per chat turn, and per student per day.
 RUN_BUDGET_USD = float(os.getenv("RUN_BUDGET_USD", "0.05"))
 DAILY_BUDGET_USD = float(os.getenv("DAILY_BUDGET_USD", "0.50"))
+# Visitors (not signed in) share one daily pool, and each IP gets a few questions a day.
+PUBLIC_DAILY_BUDGET_USD = float(os.getenv("PUBLIC_DAILY_BUDGET_USD", "1.00"))
+PUBLIC_MESSAGES_PER_DAY = int(os.getenv("PUBLIC_MESSAGES_PER_DAY", "15"))
 MAX_MODEL_REQUESTS = int(os.getenv("MAX_MODEL_REQUESTS", "12"))
 MAX_MESSAGE_CHARS = 2000
 

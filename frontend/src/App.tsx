@@ -3,6 +3,7 @@ import { Ellipsis, LogOut, Search, Shield, UserRound } from 'lucide-react'
 import { api } from './api'
 import CommandPalette from './components/CommandPalette'
 import CourseDrawer from './components/CourseDrawer'
+import DanChat from './components/DanChat'
 import HandsomeDan from './mascots/HandsomeDan'
 import { NAV } from './nav'
 import Bids from './pages/Bids'
@@ -142,6 +143,7 @@ function Shell() {
       )}
       <CommandPalette open={cmdk} onClose={() => setCmdk(false)} onOpenCourse={setDrawerKey} />
       {drawerKey && <CourseDrawer courseKey={drawerKey} onClose={closeDrawer} />}
+      <DanChat />
       <Celebration />
       <Toasts />
     </div>

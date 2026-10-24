@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { api, type ProgramsInfo, type Section } from '../api'
 import Timetable, { sectionsClash } from '../components/Timetable'
+import DanChat from '../components/DanChat'
 import { Overlay } from '../components/ui'
 import HandsomeDan from '../mascots/HandsomeDan'
 import { prettyDate, relDays, daysUntil, TERM_NAMES } from '../lib/format'
@@ -414,6 +415,7 @@ export default function Landing() {
         <span className="faint">Independent student project, not an official Yale tool.</span>
       </footer>
 
+      <DanChat onSignup={() => setAuth('signup')} />
       {auth && <AuthDialog initial={auth} onClose={() => setAuth(null)} />}
     </div>
   )

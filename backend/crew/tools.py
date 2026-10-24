@@ -113,7 +113,7 @@ def yale_facts(ctx: RunContext[StudentContext], question: str) -> str:
     """
     if not _log(ctx, "yale_facts", question=question):
         return LOOP_MSG
-    program = _program(ctx.deps)
+    program = ctx.deps.profile.get("program")  # None for visitors: search every program
     hits = knowledge.search(question, program)
     if not hits:
         links = "\n".join(f"- {name}: {url}" for name, url in knowledge.links_for(program))

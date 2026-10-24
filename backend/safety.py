@@ -21,7 +21,7 @@ from datetime import timedelta
 
 from sqlmodel import Session, func, select
 
-from config import DAILY_BUDGET_USD, MAX_MESSAGE_CHARS, RUN_BUDGET_USD
+from config import DAILY_BUDGET_USD, MAX_MESSAGE_CHARS, PUBLIC_DAILY_BUDGET_USD, RUN_BUDGET_USD
 from db import UsageLog, utcnow
 
 # ---------------------------------------------------------------- 1. input screen
@@ -118,6 +118,13 @@ class BudgetExceeded(Exception):
     pass
 
 
+def public_spent_today(db: Session) -> float:
+    since = utcnow() - timedelta(days=1)
+    total = db.exec(select(func.coalesce(func.sum(UsageLog.cost_usd), 0.0)).where(
+        UsageLog.user_id.is_(None), UsageLog.feature == "public", UsageLog.created_at >= since)).one()
+    return float(total or 0.0)
+
+
 def spent_today(db: Session, user_id: int) -> float:
     since = utcnow() - timedelta(days=1)
     total = db.exec(
@@ -141,7 +148,17 @@ class SpendGuard:
         before = spent_today(db, user_id) if user_id else 0.0
         return cls(user_id=user_id, spent_before=before)
 
+    public: bool = False
+
+    @classmethod
+    def for_public(cls, db: Session) -> "SpendGuard":
+        """All visitors share one daily pool (PUBLIC_DAILY_BUDGET_USD)."""
+        return cls(user_id=None, daily_budget=PUBLIC_DAILY_BUDGET_USD, spent_before=public_spent_today(db), public=True)
+
     def check(self, stage: str = "") -> None:
+        if self.public and self.spent_before + self.spent_run >= self.daily_budget:
+            raise BudgetExceeded("Dan has answered all the visitor questions he can for today. Create a free account "
+                                 "to keep chatting: signed-in students get their own daily budget.")
         if self.spent_before + self.spent_run >= self.daily_budget:
             raise BudgetExceeded(
                 f"Daily AI budget reached (${self.daily_budget:.2f} per student per day). "

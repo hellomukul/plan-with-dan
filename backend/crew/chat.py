@@ -67,10 +67,15 @@ def _mark_blocked(db: Session, msg: ChatMessage | None) -> None:
 
 
 async def run_turn(db: Session, user_id: int | None, message: str, mode: str = "dan",
-                   queue: asyncio.Queue | None = None) -> dict:
-    """mode 'dan' routes freely; mode 'news' always goes to the AI News Desk."""
-    run = Run(db=db, user_id=user_id, feature="news" if mode == "news" else "chat",
-              guard=SpendGuard.for_user(db, user_id), queue=queue)
+                   queue: asyncio.Queue | None = None, visitor_history: list[dict] | None = None) -> dict:
+    """mode 'dan' routes freely; mode 'news' always goes to the AI News Desk.
+
+    visitor_history is set for people who aren't signed in: their recent turns come from the
+    browser (nothing is stored), and they share the public daily budget.
+    """
+    visitor = user_id is None and visitor_history is not None
+    run = Run(db=db, user_id=user_id, feature="public" if visitor else "news" if mode == "news" else "chat",
+              guard=SpendGuard.for_public(db) if visitor else SpendGuard.for_user(db, user_id), queue=queue)
     known = {s.number.upper() for s in get_catalog().sections}
     result = {"answer": "", "agent": None, "proposals": [], "blocked": False, "safety": []}
 
@@ -97,6 +102,14 @@ async def run_turn(db: Session, user_id: int | None, message: str, mode: str = "
     # Blocked messages (and Dan's refusals of them) never go back into a prompt.
     history = memory.context_block(db, user_id, mode, exclude_id=user_msg.id if user_msg else None)
     card = f"STUDENT:\n{student_card(ctx)}\n" if user_id else ""
+    if visitor:
+        turns = [t for t in visitor_history[-8:] if t.get("role") in ("user", "assistant")]
+        lines = [f"{t['role']}: {str(t.get('content', ''))[:1000]}" for t in turns]
+        history = ("RECENT MESSAGES (from the visitor's browser, oldest first):\n"
+                   + fence("\n".join(lines), "recent_chat", limit=9000)) if lines else ""
+        card = ("STUDENT: a visitor who is NOT signed in. You don't know their program, year or plan; ask if it "
+                "matters, and mention that a free account lets Dan save a plan and check it against their rules. "
+                "Don't call suggest_add.\n")
     today = date.today().isoformat()
 
     try:
@@ -122,7 +135,7 @@ async def run_turn(db: Session, user_id: int | None, message: str, mode: str = "
         )
         answer = await run.call(agent, prompt, name=label, deps=ctx, requests=3 if chosen == "news_desk" else None,
                               web_searches=2 if chosen == "news_desk" else 0)
-        result.update(answer=str(answer.output), agent=label, proposals=ctx.proposals)
+        result.update(answer=str(answer.output), agent=label, proposals=[] if visitor else ctx.proposals)
         if chosen == "news_desk" and "http" not in result["answer"]:
             run.audit("news_without_sources")
             result["answer"] += "\n\n> I couldn't attach source links this time — treat this as unverified and check a news site."

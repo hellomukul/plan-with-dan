@@ -142,6 +142,15 @@ def add_entries(entries: list[dict]) -> None:
     KB.extend(entries)
 
 
+ALIASES = {
+    "MBA": "mba full-time fulltime", "MBA-JOINT": "joint dual degree jd mph mem law medicine",
+    "EMBA": "emba executives executive weekend", "MAM": "mam advanced management global network",
+    "MMS-AM": "mms asset management am", "MMS-GBS": "mms gbs global business society",
+    "MMS-SR": "mms systemic risk sr central banking", "MMS-TM": "mms technology management tm",
+    "MMS-PEM": "mms pem public education management", "PhD": "phd doctoral doctorate",
+}
+
+
 def _program_entries() -> list[dict]:
     from programs import PROGRAMS
     out = []
@@ -157,7 +166,8 @@ def _program_entries() -> list[dict]:
         out.append({"id": f"program-{code.lower()}", "programs": audience,
                     "title": f"{prog['label']} degree requirements",
                     "text": text, "url": prog["sources"][0],
-                    "keywords": "degree requirements units graduate required courses track program electives calendar global"})
+                    "keywords": "degree requirements units graduate required courses track program electives calendar global "
+                                + ALIASES.get(code, "")})
     return out
 
 

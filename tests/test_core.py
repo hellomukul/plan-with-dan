@@ -559,3 +559,17 @@ def test_public_programs_endpoint_needs_no_login(client):
     codes = {p["code"] for p in r["programs"]}
     assert {"MBA", "EMBA", "MAM", "MMS-AM", "MMS-GBS", "MMS-SR", "MMS-TM", "MMS-PEM", "MBA-JOINT", "PhD"} == codes
     assert r["upcoming"] and all(p["sources"] for p in r["programs"])
+
+
+def test_visitor_chat_needs_no_login_and_is_capped(client):
+    import main as app_main
+    from datetime import date
+    fresh = client.__class__(client.app)
+    r = fresh.post("/api/chat/public", json={"message": "What does the MAM program require?", "history": []})
+    assert r.status_code == 200 and "remaining_today" in r.json()
+    app_main._visitor_counts["testclient"] = (date.today().isoformat(), app_main.PUBLIC_MESSAGES_PER_DAY)
+    limited = fresh.post("/api/chat/public", json={"message": "one more?", "history": []}).json()
+    assert limited["limited"] is True
+    app_main._visitor_counts.clear()
+    import knowledge
+    assert knowledge.search("What does the MAM program require?", None)[0]["id"] == "program-mam"

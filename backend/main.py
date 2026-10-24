@@ -29,7 +29,9 @@ from sqlmodel import Session, func, select  # noqa: E402
 import auth  # noqa: E402
 from auth import current_user, limiter  # noqa: E402
 from catalog import TERM_NAMES, TOPIC_RULES, get_catalog  # noqa: E402
-from config import DAILY_BUDGET_USD, MODEL_NAME, ROOT, RUN_BUDGET_USD, ai_available  # noqa: E402
+from config import (  # noqa: E402
+    DAILY_BUDGET_USD, MODEL_NAME, PUBLIC_MESSAGES_PER_DAY, ROOT, RUN_BUDGET_USD, ai_available,
+)
 from crew import memory as chat_memory  # noqa: E402
 from crew.chat import run_turn, stream_turn  # noqa: E402
 from crew.desk import apply_states, brief as desk_brief, scan as desk_scan, set_state as set_desk_state  # noqa: E402
@@ -660,6 +662,36 @@ def _sse(gen):
             yield f"event: {event['type']}\ndata: {json.dumps(event['data'], default=str)}\n\n"
     return StreamingResponse(stream(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+class VisitorTurn(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(max_length=4000)
+
+
+class PublicChatIn(BaseModel):
+    message: str = Field(max_length=2000)
+    history: list[VisitorTurn] = Field(default_factory=list, max_length=12)
+
+
+_visitor_counts: dict[str, tuple[str, int]] = {}  # ip -> (day, questions); per process, which is fine for one instance
+
+
+@app.post("/api/chat/public")
+@limiter.limit("6/minute")
+async def chat_public(request: Request, body: PublicChatIn, db: Session = Depends(get_db)):
+    """Dan for visitors who aren't signed in: no stored data, a few questions per day, a shared budget."""
+    ip = request.client.host if request.client else "unknown"
+    day = date.today().isoformat()
+    seen_day, count = _visitor_counts.get(ip, (day, 0))
+    count = count if seen_day == day else 0
+    if count >= PUBLIC_MESSAGES_PER_DAY:
+        return {"answer": f"That's {PUBLIC_MESSAGES_PER_DAY} questions today, the limit for visitors. Create a free "
+                          "account to keep going: Dan will also remember your goals and check courses against your plan.",
+                "agent": None, "proposals": [], "blocked": False, "safety": ["visitor_limit"], "limited": True}
+    _visitor_counts[ip] = (day, count + 1)
+    result = await run_turn(db, None, body.message, "dan", visitor_history=[t.model_dump() for t in body.history])
+    return {**result, "remaining_today": PUBLIC_MESSAGES_PER_DAY - count - 1}
 
 
 @app.post("/api/chat/stream")

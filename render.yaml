@@ -5,6 +5,7 @@ services:
     name: plan-with-dan
     runtime: python
     plan: free
+    region: ohio         # same AWS region as the Neon database (us-east-2), so each query is ~1 ms, not ~70 ms
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips='*'
     healthCheckPath: /api/health

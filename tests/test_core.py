@@ -11,7 +11,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend"))
-os.environ["DATABASE_URL"] = "sqlite:///" + str(ROOT / "data" / "test_app.db")
+# Offline by default. Set TEST_DATABASE_URL to run the same suite against an EMPTY Postgres database.
+os.environ["DATABASE_URL"] = os.getenv("TEST_DATABASE_URL") or "sqlite:///" + str(ROOT / "data" / "test_app.db")
 os.environ["PORTKEY_API_KEY"] = ""
 os.environ["OPENAI_API_KEY"] = ""
 
@@ -499,7 +500,8 @@ def test_old_database_gets_new_columns(tmp_path):
 
 
 def test_health_reports_storage(client):
-    assert client.get("/api/health").json()["storage"]["engine"] == "sqlite"
+    expected = "postgres" if os.getenv("TEST_DATABASE_URL") else "sqlite"
+    assert client.get("/api/health").json()["storage"]["engine"] == expected
 
 
 def test_every_program_sees_its_own_courses():

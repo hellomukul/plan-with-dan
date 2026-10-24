@@ -107,3 +107,20 @@ All P0 and P1 bugs from `docs/persona_testing.md` were fixed. Tests went from 35
 - Spring 2027 courses visible per program: MAM 2 → 88, MMS tracks about 90, EMBA 10, PhD 109.
 - Gaps in the official data are in `docs/programs_data_audit.md`.
 - Tests: 49 → 58.
+
+## Oct 24 (late night): Postgres on Neon
+
+- Connected to Neon (PostgreSQL 18.6, AWS us-east-2, session timezone UTC). `init_db` created all 15 tables.
+- **Migration on Postgres:** dropped `globalchoice.note` and `profile.onboarded`. On restart both came back, with defaults `''` and `false`.
+- **Full test suite on Neon:** `TEST_DATABASE_URL=… pytest`, **58/58 passed** in 54 s. The slowness is laptop-to-Ohio round trips; the same suite takes 1.5 s on SQLite.
+- **Backup and restore:** backed up Neon to JSON, truncated it, and restored. Every table came back. A new signup afterwards got id 10 with no sequence conflict, plan add and login worked, and the session expiry read back as 30.00 days, so timestamps round-trip in UTC.
+- **Speed from the laptop:**
+
+  | Page | Queries | Time |
+  |---|---|---|
+  | Plan | 5 | 0.40 s |
+  | Best fits | 7 | 0.57 s |
+  | Desk (cached brief) | 8 | 0.58 s |
+
+  `render.yaml` now pins Render to Ohio, next to Neon.
+- **Cleanup:** all test rows were removed. Neon is empty except the 48 SAMPLE bid rows the app seeds on startup.

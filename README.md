@@ -53,9 +53,11 @@ uvicorn backend.main:app --port 8000
 **Hosting it for friends (keep their accounts safe)**
 
 Render's free disk is wiped on every deploy, restart or idle spin-down. A SQLite file there would lose every account, so online the app must use a managed Postgres:
-1. Create a free database at [neon.tech](https://neon.tech). It has no expiry; Render's own free Postgres is deleted after 30 days. Copy its connection string.
+1. Create a free database at [neon.tech](https://neon.tech) in AWS US East (Ohio), the same region as `render.yaml`. It has no expiry; Render's own free Postgres is deleted after 30 days. Copy its connection string.
 2. In Render, go to **Environment** and set `DATABASE_URL` to that string. `/api/health` should then show `"storage": {"engine": "postgres"}`.
 3. Optional: move your local data first. Run `python scripts/db_tools.py backup` locally, then run `python scripts/db_tools.py restore backups/<file>.json` with `DATABASE_URL` pointing at Neon.
+
+To check the app against Postgres, run the whole test suite on an **empty** database: `TEST_DATABASE_URL=<url> python -m pytest -q`. It passed 58/58 on Neon (PostgreSQL 18) on Oct 24, 2026.
 
 Owner tools (`scripts/db_tools.py`):
 - `stats`: row counts.

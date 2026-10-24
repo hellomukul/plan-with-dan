@@ -61,13 +61,17 @@ async def _rate_limited(_request: Request, _exc: RateLimitExceeded):
     return JSONResponse({"detail": "Too many attempts. Wait a minute and try again."}, status_code=429)
 
 
+# The Vite dev server (npm run dev) proxies /api from another port; production is same-origin.
+DEV_ORIGINS = {"http://127.0.0.1:5173", "http://localhost:5173"}
+
+
 @app.middleware("http")
 async def guard_requests(request: Request, call_next):
     """CSRF defence for cookie auth: unsafe API calls must come from our own origin."""
     if request.method not in ("GET", "HEAD", "OPTIONS") and request.url.path.startswith("/api/"):
         origin = request.headers.get("origin")
         host = request.headers.get("x-forwarded-host") or request.headers.get("host", "")
-        if origin and origin.split("://", 1)[-1] != host:
+        if origin and origin.split("://", 1)[-1] != host and origin not in DEV_ORIGINS:
             return JSONResponse({"detail": "Cross-site request blocked."}, status_code=403)
     response = await call_next(request)
     response.headers.setdefault("X-Content-Type-Options", "nosniff")

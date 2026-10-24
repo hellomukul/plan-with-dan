@@ -1,0 +1,21 @@
+# Render Blueprint: one web service. FastAPI serves the API and the built React app,
+# so login cookies are same-origin. Connect the repo in Render → New → Blueprint.
+services:
+  - type: web
+    name: plan-with-dan
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips='*'
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.13.5
+      - key: PORTKEY_API_KEY
+        sync: false        # paste your key in the Render dashboard; never commit it
+      - key: MODEL_NAME
+        value: gpt-6-luna
+      - key: SECURE_COOKIES
+        value: "true"
+      - key: DATABASE_URL
+        sync: false        # optional: a Neon Postgres URL so accounts survive restarts

@@ -210,7 +210,7 @@ def alternates(target: Offering, chosen: list[Section], catalog: Catalog, n: int
         if not overlap and score < 2:
             continue
         sec = best_section(off, [s for s in chosen if s.offering_key != target.key], prefs)
-        if not sec:
+        if not sec or (prefs and not respects_prefs(sec, prefs)):
             continue
         out.append({
             "key": off.key,
@@ -232,12 +232,17 @@ def bid_stats(reports: list[dict]) -> dict:
     """Summarise reported bid outcomes for one course. Never invents numbers."""
     if not reports:
         return {"reports": 0}
+    real = [r for r in reports if r.get("source") != "sample"]
+    sample_count = len(reports) - len(real)
+    if real:  # once students report real outcomes, SAMPLE rows stop counting
+        reports = real
     won = sorted(r["points_bid"] for r in reports if r["got_seat"])
     lost = sorted(r["points_bid"] for r in reports if not r["got_seat"])
     clearing = [r["clearing_points"] for r in reports if r.get("clearing_points") is not None]
     return {
         "reports": len(reports),
         "sample_only": all(r.get("source") == "sample" for r in reports),
+        "sample_reports_ignored": sample_count if real else 0,
         "won": len(won),
         "lost": len(lost),
         "lowest_winning_bid": won[0] if won else None,

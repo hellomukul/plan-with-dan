@@ -1,132 +1,142 @@
 <p align="center">
-  <img src="docs/handsome-dan.svg" alt="A row of seven rainbow-colored Handsome Dan bulldogs in Yale-blue bandanas" width="720">
+  <img src="docs/handsome-dan.svg" alt="Handsome Dan bulldogs" width="560">
 </p>
 
-<h1 align="center">Yale SOM Course Explorer</h1>
+<h1 align="center">Plan with Dan 🐶</h1>
+<p align="center"><b>An AI course-planning crew for Yale SOM students.</b><br>
+It finds courses that match your goals, builds a clash-free timetable, plans Global Studies, coaches your bids and syncs your calendar.</p>
 
 <p align="center">
-  Browse every Yale School of Management course as a card, or ask the AI course assistant a question in plain English.
+  <b>Live app:</b> <i>(Render link added at deploy time)</i> ·
+  <b>Report:</b> <code>submission/report.html</code> ·
+  <b>Slides:</b> <code>submission/slides.html</code>
 </p>
 
 ---
 
-## What it does
+## Run it locally (about 3 minutes)
 
-- **Course catalog.** All 234 Yale SOM courses show up as glass-style cards with the course number, title, instructor, meeting time, room, session, units and description. Each card has its own Handsome Dan bulldog, and every course gets a different rainbow coat color.
-- **Search and filter.** Type in the search box to filter by title, number, professor or day. You can also click a category chip such as Core, Finance or Marketing.
-- **Course assistant chat.** Click **Ask the course assistant** in the bottom-right corner. The assistant is an AI agent with two tools:
-  - `search_courses` does semantic search over the course database. The LLM reads the whole catalog and ranks courses by meaning, so a question like "courses about persuading customers" finds *Mastering Influence & Persuasion* even though the words don't match.
-  - `web_search` is OpenAI's built-in web search. The agent uses it for anything the course data doesn't cover, such as faculty news, rankings or research.
+You need **Python 3.11+** and one API key: `PORTKEY_API_KEY` (course key, uses `gpt-6-luna`) or `OPENAI_API_KEY`. Node is **not** needed because the built web app is committed in `frontend/dist`.
 
-  Under each reply you'll see which tools the agent used.
-- **Audit trail.** The app appends every agent run to `output/audit_trail.json`. Each entry records the time, the question, the model's reasoning summary, each tool call with its arguments and a short result, and why the run stopped.
-
-## Tech stack
-
-| Part | Tools |
-|---|---|
-| Frontend | React 19, Vite, TypeScript, `react-markdown` |
-| Backend | FastAPI, uvicorn |
-| Agent | PydanticAI (`pydantic-ai-slim[openai]`) on the OpenAI Responses API |
-| Model | `gpt-6-astra` through the [Portkey](https://portkey.ai) gateway |
-| Data | `data/yale_som_classes.json` (catalog) and `data/yale_som.db` (SQLite, used by the agent) |
-
-## Project layout
-
-```
-.
-├── .env.example            # copy to .env and add your key
-├── data/
-│   ├── yale_som_classes.json
-│   └── yale_som.db         # not in git, see Setup
-├── backend/
-│   ├── main.py             # FastAPI app: /api/health, /api/courses, /api/chat
-│   ├── agent.py            # PydanticAI agent, web search, audit trail
-│   ├── tools.py            # search_courses (LLM semantic search over yale_som.db)
-│   ├── models.py           # Pydantic models (CourseSearchResult, AgentResult, ...)
-│   ├── prompts/prompt.md   # agent system prompt
-│   └── requirements.txt
-├── frontend/
-│   ├── src/
-│   │   ├── App.tsx
-│   │   ├── api.ts
-│   │   ├── index.css       # glassmorphism styles
-│   │   └── components/
-│   │       ├── CourseCard.tsx
-│   │       ├── ChatPanel.tsx
-│   │       └── HandsomeDan.tsx
-│   └── render-dan.mjs      # regenerates docs/handsome-dan.svg
-├── docs/handsome-dan.svg
-└── output/audit_trail.json
+**1. Get the code**
+```bash
+git clone <this-repo-url> plan-with-dan
+cd plan-with-dan
 ```
 
-## Setup
-
-You need **Python 3.12+**, **Node.js 20+** and a **Portkey API key**.
-
-**1. API key.** Copy `.env.example` to `.env` and fill in your key:
-
-```
-PORTKEY_API_KEY=your-portkey-api-key-here
-```
-
-The backend reads `.env` from the project folder or from the folder one level up. Never commit your real `.env`. It's already in `.gitignore`.
-
-**2. Course database.** Put `yale_som.db` in the `data/` folder. `.gitignore` excludes `*.db`, so the file isn't in the repo. The catalog cards still load from `data/yale_som_classes.json` without it, but the agent's `search_courses` tool needs the database.
-
-**3. Backend dependencies.** Run these in PowerShell:
-
-```powershell
-cd backend
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
+**2. Install** (macOS / Linux)
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 ```
+On Windows PowerShell, use `py -m venv .venv`, then `.venv\Scripts\Activate.ps1`, then `pip install -r requirements.txt`.
 
-**4. Frontend dependencies:**
-
-```powershell
-cd frontend
-npm install
+**3. Key.** The app looks for `.env` **in this folder first, then in the folder above it**. If the graders' `.env` sits one level up, there's nothing to do. Otherwise:
+```bash
+cp .env.example .env    # then paste your PORTKEY_API_KEY (or OPENAI_API_KEY)
 ```
 
-## Running the app
-
-Open **two terminals**.
-
-**Terminal 1, backend.** Start this one first:
-
-```powershell
-cd backend
-.\.venv\Scripts\Activate.ps1
-uvicorn main:app --port 8000
+**4. Start it**
+```bash
+uvicorn backend.main:app --port 8000
 ```
 
-**Terminal 2, frontend:**
+**5.** Open **http://localhost:8000**, click **Create account**, and answer the 5-question quiz.
 
-```powershell
-cd frontend
-npm run dev
+**Notes**
+- The database is a local SQLite file (`data/app.db`) and is created automatically on first run.
+- The course data (`data/yale_som_classes.json`, 453 sections, under 1 MB) is in the repo, so no extra dataset is needed.
+- If port 8000 is busy, use `--port 8010` and open that port instead.
+- With no key, the app still runs. Search, planner, calendar, bids and Global Studies all work, and only the AI features say they're offline.
+
+**Run the tests** (offline, no key needed)
+```bash
+python -m pytest -q
+```
+There are 27 tests covering injection blocking, invented-course removal, spend caps, clash logic, auth enumeration, CSRF and calendar feeds.
+
+**Frontend development (optional, needs Node 20+)**
+```bash
+cd frontend && npm install && npm run dev
+```
+The dev UI runs on http://127.0.0.1:5173 and forwards `/api` to `API_PORT` (default 8000). Run `npm run build` to update `frontend/dist`.
+
+## What it does
+
+| Feature | What a student gets |
+|---|---|
+| ✨ **Find my courses** | A 5-step quiz (program, background, interests, short- and long-term goals, schedule vibe) leads to a shortlist of real courses. Each pick comes with a reason, a quoted line from the course description, a clash check, and backups in the same slot. |
+| 🐶 **Ask Dan** | Chat that routes each question to one specialist (Course Scout, Planner, Bid Coach or Career Coach). Specialists use tools that read real data and can offer one-click "add to plan" buttons. |
+| 📰 **AI News Desk** | Answers about current AI news using web search, with sources, and finishes with the SOM course where you can learn the topic. |
+| 🗓️ **My plan** | A weekly timetable with session-1 and session-2 views, clash detection based on real session dates, section switching, a unit check (16-unit minimum, approval needed above 24), and status tracking (planned, bidding, enrolled, completed). |
+| 🌍 **Global studies** | Every way to meet the GSR (IE, GNW, SNOC, GSE, exchange), checked against your 10 funded GSA days, with the matching courses and key dates. |
+| 🎯 **Bid coach** | Splits a points budget by priority and seat demand. Students report their own bid outcomes so real history builds up (demo rows are clearly labelled **SAMPLE**). |
+| 📆 **Calendar** | A month view of classes and SOM deadlines, plus one private subscription link for Google, Outlook and Apple Calendar, or an .ics download. |
+| 🧾 **Cost & safety** | Token counts and dollars for every run, daily budgets, and a log of every safety event. |
+
+## How the agents work
+
+```
+Chat turn:   safety screen ─▶ budget check ─▶ Dispatcher (1 small structured call)
+                                               │ routes to exactly one specialist
+             Course Scout · Planner · Bid Coach · Career Coach · AI News Desk (+web search)
+                                               │ deterministic tools: search_catalog, check_fit,
+                                               │ plan_review, requirements_status, global_options,
+                                               │ bid_history, suggest_bid_split, suggest_add …
+                                               ▼
+             output check (secrets, course numbers not in the catalog) ─▶ answer + "add" buttons
+
+Find my courses: Retriever (code, BM25 on goals) ─▶ Curator agent ─▶ Validator (code)
+                 ─▶ Scheduler (code: clash-free sections + backups) ─▶ Critic agent
 ```
 
-Then open **http://127.0.0.1:5173**. The API docs are at **http://127.0.0.1:8000/docs**.
+- **Model:** `gpt-6-luna` through Portkey. It's the only model the course key allows, and at $0.10 / $0.50 per 1M tokens a typical turn costs under a fifth of a cent.
+- **Facts come from tools; reasoning comes from the model.** Times, clashes, units, requirement status and the GSA budget are always computed in code.
+- **Prompt caching:** every agent's instructions start with the same static primer, so 60–70% of input tokens are billed at the cached rate.
 
-> If the page says "Could not load courses", the backend isn't running yet. Start it and refresh.
+## Safety
 
-## API
+| Risk | Defense (built and tested) |
+|---|---|
+| Prompt injection or data leaks | `screen_input` blocks "ignore your instructions", system-prompt and key requests, other students' data, fake control tags and SQL before any model call, so a blocked attempt costs $0. Untrusted text (descriptions, web pages, notes, chat history) is wrapped in `<untrusted>` fences. Blocked messages are never replayed into later prompts. |
+| Invented courses or facts | The recommender only accepts keys from the shortlist it was given, and removes any "evidence" quote that isn't really in the course description. The chat output is checked for course numbers that aren't in the catalog. |
+| Wrong actions | Agents can only *suggest* plan changes. The student clicks to add. |
+| Loops and overspending | Request limits per agent, a per-tool loop guard, a token cap derived from the remaining budget, $0.05 per turn and $0.50 per student per day (configurable), plus rate limits on login, chat and recommend. |
+| Account security | Argon2id hashes, HttpOnly SameSite session cookies (only the token hash is stored), no account enumeration, a CSRF origin check, and no secrets in the repo. |
 
-| Method | Route | What it does |
-|---|---|---|
-| `GET` | `/api/health` | Health check |
-| `GET` | `/api/courses?q=...` | All courses, with an optional text filter |
-| `POST` | `/api/chat` | `{"message": "..."}` returns `{"reply": "...", "tools_used": [...]}` |
+## Repo map
 
-## Notes
+```
+backend/
+  main.py          API routes + serves frontend/dist
+  config.py        .env loading (repo folder, then parent), model client
+  db.py, auth.py   SQLModel tables; accounts and sessions
+  catalog.py       typed catalog, topic tagging, BM25 search
+  planning.py      clashes, week review, requirements, GSA, backups, bid maths
+  rules.py         SOM rules + calendar with sources (2026–27 Bulletin)
+  ics.py           calendar feed (RRULE/EXDATE/VTIMEZONE)
+  safety.py        input screen, fencing, output check, spend guard, validator
+  pricing.py       token prices → dollars
+  crew/            agents, tools, chat pipeline, recommender pipeline, run accounting
+  prompts/         shared primer + role prompts
+frontend/          React + Vite + TypeScript (dist/ is committed)
+data/              SOM course data (public course directory, Oct 2026)
+scripts/           refresh_data.py, enrich_from_som_feed.py
+tests/             pytest suite
+docs/              research notes, evidence log, submission checklist
+```
 
-- **Cost.** `search_courses` makes its own LLM call on every search, and web questions can take several search rounds. The agent allows up to 20 model requests per question. `gpt-6-astra` also costs more than `gpt-5.6-luna`. If you're on a tight Portkey budget, change `MODEL_NAME` in `backend/agent.py` and `backend/tools.py`.
-- **Handsome Dan image.** The mascot is an original SVG React component with `furColor`, `bandanaColor` and `size` props. If you edit the component, regenerate the image at the top of this README:
+## What I added to the lecture 8 base
 
-  ```powershell
-  cd frontend
-  node render-dan.mjs
-  ```
+This started from the class's *Yale SOM Course Explorer* (lecture 8: a catalog browser plus a single Q&A agent; upstream `zlisto/yale_som_courses_zlisto`, my fork `hellomukul/yale_som_courses_silver`). I kept the course data and the Handsome Dan mascot and **rewrote the backend and UI**:
+
+- **Agents:** a multi-agent crew (Dispatcher plus 5 specialists) and a 5-stage recommender pipeline (Retriever, Curator, Validator, Scheduler, Critic), with an AI News Desk using web search.
+- **Accounts and storage:** student accounts with saved profiles, plans, Global Studies choices, chats and bid reports.
+- **Planning tools:** deterministic tools for clashes (fixing the base app's half-term bug), requirements, the GSA budget, backups and bid splits.
+- **Calendar:** a subscription feed for Google, Outlook and Apple.
+- **Safety and cost:** a safety layer, per-run token and cost accounting, spend caps, and a test suite.
+- **Data:** seat limits and LDR/GSR flags merged in from SOM's public feed.
+- **Design:** a new Gen Z interface with CSS-only Labubus.
+
+Not an official Yale tool. Requirements and dates follow the 2026–27 Yale Bulletin and SOM pages (sources in `backend/rules.py` and `docs/research.md`). Always confirm on the SOM internal site.

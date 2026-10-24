@@ -1,237 +1,102 @@
-import { useMemo } from 'react'
-import type { Course } from '../api'
-import { DAYS, DAY_NAMES, formatClock, parseMeeting } from '../schedule'
-import type { Day } from '../schedule'
+/* Weekly Mon–Fri timetable, 8:00–20:00, with absolutely positioned course blocks. */
+import type { Section } from '../api'
+import { clock, DAYS, DAY_NAMES } from '../lib/format'
+import '../pages/pages-a.css'
 
-interface Group {
-  key: string
-  course: Course
-  sections: Course[]
+const START = 8 * 60
+const END = 20 * 60
+const PX_PER_MIN = 0.8 // 48px per hour
+const HEIGHT = (END - START) * PX_PER_MIN
+const TONES = ['pink', 'lilac', 'sky', 'lime', 'amber'] as const
+
+/** True when two sections meet at the same time: same term, overlapping dates, a shared day, overlapping minutes. */
+// eslint-disable-next-line react-refresh/only-export-components
+export function sectionsClash(a: Section, b: Section): boolean {
+  if (a.id === b.id || a.term !== b.term) return false
+  if (a.start_min == null || a.end_min == null || b.start_min == null || b.end_min == null) return false
+  if (a.starts && a.ends && b.starts && b.ends && !(a.starts <= b.ends && b.starts <= a.ends)) return false
+  if (!a.days.some((d) => b.days.includes(d))) return false
+  return Math.max(a.start_min, b.start_min) < Math.min(a.end_min, b.end_min)
+}
+
+interface Placed { s: Section; lane: number; lanes: number }
+
+/** Side-by-side lanes for blocks that overlap on the same day, so nothing hides behind anything. */
+function layoutDay(list: Section[]): Placed[] {
+  const sorted = [...list].sort((a, b) => (a.start_min ?? 0) - (b.start_min ?? 0) || (b.end_min ?? 0) - (a.end_min ?? 0))
+  const out: Placed[] = []
+  let cluster: Placed[] = []
+  let clusterEnd = -1
+  const flush = () => {
+    const lanes = Math.max(1, ...cluster.map((p) => p.lane + 1))
+    cluster.forEach((p) => { p.lanes = lanes })
+    out.push(...cluster)
+    cluster = []
+  }
+  for (const s of sorted) {
+    const start = s.start_min ?? 0
+    if (cluster.length && start >= clusterEnd) { flush(); clusterEnd = -1 }
+    const laneEnds: number[] = []
+    cluster.forEach((p) => { laneEnds[p.lane] = Math.max(laneEnds[p.lane] ?? -1, p.s.end_min ?? 0) })
+    let lane = laneEnds.findIndex((e) => e <= start)
+    if (lane === -1) lane = laneEnds.length
+    cluster.push({ s, lane, lanes: 1 })
+    clusterEnd = Math.max(clusterEnd, s.end_min ?? 0)
+  }
+  if (cluster.length) flush()
+  return out
 }
 
 interface Props {
-  chosen: Group[]
-  /** Only show courses that run in this term, so halves do not pile up. */
-  term: string
-  /** groupKey -> chosen section id, so the grid shows your actual slot. */
-  sectionChoice: Record<string, string>
-  onChooseSection: (groupKey: string, sectionId: string) => void
+  sections: Section[]
+  clashIds?: Set<string>
+  onOpen?: (s: Section) => void
 }
 
-interface Block {
-  key: string
-  number: string
-  title: string
-  day: Day
-  start: number
-  end: number
-  room: string
-  ambiguous: boolean
-  /** Column index and column count, so overlapping blocks sit side by side. */
-  lane: number
-  lanes: number
-}
-
-/**
- * Two courses at the same hour must not be drawn on top of each other, so
- * overlapping blocks share the column: first free lane wins, and every block
- * in a cluster is told how many lanes the cluster needs.
- */
-function layOutLanes(dayBlocks: Block[]): void {
-  const sorted = [...dayBlocks].sort((a, b) => a.start - b.start || a.end - b.end)
-  let cluster: Block[] = []
-  let clusterEnd = -1
-
-  const flush = () => {
-    const lanes = cluster.reduce((max, b) => Math.max(max, b.lane + 1), 0)
-    for (const b of cluster) b.lanes = lanes
-    cluster = []
-    clusterEnd = -1
-  }
-
-  for (const block of sorted) {
-    if (cluster.length > 0 && block.start >= clusterEnd) flush()
-
-    const taken = new Set(
-      cluster.filter((b) => b.end > block.start).map((b) => b.lane),
-    )
-    let lane = 0
-    while (taken.has(lane)) lane += 1
-    block.lane = lane
-
-    cluster.push(block)
-    clusterEnd = Math.max(clusterEnd, block.end)
-  }
-  if (cluster.length > 0) flush()
-}
-
-const DAY_START = 8 * 60 // 8:00
-const DAY_END = 20 * 60 // 20:00
-const PX_PER_MIN = 0.75
-
-/** A Monday–Friday grid of the shortlist, drawn from the parsed meeting times. */
-export function Timetable({ chosen, term, sectionChoice, onChooseSection }: Props) {
-  const blocks = useMemo(() => {
-    const out: Block[] = []
-    for (const g of chosen) {
-      const inTerm = g.sections.filter((s) => {
-        const t = (s['Course Session'] ?? '').toLowerCase()
-        if (term === 'Fall 1') return t === 'fall-1' || t === 'fall'
-        if (term === 'Fall 2') return t === 'fall-2' || t === 'fall'
-        return true
-      })
-      if (inTerm.length === 0) continue
-
-      // Use the section you picked; otherwise draw the first and mark it as
-      // provisional.
-      const picked = inTerm.find((s) => s.Section?.trim() === sectionChoice[g.key])
-      const section = picked ?? inTerm[0]
-      const meet = parseMeeting(section.Daytimes)
-      if (!meet) continue
-
-      for (const day of meet.days) {
-        out.push({
-          key: `${g.key}-${day}`,
-          number: g.course['Course Number'],
-          title: g.course['Course Title'],
-          day,
-          start: Math.max(meet.start, DAY_START),
-          end: Math.min(meet.end, DAY_END),
-          room: section.Room?.trim() || 'TBA',
-          ambiguous: inTerm.length > 1 && !picked,
-          lane: 0,
-          lanes: 1,
-        })
-      }
-    }
-    for (const day of DAYS) layOutLanes(out.filter((b) => b.day === day))
-    return out
-  }, [chosen, term, sectionChoice])
-
-  /** Courses in this term that have more than one section to choose between. */
-  const choosable = useMemo(
-    () =>
-      chosen
-        .map((g) => ({
-          group: g,
-          options: g.sections.filter((s) => {
-            const t = (s['Course Session'] ?? '').toLowerCase()
-            if (term === 'Fall 1') return t === 'fall-1' || t === 'fall'
-            if (term === 'Fall 2') return t === 'fall-2' || t === 'fall'
-            return true
-          }),
-        }))
-        .filter((x) => x.options.length > 1),
-    [chosen, term],
-  )
-
-  const unscheduled = useMemo(
-    () =>
-      chosen.filter((g) => !g.sections.some((s) => parseMeeting(s.Daytimes))),
-    [chosen],
-  )
-
-  const hours = useMemo(() => {
-    const out: number[] = []
-    for (let m = DAY_START; m <= DAY_END; m += 60) out.push(m)
-    return out
-  }, [])
-
-  const height = (DAY_END - DAY_START) * PX_PER_MIN
-
-  if (blocks.length === 0) {
-    return (
-      <p className="tt__empty">
-        Nothing in your shortlist has a published meeting time for {term}.
-      </p>
-    )
-  }
+export default function Timetable({ sections, clashIds = new Set(), onOpen }: Props) {
+  const timed = sections.filter((s) => s.start_min != null && s.end_min != null && s.days.length > 0)
+  const toneByKey = new Map<string, string>()
+  timed.forEach((s) => { if (!toneByKey.has(s.key)) toneByKey.set(s.key, TONES[toneByKey.size % TONES.length]) })
+  const hours = Array.from({ length: (END - START) / 60 }, (_, i) => START + i * 60)
 
   return (
-    <div className="tt">
-      <div className="tt__grid" style={{ height }}>
-        <div className="tt__hours">
-          {hours.map((m) => (
-            <span key={m} style={{ top: (m - DAY_START) * PX_PER_MIN }}>
-              {formatClock(m)}
-            </span>
+    <div className="tt-scroll">
+      <div className="timetable" role="group" aria-label="Weekly timetable">
+        <div className="tt-head" aria-hidden="true" />
+        {DAYS.map((d) => <div key={d} className="tt-head" aria-hidden="true">{DAY_NAMES[d]}</div>)}
+
+        <div className="tt-hours" style={{ height: HEIGHT }} aria-hidden="true">
+          {hours.map((h) => (
+            <div key={h} className="tt-hour" style={{ top: (h - START) * PX_PER_MIN }}>{clock(h).replace(':00', '')}</div>
           ))}
         </div>
-
-        {DAYS.map((day) => (
-          <div key={day} className="tt__col">
-            <header title={DAY_NAMES[day]}>{day}</header>
-            <div className="tt__slots">
-              {hours.map((m) => (
-                <span
-                  key={m}
-                  className="tt__line"
-                  style={{ top: (m - DAY_START) * PX_PER_MIN }}
-                />
-              ))}
-              {blocks
-                .filter((b) => b.day === day)
-                .map((b) => (
-                  <article
-                    key={b.key}
-                    className={`tt__block${b.ambiguous ? ' is-ambiguous' : ''}`}
-                    style={{
-                      top: (b.start - DAY_START) * PX_PER_MIN,
-                      height: Math.max((b.end - b.start) * PX_PER_MIN, 22),
-                      left: `calc(${(b.lane / b.lanes) * 100}% + 2px)`,
-                      width: `calc(${100 / b.lanes}% - 4px)`,
-                    }}
-                    title={`${b.number} — ${b.title}${b.ambiguous ? ' (one of several sections)' : ''}`}
-                  >
-                    <b>{b.number}</b>
-                    <span>{b.title}</span>
-                    <i>{b.room}</i>
-                  </article>
-                ))}
-            </div>
+        {DAYS.map((d) => (
+          <div key={d} className="tt-col" style={{ height: HEIGHT }} role="group" aria-label={DAY_NAMES[d]}>
+            {hours.map((h) => <div key={h} className="tt-line" style={{ top: (h - START) * PX_PER_MIN }} />)}
+            {layoutDay(timed.filter((s) => s.days.includes(d))).map(({ s, lane, lanes }) => {
+              const top = Math.max(0, ((s.start_min ?? START) - START) * PX_PER_MIN)
+              const bottom = Math.min(HEIGHT, ((s.end_min ?? END) - START) * PX_PER_MIN)
+              const clash = clashIds.has(s.id)
+              const w = 100 / lanes
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  className={`tt-block tone-${toneByKey.get(s.key)} ${clash ? 'clash' : ''}`}
+                  style={{ top, height: Math.max(22, bottom - top - 2), left: `calc(${lane * w}% + 3px)`, right: 'auto', width: `calc(${w}% - 6px)` }}
+                  onClick={() => onOpen?.(s)}
+                  title={`${s.number} §${s.section} ${s.title}\n${clock(s.start_min)}–${clock(s.end_min)}${s.room ? ` · ${s.room}` : ''}${clash ? '\nTime clash!' : ''}`}
+                >
+                  <b>{clash ? '⚠️ ' : ''}{s.number}</b>
+                  <span className="tt-time">{clock(s.start_min).replace(/ (AM|PM)$/, '')}–{clock(s.end_min)}</span>
+                  {s.session.endsWith('-1') && <span className="tt-sess">S1</span>}
+                  {s.session.endsWith('-2') && <span className="tt-sess">S2</span>}
+                </button>
+              )
+            })}
           </div>
         ))}
       </div>
-
-      {choosable.length > 0 && (
-        <div className="tt__sections">
-          <h5>Pick your section</h5>
-          <p className="tt__note">
-            Dashed blocks are provisional. Choose a section and the grid — and
-            the clash check — become exact.
-          </p>
-          <ul>
-            {choosable.map(({ group, options }) => (
-              <li key={group.key}>
-                <b>{group.course['Course Number']}</b>
-                <select
-                  value={sectionChoice[group.key] ?? ''}
-                  onChange={(e) => onChooseSection(group.key, e.target.value)}
-                  aria-label={`Section for ${group.course['Course Number']}`}
-                >
-                  <option value="">Not chosen</option>
-                  {options.map((s) => {
-                    const m = parseMeeting(s.Daytimes)
-                    const id = s.Section?.trim() ?? ''
-                    return (
-                      <option key={id} value={id}>
-                        {id} — {m ? `${m.days.join('/')} ${m.label}` : 'TBA'}
-                      </option>
-                    )
-                  })}
-                </select>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {unscheduled.length > 0 && (
-        <p className="tt__note">
-          No published time yet:{' '}
-          {unscheduled.map((g) => g.course['Course Number']).join(', ')}.
-        </p>
-      )}
     </div>
   )
 }

@@ -1,0 +1,459 @@
+/* Bid coach: split auction points, browse crowdsourced bid history, report your own result.
+   Honesty rule: SOM doesn't publish clearing prices. Rows marked sample_only are illustrative SAMPLE data. */
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { api, type BidCourse, type BidSplit } from '../api'
+import { Bar, Empty, SampleBanner, Spinner } from '../components/ui'
+import { TERM_NAMES } from '../lib/format'
+import { useApp } from '../state'
+import './pages-b.css'
+
+type Mine = Awaited<ReturnType<typeof api.bids>>['mine'][number]
+
+const PRIORITIES = [
+  { value: 1, label: '🔥 Must-have', short: 'Must' },
+  { value: 2, label: '💖 Want', short: 'Want' },
+  { value: 3, label: '🙂 Nice', short: 'Nice' },
+] as const
+const PRIO_BADGE: Record<number, string> = { 1: 'pink', 2: 'lilac', 3: 'sky' }
+const REPORT_TERMS = [
+  { code: '202603', name: 'Fall 2026' },
+  { code: '202701', name: 'Spring 2027' },
+]
+
+const pts = (v: number | null | undefined) => (v == null ? '–' : Math.round(v).toLocaleString('en-US'))
+const SampleTag = () => <span className="badge amber" title="Illustrative sample data, not a real SOM result">SAMPLE</span>
+
+export default function Bids() {
+  return (
+    <>
+      <div className="page-head">
+        <div>
+          <h1>Bid coach 🎯</h1>
+          <p>
+            SOM runs electives, IE, GNW and SNOC through a points auction, and doesn't publish past clearing prices.
+            So we split your points with a transparent rule of thumb and crowdsource real results from classmates.
+          </p>
+        </div>
+      </div>
+      <SplitSection />
+      <HistoryAndReport />
+    </>
+  )
+}
+
+/* ------------------------------------------------------------------ A. split my points */
+function SplitSection() {
+  const { plan, go, toast } = useApp()
+  const [budget, setBudget] = useState('500')
+  const [prio, setPrio] = useState<Record<string, number>>({})
+  const [result, setResult] = useState<{ split: BidSplit[]; note: string } | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  const courses = useMemo(() => {
+    const seen = new Set<string>()
+    const out: { number: string; title: string; term: string; seats: number | null }[] = []
+    for (const it of plan?.items ?? []) {
+      const s = it.section
+      if (s.enrollment.toLowerCase() !== 'bid' || it.status === 'completed' || seen.has(s.number)) continue
+      seen.add(s.number)
+      out.push({ number: s.number, title: s.title, term: s.term_name, seats: s.limit })
+    }
+    return out
+  }, [plan])
+
+  const budgetNum = Number(budget)
+  const budgetOk = Number.isInteger(budgetNum) && budgetNum >= 1 && budgetNum <= 100000
+
+  const run = async (e: FormEvent) => {
+    e.preventDefault()
+    if (!budgetOk) { setError('Enter a whole number of points between 1 and 100,000.'); return }
+    setError('')
+    setBusy(true)
+    try {
+      const priorities = Object.fromEntries(courses.map((c) => [c.number, prio[c.number] ?? 2]))
+      setResult(await api.suggestBids(budgetNum, priorities))
+    } catch (err) {
+      setError((err as Error).message)
+      toast('Could not split your points.', 'bad')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const anySample = result?.split.some((r) => r.sample_only) ?? false
+
+  return (
+    <section className="card pad-lg" aria-labelledby="split-h">
+      <div className="row" style={{ gap: 10, marginBottom: 6 }}>
+        <span className="pb-step" aria-hidden="true">A</span>
+        <h2 id="split-h" style={{ margin: 0 }}>Split my points</h2>
+      </div>
+      <p className="muted small">Rank the bid courses in your plan and we'll suggest how to spread your budget. You still place the bids in SOM's auction app.</p>
+
+      {plan === null ? (
+        <Spinner label="Loading your plan…" />
+      ) : courses.length === 0 ? (
+        <Empty icon="🛒" title="No bid courses in your plan yet">
+          <p className="small" style={{ margin: 0 }}>Add a few auction electives first, then come back to split your points.</p>
+          <button className="btn primary" onClick={() => go('explore')}>Browse the catalog</button>
+        </Empty>
+      ) : (
+        <form onSubmit={run} className="stack mt">
+          <div className="row" style={{ alignItems: 'flex-end' }}>
+            <label className="field" style={{ width: 180 }}>
+              Points budget
+              <input
+                type="number"
+                min={1}
+                max={100000}
+                step={1}
+                inputMode="numeric"
+                value={budget}
+                onChange={(e) => setBudget(e.target.value)}
+                aria-invalid={!budgetOk}
+                aria-describedby="budget-help"
+              />
+            </label>
+            <p id="budget-help" className="small faint" style={{ margin: 0, flex: '1 1 260px' }}>
+              SOM doesn't publish the budget. The Yale Daily News reported 300 points for first-years and 500 for second-years back in 2015,
+              which may be out of date. Use your real number.
+            </p>
+          </div>
+
+          <div className="stack tight">
+            {courses.map((c) => {
+              const current = prio[c.number] ?? 2
+              return (
+                <div key={c.number} className="pb-prio">
+                  <div style={{ minWidth: 0, flex: '1 1 200px' }}>
+                    <span className="course-num">{c.number}</span> <b>{c.title}</b>
+                    <div className="small muted">{c.term}{c.seats ? ` · ${c.seats} seats` : ''}</div>
+                  </div>
+                  <div className="tabs" role="radiogroup" aria-label={`Priority for ${c.number}`}>
+                    {PRIORITIES.map((p) => (
+                      <button
+                        key={p.value}
+                        type="button"
+                        role="radio"
+                        aria-checked={current === p.value}
+                        className={`p${p.value} ${current === p.value ? 'on' : ''}`}
+                        onClick={() => setPrio((m) => ({ ...m, [c.number]: p.value }))}
+                      >{p.label}</button>
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          <div className="row">
+            <button className="btn primary" type="submit" disabled={busy || !budgetOk}>
+              {busy ? 'Splitting…' : '🎯 Split my points'}
+            </button>
+            {error && <span className="error-text" role="alert">{error}</span>}
+          </div>
+        </form>
+      )}
+
+      {result && (
+        <div className="mt-lg stack" aria-live="polite">
+          {anySample && <SampleBanner>SAMPLE data feeds some "median winning bid" numbers below: illustrative only, not real SOM results.</SampleBanner>}
+          <div className="table-wrap">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th scope="col">Course</th>
+                  <th scope="col">Priority</th>
+                  <th scope="col" className="pb-right">Seats</th>
+                  <th scope="col" className="pb-right">Median winning bid</th>
+                  <th scope="col" className="pb-right">Suggested</th>
+                  <th scope="col">Share</th>
+                </tr>
+              </thead>
+              <tbody>
+                {result.split.map((r) => {
+                  const p = PRIORITIES.find((x) => x.value === r.priority)
+                  return (
+                    <tr key={r.number} className={r.sample_only ? 'pb-tr-sample' : ''}>
+                      <td>
+                        <span className="course-num">{r.number}</span>
+                        <div className="small">{r.title}</div>
+                        {r.term_name && <div className="small faint">{r.term_name}</div>}
+                      </td>
+                      <td><span className={`badge ${PRIO_BADGE[r.priority] ?? 'gray'}`}>{p?.short ?? r.priority}</span></td>
+                      <td className="pb-right pb-num">{r.seats ?? '–'}</td>
+                      <td className="pb-right pb-num">
+                        {r.median_winning_bid == null
+                          ? <span className="faint">no reports</span>
+                          : <>{pts(r.median_winning_bid)} {r.sample_only && <SampleTag />}</>}
+                      </td>
+                      <td className="pb-right"><span className="pb-points">{pts(r.suggested_points)}</span></td>
+                      <td className="pb-share">
+                        <Bar pct={r.share * 100} tone={r.priority === 1 ? '' : 'lime'} />
+                        <div className="small faint">{Math.round(r.share * 100)}%</div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+          <p className="small faint" style={{ margin: 0 }}>ℹ️ {result.note}</p>
+        </div>
+      )}
+
+      <div className="divider" />
+      <div className="card-title">💡 Bidding tips</div>
+      <ul className="pb-list small muted">
+        <li><b>Go big on 1–2 must-haves.</b> Spreading points evenly is how you lose the class you actually wanted.</li>
+        <li><b>Keep a same-slot backup.</b> Have a second course in the same time slot ready in case you miss.</li>
+        <li><b>Big classes usually clear cheap.</b> Courses with large seat limits rarely need a big bid. Save points for small seminars.</li>
+        <li><b>Add/drop is your safety net.</b> It lasts one week (Spring 2027 opens Jan 5). Seats free up as people shuffle.</li>
+      </ul>
+    </section>
+  )
+}
+
+/* ------------------------------------------------------------------ B + C. history and reporting */
+function HistoryAndReport() {
+  const [courses, setCourses] = useState<BidCourse[] | null>(null)
+  const [mine, setMine] = useState<Mine[]>([])
+  const [error, setError] = useState('')
+
+  const load = useCallback(() => api.bids().then(
+    (r) => { setCourses(r.courses); setMine(r.mine); setError('') },
+    (e: Error) => setError(e.message || 'Could not load bid history.'),
+  ), [])
+
+  useEffect(() => { void load() }, [load])
+
+  return (
+    <>
+      <HistorySection courses={courses} error={error} onRetry={() => void load()} />
+      <ReportSection mine={mine} onSaved={load} />
+    </>
+  )
+}
+
+function HistorySection({ courses, error, onRetry }: { courses: BidCourse[] | null; error: string; onRetry: () => void }) {
+  const [q, setQ] = useState('')
+  const filtered = useMemo(() => {
+    const needle = q.trim().toLowerCase()
+    if (!courses) return []
+    if (!needle) return courses
+    return courses.filter((c) => c.course_number.toLowerCase().includes(needle) || c.title.toLowerCase().includes(needle))
+  }, [courses, q])
+  const anySample = courses?.some((c) => c.sample_only) ?? false
+
+  return (
+    <section className="card pad-lg mt-lg" aria-labelledby="hist-h">
+      <div className="pb-section-head">
+        <div>
+          <div className="row" style={{ gap: 10 }}>
+            <span className="pb-step" aria-hidden="true">B</span>
+            <h2 id="hist-h">Bid history</h2>
+          </div>
+          <p>What classmates reported bidding, and whether they got in. Only as good as the reports, so add yours below 💌</p>
+        </div>
+        <label className="field" style={{ width: 'min(280px, 100%)' }}>
+          <span className="pb-sr">Search courses</span>
+          <input type="search" placeholder="🔎 Search MGT 5xx or title" value={q} onChange={(e) => setQ(e.target.value)} />
+        </label>
+      </div>
+
+      {error && !courses ? (
+        <Empty icon="😵‍💫" title="Couldn't load bid history">
+          <p className="error-text" style={{ margin: 0 }}>{error}</p>
+          <button className="btn primary" onClick={onRetry}>Try again</button>
+        </Empty>
+      ) : !courses ? (
+        <Spinner label="Loading bid history…" />
+      ) : courses.length === 0 ? (
+        <Empty icon="🫙" title="No reports yet">Be the first: report your result below.</Empty>
+      ) : (
+        <div className="stack">
+          {anySample && <SampleBanner />}
+          {filtered.length === 0 ? (
+            <p className="muted small">No course matches “{q}”.</p>
+          ) : (
+            <div className="table-wrap">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th scope="col">Course</th>
+                    <th scope="col" className="pb-right">Seats</th>
+                    <th scope="col" className="pb-right">Reports</th>
+                    <th scope="col" className="pb-right">Won / lost</th>
+                    <th scope="col" className="pb-right">Lowest win</th>
+                    <th scope="col" className="pb-right">Median win</th>
+                    <th scope="col" className="pb-right">Highest loss</th>
+                    <th scope="col">Terms</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((c) => (
+                    <tr key={c.course_number} className={c.sample_only ? 'pb-tr-sample' : ''}>
+                      <td>
+                        <div className="row" style={{ gap: 6 }}>
+                          <span className="course-num">{c.course_number}</span>
+                          {c.sample_only && <SampleTag />}
+                        </div>
+                        <div className="small">{c.title}</div>
+                      </td>
+                      <td className="pb-right pb-num">{c.seats ?? '–'}</td>
+                      <td className="pb-right pb-num">{c.reports}</td>
+                      <td className="pb-right pb-num"><span style={{ color: 'var(--lime)' }}>{c.won ?? 0}</span> / <span style={{ color: 'var(--red)' }}>{c.lost ?? 0}</span></td>
+                      <td className="pb-right pb-num">{pts(c.lowest_winning_bid)}</td>
+                      <td className="pb-right pb-num"><b>{pts(c.median_winning_bid)}</b></td>
+                      <td className="pb-right pb-num">{pts(c.highest_losing_bid)}</td>
+                      <td className="small muted">{(c.terms ?? []).map((t) => TERM_NAMES[t] ?? t).join(', ') || '–'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <p className="small faint" style={{ margin: 0 }}>
+            Lowest win and highest loss bracket the price: if you bid above the highest losing bid, you'd likely have gotten in. A small number of reports is a hint, not a guarantee.
+          </p>
+        </div>
+      )}
+    </section>
+  )
+}
+
+function ReportSection({ mine, onSaved }: { mine: Mine[]; onSaved: () => Promise<void> }) {
+  const { sections, toast } = useApp()
+  const [course, setCourse] = useState('')
+  const [term, setTerm] = useState('202701')
+  const [points, setPoints] = useState('')
+  const [gotSeat, setGotSeat] = useState<boolean | null>(null)
+  const [clearing, setClearing] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  const numbers = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const s of sections) if (!m.has(s.number)) m.set(s.number, s.title)
+    return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true }))
+  }, [sections])
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault()
+    const num = course.trim().toUpperCase()
+    const p = Number(points)
+    const cl = clearing.trim() === '' ? null : Number(clearing)
+    if (!num) return setError('Which course? Start typing, e.g. MGT 5…')
+    if (numbers.length && !numbers.some(([n]) => n === num)) return setError(`${num} isn't in the SOM catalog. Pick one from the list.`)
+    if (points.trim() === '' || !Number.isInteger(p) || p < 0) return setError('Points bid should be a whole number (0 or more).')
+    if (gotSeat === null) return setError('Did you get a seat? Pick yes or no.')
+    if (cl !== null && (!Number.isInteger(cl) || cl < 0)) return setError('Clearing points should be a whole number, or leave it blank.')
+    setError('')
+    setBusy(true)
+    try {
+      await api.reportBid({ course_number: num, term_code: term, points_bid: p, got_seat: gotSeat, clearing_points: cl })
+      toast('Thanks for reporting! Your classmates owe you one 💖', 'good')
+      setCourse(''); setPoints(''); setGotSeat(null); setClearing('')
+      await onSaved()
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const titleFor = useMemo(() => new Map(numbers), [numbers])
+
+  return (
+    <section className="card pad-lg mt-lg" aria-labelledby="report-h">
+      <div className="row" style={{ gap: 10, marginBottom: 6 }}>
+        <span className="pb-step" aria-hidden="true">C</span>
+        <h2 id="report-h" style={{ margin: 0 }}>Report your result</h2>
+      </div>
+      <div className="grid two mt">
+        <form onSubmit={submit} className="pb-form" noValidate>
+          <label className="field full">
+            Course number
+            <input
+              list="pb-course-numbers"
+              placeholder="e.g. MGT 527"
+              value={course}
+              onChange={(e) => setCourse(e.target.value)}
+              autoComplete="off"
+              required
+            />
+            {titleFor.get(course.trim().toUpperCase()) && <span className="small faint">{titleFor.get(course.trim().toUpperCase())}</span>}
+          </label>
+          <datalist id="pb-course-numbers">
+            {numbers.map(([n, t]) => <option key={n} value={n}>{t}</option>)}
+          </datalist>
+          <label className="field">
+            Term
+            <select value={term} onChange={(e) => setTerm(e.target.value)}>
+              {REPORT_TERMS.map((t) => <option key={t.code} value={t.code}>{t.name}</option>)}
+            </select>
+          </label>
+          <label className="field">
+            Points you bid
+            <input type="number" min={0} step={1} inputMode="numeric" value={points} onChange={(e) => setPoints(e.target.value)} required />
+          </label>
+          <fieldset className="pb-fieldset full">
+            <legend>Did you get a seat?</legend>
+            <div className="pb-yesno" role="radiogroup">
+              <button type="button" role="radio" aria-checked={gotSeat === true} className={`chip yes ${gotSeat === true ? 'on' : ''}`} onClick={() => setGotSeat(true)}>🎉 Yes, I got in</button>
+              <button type="button" role="radio" aria-checked={gotSeat === false} className={`chip no ${gotSeat === false ? 'on' : ''}`} onClick={() => setGotSeat(false)}>😭 No seat</button>
+            </div>
+          </fieldset>
+          <label className="field full">
+            Clearing points, if you know them (optional)
+            <input type="number" min={0} step={1} inputMode="numeric" value={clearing} onChange={(e) => setClearing(e.target.value)} placeholder="Leave blank if unsure" />
+          </label>
+          <div className="full row">
+            <button className="btn primary" type="submit" disabled={busy}>{busy ? 'Sending…' : '📮 Submit report'}</button>
+            {error && <span className="error-text" role="alert">{error}</span>}
+          </div>
+        </form>
+
+        <div className="stack">
+          <div className="pb-callout">
+            <b>Why report? 🤝</b> SOM keeps past clearing prices behind a login, so every bid is a guess. Each report you add is
+            pooled anonymously into the history above: classmates see counts, medians and ranges per course, never your name.
+            The more people report, the less everyone overspends.
+          </div>
+          <div>
+            <div className="card-title" style={{ marginBottom: 8 }}>🗂️ My reports</div>
+            {mine.length === 0 ? (
+              <p className="small muted" style={{ margin: 0 }}>Nothing yet. Your first report shows up here.</p>
+            ) : (
+              <div className="table-wrap">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Course</th>
+                      <th scope="col">Term</th>
+                      <th scope="col" className="pb-right">Bid</th>
+                      <th scope="col">Result</th>
+                      <th scope="col" className="pb-right">Clearing</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {mine.map((r) => (
+                      <tr key={r.id}>
+                        <td><span className="course-num">{r.course_number}</span> {r.source === 'sample' && <SampleTag />}</td>
+                        <td className="small muted">{TERM_NAMES[r.term_code] ?? (r.term_code || '–')}</td>
+                        <td className="pb-right pb-num">{pts(r.points_bid)}</td>
+                        <td>{r.got_seat ? <span className="badge lime">Got in</span> : <span className="badge red">No seat</span>}</td>
+                        <td className="pb-right pb-num">{pts(r.clearing_points)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}

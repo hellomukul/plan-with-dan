@@ -1,0 +1,129 @@
+/* Extra styles for Explore, My plan, Calendar and the Timetable component.
+   Builds on styles.css tokens only; no new colours. */
+
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+
+/* ------------------------------------------------------------ timetable */
+.tt-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.tt-scroll .timetable { min-width: 520px; }
+.tt-line { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--line); pointer-events: none; }
+.tt-hour { line-height: 1; padding-top: 3px; }
+.timetable .tt-block {
+  font: inherit; font-size: 11.5px; text-align: left; display: flex; flex-direction: column; gap: 1px; justify-content: flex-start;
+  transition: transform 0.1s ease, filter 0.15s ease; z-index: 1;
+}
+.timetable .tt-block:hover { filter: brightness(1.15); z-index: 2; }
+.tt-block .tt-time { color: var(--muted); font-size: 10.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tt-block .tt-sess {
+  align-self: flex-start; font-size: 9.5px; font-weight: 700; padding: 0 5px; border-radius: 999px; background: rgba(0, 0, 0, 0.35); color: var(--text);
+}
+.tt-block.tone-pink { background: var(--pink-soft); border-color: rgba(255, 79, 163, 0.55); }
+.tt-block.tone-lilac { background: var(--lilac-soft); border-color: rgba(185, 140, 255, 0.6); }
+.tt-block.tone-sky { background: var(--sky-soft); border-color: rgba(111, 211, 255, 0.55); }
+.tt-block.tone-lime { background: var(--lime-soft); border-color: rgba(198, 255, 94, 0.5); }
+.tt-block.tone-amber { background: var(--amber-soft); border-color: rgba(255, 200, 87, 0.55); }
+.timetable .tt-block.clash { background: var(--red-soft); border-color: var(--red); box-shadow: 0 0 0 1px var(--red); }
+
+/* ------------------------------------------------------------ explore */
+.ex-filters { display: flex; flex-direction: column; gap: 14px; }
+.ex-search-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.ex-search { flex: 1 1 320px; }
+.ex-sort { flex: 0 0 210px; }
+.ex-search input { font-size: 16px; padding: 12px 16px; border-radius: 999px; }
+.ex-sort select { border-radius: 999px; padding: 12px 16px; }
+.ex-filter-row { display: grid; grid-template-columns: 70px 1fr; gap: 10px; align-items: start; }
+.ex-label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); padding-top: 8px; }
+.ex-chips { gap: 6px; }
+.ex-foot { border-top: 1px solid var(--line); padding-top: 12px; }
+.ex-count { font-family: var(--display); color: var(--text); font-size: 18px; }
+@media (max-width: 640px) {
+  .ex-sort { flex: 1 1 100%; }
+  .ex-filter-row { grid-template-columns: 1fr; gap: 6px; }
+  .ex-label { padding-top: 0; }
+}
+
+/* ------------------------------------------------------------ my plan */
+.pl-headstat { display: flex; align-items: center; gap: 14px; padding: 12px 18px; }
+.pl-req { align-items: start; }
+.pl-terms { gap: 10px 22px; }
+.pl-notes { margin: 12px 0 0; padding-left: 18px; }
+.pl-notes li + li { margin-top: 2px; }
+.pl-week { grid-template-columns: minmax(0, 1.7fr) minmax(280px, 1fr); align-items: start; }
+@media (max-width: 1000px) { .pl-week { grid-template-columns: 1fr; } }
+.pl-days { gap: 6px; }
+.pl-day {
+  padding: 4px 10px; border-radius: 999px; font-size: 12.5px; font-weight: 600; border: 1px solid var(--line-2); color: var(--faint); background: var(--bg-2);
+}
+.pl-day.on { background: var(--pink-soft); border-color: var(--pink); color: var(--text); }
+.pl-review { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; font-size: 13.5px; }
+.pl-review li { display: flex; gap: 8px; align-items: baseline; }
+.pl-review .badge { flex: none; text-transform: capitalize; }
+.pl-clash { border-color: rgba(255, 107, 107, 0.45); }
+.pl-clash-row { padding: 12px; border-radius: var(--radius-sm); background: var(--red-soft); border: 1px solid rgba(255, 107, 107, 0.3); font-size: 14px; }
+.pl-clash-row .btn { white-space: normal; text-align: left; }
+.pl-row { display: flex; gap: 16px; align-items: center; justify-content: space-between; flex-wrap: wrap; padding: 14px 18px; }
+.pl-row-main {
+  flex: 1 1 280px; min-width: 0; display: flex; flex-direction: column; gap: 4px; background: none; border: 0; padding: 0; text-align: left;
+  color: var(--text); font: inherit; cursor: pointer;
+}
+.pl-row-main:hover .course-title { color: var(--pink-2); }
+.pl-row-main .course-title { font-size: 16px; }
+.pl-row-controls { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+.pl-row-controls select { padding: 7px 10px; min-width: 150px; }
+.pl-bid input { width: 120px; padding: 7px 10px; }
+.pl-row-actions { gap: 6px; }
+@media (max-width: 640px) {
+  .pl-row-controls { width: 100%; }
+  .pl-row-controls .field { flex: 1 1 140px; }
+  .pl-row-controls select, .pl-bid input { width: 100%; }
+  .pl-headstat { width: 100%; justify-content: space-between; }
+}
+
+/* ------------------------------------------------------------ calendar */
+.cal-layout { grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr); align-items: start; }
+@media (max-width: 1000px) { .cal-layout { grid-template-columns: 1fr; } }
+.cal-title { margin: 0; font-size: 22px; min-width: 10ch; text-align: center; }
+.cal-day { font: inherit; font-size: 11.5px; color: inherit; text-align: left; cursor: pointer; width: 100%; transition: border-color 0.15s ease; }
+.cal-day:hover { border-color: var(--line-2); }
+.cal-day.sel { border-color: var(--lilac); box-shadow: inset 0 0 0 1px var(--lilac); }
+.cal-day.today.sel { border-color: var(--pink); box-shadow: inset 0 0 0 1px var(--pink), 0 0 0 2px var(--lilac-soft); }
+.cal-day .ev { display: block; flex: none; }
+.cal-more { font-size: 10.5px; color: var(--faint); padding-left: 4px; }
+.cal-legend { gap: 6px; }
+.cal-legend .ev { font-size: 12px; padding: 2px 8px; }
+.cal-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
+.cal-list li { display: flex; gap: 10px; align-items: flex-start; }
+.cal-dot { width: 10px; height: 10px; border-radius: 50%; margin-top: 6px; flex: none; }
+.cal-dot.class { background: var(--pink); }
+.cal-dot.deadline { background: var(--amber); }
+.cal-dot.exam { background: var(--lilac); }
+.cal-dot.global { background: var(--sky); }
+.cal-dot.break, .cal-dot.holiday { background: var(--lime); }
+.cal-item-title { font-weight: 600; font-size: 14px; line-height: 1.3; }
+.cal-upcoming {
+  display: flex; flex-direction: column; gap: 2px; background: none; border: 0; padding: 0; text-align: left; color: var(--text); font: inherit; cursor: pointer;
+}
+.cal-upcoming:hover .cal-item-title { color: var(--pink-2); }
+.cal-soon { color: var(--pink-2); }
+.cal-note { padding: 12px 14px; border-radius: var(--radius-sm); font-size: 13.5px; line-height: 1.5; border: 1px solid var(--line-2); }
+.cal-note.amber { background: var(--amber-soft); border-color: rgba(255, 200, 87, 0.4); color: var(--amber); }
+.cal-note.sky { background: var(--sky-soft); border-color: rgba(111, 211, 255, 0.35); color: var(--text); }
+.cal-note.pink { background: var(--pink-soft); border-color: rgba(255, 79, 163, 0.35); color: var(--text); }
+.cal-feed-label { display: block; font-size: 13px; color: var(--muted); font-weight: 500; margin-bottom: 6px; }
+.cal-feed input { text-overflow: ellipsis; }
+@media (max-width: 640px) {
+  .cal-title { font-size: 18px; }
+  .cal-month { gap: 3px; }
+  .cal-day { padding: 4px; min-height: 54px; }
+  /* Tiny screens: events become colour bars; tap the day for details. */
+  .cal-month .ev { font-size: 0; height: 5px; padding: 0; border-radius: 3px; }
+  .cal-month .ev.class { background: var(--pink); }
+  .cal-month .ev.deadline { background: var(--amber); }
+  .cal-month .ev.exam { background: var(--lilac); }
+  .cal-month .ev.global { background: var(--sky); }
+  .cal-month .ev.break, .cal-month .ev.holiday { background: var(--lime); }
+  .cal-more { font-size: 9px; padding: 0; }
+  .cal-feed .input-row { flex-direction: column; }
+}

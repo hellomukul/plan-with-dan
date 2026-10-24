@@ -3,6 +3,7 @@ import { api, type Profile } from '../api'
 import HandsomeDan from '../mascots/HandsomeDan'
 import { Briefcase, Clock, Coffee, GraduationCap, Globe2, BookOpen, Moon, Scale, FlaskConical } from 'lucide-react'
 import { EMPTY_PROFILE, useApp } from '../state'
+import { importTryout, loadTryout } from '../lib/tryout'
 
 const PROGRAMS = [
   { v: 'MBA', label: 'Full-time MBA', big: <GraduationCap className="icon lg" /> },
@@ -35,7 +36,11 @@ const STEPS = ['You', 'Background', 'Interests', 'Goals', 'Schedule']
 
 export default function Onboarding({ editing = false }: { editing?: boolean }) {
   const { profile, topics, refreshProfile, go, toast, user } = useApp()
-  const [p, setP] = useState<Profile>(profile ?? EMPTY_PROFILE)
+  const [p, setP] = useState<Profile>(() => {
+    const base = profile ?? EMPTY_PROFILE
+    const tryout = loadTryout()  // start from the program they picked on the home page, if they built a week there
+    return !editing && !base.onboarded && tryout.ids.length ? { ...base, program: tryout.program } : base
+  })
   const [step, setStep] = useState(0)
   const [completedText, setCompletedText] = useState((profile?.completed ?? []).join(', '))
   const [saving, setSaving] = useState(false)
@@ -65,8 +70,9 @@ export default function Onboarding({ editing = false }: { editing?: boolean }) {
     try {
       const completed = completedText.split(/[,\n;]+/).map((s) => s.trim().toUpperCase()).filter(Boolean)
       await api.saveProfile({ ...p, completed, onboarded: true })
+      const added = editing ? 0 : await importTryout().catch(() => 0)  // the week they built on the home page
       await refreshProfile()
-      toast('Profile saved', 'good')
+      toast(added ? `Profile saved, and ${added} course${added > 1 ? 's' : ''} from your try-out week added to your plan` : 'Profile saved', 'good')
       go(then)
     } catch (e) {
       toast((e as Error).message, 'bad')

@@ -1,0 +1,77 @@
+/* Public home page. Same Quiet Yale tokens as the app; wider bands, one idea per band. */
+.lp { min-height: 100vh; display: flex; flex-direction: column; }
+.lp-header { position: sticky; top: 0; z-index: 30; display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 12px clamp(16px, 4vw, 48px); background: rgba(11, 11, 12, 0.88); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
+.lp-header .brand { text-decoration: none; color: inherit; }
+.lp-nav { display: flex; gap: 22px; font-size: 13.5px; }
+.lp-nav a { color: var(--muted); text-decoration: none; }
+.lp-nav a:hover { color: var(--text); }
+.lp-main { width: 100%; max-width: 1180px; margin: 0 auto; padding: 24px clamp(16px, 4vw, 48px) 32px; flex: 1; }
+.lp-lede { font-size: 17px; max-width: 540px; margin: 0; }
+.lp-preview { padding: 18px; width: 100%; max-width: 460px; }
+.lp-band { margin-top: 72px; scroll-margin-top: 72px; }
+.lp-band-head { margin-bottom: 18px; max-width: 680px; }
+.lp-band-head h2 { margin: 0 0 6px; font-size: clamp(22px, 3vw, 30px); letter-spacing: -0.02em; }
+.lp-band-head p { margin: 0; }
+
+/* try it */
+.lp-try { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: 20px; align-items: start; }
+.lp-select { background: var(--bg-2); color: var(--text); border: 1px solid var(--line-2); border-radius: 8px; padding: 6px 10px; font: inherit; font-size: 13px; }
+.lp-select.sm { padding: 3px 6px; font-size: 12px; max-width: 170px; }
+.lp-search { display: flex; align-items: center; gap: 8px; background: var(--bg-2); border: 1px solid var(--line-2); border-radius: 10px; padding: 8px 12px; }
+.lp-search:focus-within { border-color: var(--pink-line); }
+.lp-search input { flex: 1; min-width: 0; background: none; border: 0; outline: none; color: var(--text); font: inherit; font-size: 14px; }
+.lp-results, .lp-picked, .lp-req, .lp-dates { list-style: none; margin: 0; padding: 0; }
+.lp-results { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.lp-results button { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 10px; text-align: left; padding: 9px 12px;
+  background: var(--card); border: 0; border-top: 1px solid var(--line); color: var(--text); font: inherit; font-size: 13px; cursor: pointer; }
+.lp-results li:first-child button { border-top: 0; }
+.lp-results button:hover:not(:disabled) { background: var(--card-2); }
+.lp-results button:disabled { color: var(--faint); cursor: default; }
+.lp-picked { display: grid; gap: 6px; }
+.lp-picked li { display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); font-size: 13px; }
+.lp-picked li.clash { border-color: rgba(255, 92, 92, 0.5); }
+.lp-picked-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lp-clash { display: inline-flex; align-items: center; gap: 6px; color: var(--red); }
+.lp-week { padding: 12px; overflow-x: auto; }
+
+/* programs */
+.lp-programs { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+.lp-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.lp-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.lp-stats div { background: var(--bg-2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: grid; gap: 2px; }
+.lp-stats b { font-family: var(--mono); font-size: 20px; font-weight: 500; }
+.lp-stats span { color: var(--faint); font-size: 12px; }
+.lp-req { display: grid; gap: 4px; font-size: 13px; }
+.lp-kv { display: grid; grid-template-columns: 80px 1fr; gap: 6px 12px; margin: 0; }
+.lp-kv dt { color: var(--faint); }
+.lp-kv dd { margin: 0; color: var(--muted); }
+.lp-dates { display: grid; gap: 10px; }
+.lp-dates li { display: grid; grid-template-columns: 92px 1fr auto; gap: 10px; font-size: 13px; align-items: baseline; }
+.lp-dates li > .mono { white-space: nowrap; }
+
+/* features + faq */
+.lp-features { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.lp-features .card { padding: 14px; }
+.lp-faq { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.lp-faq details { padding: 14px 16px; }
+.lp-faq summary { cursor: pointer; font-weight: 500; }
+.lp-faq details p { margin: 8px 0 0; }
+
+/* footer */
+.lp-footer { border-top: 1px solid var(--line); padding: 20px clamp(16px, 4vw, 48px); display: flex; flex-wrap: wrap; justify-content: center;
+  gap: 8px 22px; font-size: 13px; color: var(--muted); }
+.lp-footer a { color: var(--text); }
+
+.auth-dialog { width: min(420px, 100%); }
+
+@media (max-width: 900px) {
+  .lp-try, .lp-programs, .lp-faq { grid-template-columns: 1fr; }
+  .lp-features { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .lp-band { margin-top: 48px; }
+  .lp-preview { max-width: none; }
+}
+@media (max-width: 520px) {
+  .lp-features, .lp-stats { grid-template-columns: 1fr; }
+  .lp-header .brand-name { font-size: 14px; }
+}

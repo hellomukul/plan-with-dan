@@ -129,6 +129,26 @@ def catalog_all():
     }
 
 
+@app.get("/api/programs")
+def programs_public():
+    """Public: every SOM program's key rules (from the 2026-27 Bulletin) and the next academic dates."""
+    today = date.today().isoformat()
+    progs = []
+    for code, p in PROGRAMS.items():
+        if code == "MMS":
+            continue
+        progs.append({
+            "code": code, "label": p["label"], "base": p["base"], "summary": p["summary"],
+            "total_units": p.get("total_units"), "min_units": p.get("min_units"), "max_units": p.get("max_units"),
+            "required": p.get("required", []), "global": p["global"], "calendar": p["calendar"],
+            "sources": p["sources"], "unconfirmed": p.get("unconfirmed", []),
+        })
+    upcoming = [{"date": d, "end": CALENDAR_ENDS.get(d, d), "title": label, "kind": kind}
+                for d, label, kind in CALENDAR if CALENDAR_ENDS.get(d, d) >= today][:6]
+    return {"programs": progs, "upcoming": upcoming, "today": today,
+            "calendar_note": "Dates are the shared MBA, MAM and MMS calendar. The MBA for Executives and MMS-PEM run on their own calendars."}
+
+
 # ------------------------------------------------------------------ profile
 
 class PrefsIn(BaseModel):

@@ -551,3 +551,11 @@ def test_yale_facts_by_program():
     assert knowledge.search("how many units do I need", "MAM")[0]["id"] == "program-mam"
     assert knowledge.search("required courses", "MMS-SR")[0]["id"] == "program-mms-sr"
     assert not any(e["id"] == "calendar" for e in knowledge.search("calendar dates", "EMBA"))
+
+
+def test_public_programs_endpoint_needs_no_login(client):
+    fresh = client.__class__(client.app)
+    r = fresh.get("/api/programs").json()
+    codes = {p["code"] for p in r["programs"]}
+    assert {"MBA", "EMBA", "MAM", "MMS-AM", "MMS-GBS", "MMS-SR", "MMS-TM", "MMS-PEM", "MBA-JOINT", "PhD"} == codes
+    assert r["upcoming"] and all(p["sources"] for p in r["programs"])

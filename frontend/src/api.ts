@@ -278,6 +278,19 @@ export interface BestFits { term: string; top: Fit[]; rows: { id: string; title:
 
 export interface ActionEntry { id: number; action: string; summary: string; by: string; undone: boolean; at: string }
 
+export interface ProgramInfo {
+  code: string; label: string; base: string; summary: string
+  total_units: number | null; min_units: number | null; max_units: number | null
+  required: { number: string; title: string; term: string; units: number }[]
+  global: string; calendar: string; sources: string[]; unconfirmed: string[]
+}
+export interface ProgramsInfo {
+  programs: ProgramInfo[]
+  upcoming: { date: string; end: string; title: string; kind: string }[]
+  today: string
+  calendar_note: string
+}
+
 export class ApiError extends Error {
   status: number
   constructor(status: number, message: string) {
@@ -346,6 +359,8 @@ export const api = {
 
   chatHistory: (mode: 'dan' | 'news') => request<{ messages: ChatMsg[] }>('GET', `/api/chat/history?mode=${mode}`),
   clearChat: (mode: 'dan' | 'news') => request<{ ok: boolean }>('DELETE', `/api/chat/history?mode=${mode}`),
+  importPlan: (courseIds: string[]) => request<{ added: number }>('POST', '/api/plan/import', { course_ids: courseIds }),
+  programs: () => request<ProgramsInfo>('GET', '/api/programs'),
   chatMemory: () => request<{ facts: string[]; summary: string; updated_at: string | null }>('GET', '/api/chat/memory'),
   forgetMemory: (fact?: string) => request<{ facts: string[] }>('POST', '/api/chat/memory/forget', { fact: fact ?? null }),
   recommend: (term = '202701') => request<RecResult>('POST', '/api/recommend', { term }),

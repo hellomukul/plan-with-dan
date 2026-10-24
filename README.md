@@ -3,8 +3,8 @@
 </p>
 
 <h1 align="center">Plan with Dan 🐶</h1>
-<p align="center"><b>An AI course-planning crew for Yale SOM students.</b><br>
-It finds courses that match your goals, builds a clash-free timetable, plans Global Studies, coaches your bids and syncs your calendar.</p>
+<p align="center"><b>An AI chief of staff for Yale SOM students.</b><br>
+Every day it surfaces the few planning decisions that matter (with real SOM deadlines), ranks real courses against your goals, keeps your timetable clash-free, plans Global Studies, coaches your bids and syncs your calendar. Nothing changes until you click, and every change can be undone.</p>
 
 <p align="center">
   <b>Live app:</b> <i>(Render link added at deploy time)</i> ·
@@ -54,7 +54,7 @@ uvicorn backend.main:app --port 8000
 ```bash
 python -m pytest -q
 ```
-There are 27 tests covering injection blocking, invented-course removal, spend caps, clash logic, auth enumeration, CSRF and calendar feeds.
+There are 35 tests covering injection blocking, invented-course removal, spend caps, clash logic, auth enumeration, CSRF, the calendar feed, the desk scan, best-fit filtering, undo, account export/delete and the CSP header.
 
 **Frontend development (optional, needs Node 20+)**
 ```bash
@@ -66,6 +66,7 @@ The dev UI runs on http://127.0.0.1:5173 and forwards `/api` to `API_PORT` (defa
 
 | Feature | What a student gets |
 |---|---|
+| **Dan's Desk** (home) | A 2–3 sentence brief written by the Chief of Staff agent *only* from decision cards that code computes (clashes, the 16-unit minimum, SOM deadlines, Global Studies, Leadership, bid split). Each card has a due date, a cited source, and approve / snooze / done. Below it: **best fits**, ranked in code with a label (Strong fit / Good fit / Worth a look), up to two reasons, demand shown separately, "Not for me", and a "Why?" panel quoting the course description. A side pane shows what's next, plan meters and an **undoable action log**. |
 | ✨ **Find my courses** | A 5-step quiz (program, background, interests, short- and long-term goals, schedule vibe) leads to a shortlist of real courses. Each pick comes with a reason, a quoted line from the course description, a clash check, and backups in the same slot. |
 | 🐶 **Ask Dan** | Chat that routes each question to one specialist (Course Scout, Planner, Bid Coach or Career Coach). Specialists use tools that read real data and can offer one-click "add to plan" buttons. |
 | 📰 **AI News Desk** | Answers about current AI news using web search, with sources, and finishes with the SOM course where you can learn the topic. |
@@ -74,6 +75,8 @@ The dev UI runs on http://127.0.0.1:5173 and forwards `/api` to `API_PORT` (defa
 | 🎯 **Bid coach** | Splits a points budget by priority and seat demand. Students report their own bid outcomes so real history builds up (demo rows are clearly labelled **SAMPLE**). |
 | 📆 **Calendar** | A month view of classes and SOM deadlines, plus one private subscription link for Google, Outlook and Apple Calendar, or an .ics download. |
 | 🧾 **Cost & safety** | Token counts and dollars for every run, daily budgets, and a log of every safety event. |
+| **Privacy and data** | What's stored and where AI requests go (Portkey → OpenAI), one-click export of all your data, and password-confirmed account deletion. |
+| **⌘K** | Jump to any page or course, or hand a question to Dan, from the keyboard. |
 
 ## How the agents work
 
@@ -103,7 +106,9 @@ Find my courses: Retriever (code, BM25 on goals) ─▶ Curator agent ─▶ Val
 | Invented courses or facts | The recommender only accepts keys from the shortlist it was given, and removes any "evidence" quote that isn't really in the course description. The chat output is checked for course numbers that aren't in the catalog. |
 | Wrong actions | Agents can only *suggest* plan changes. The student clicks to add. |
 | Loops and overspending | Request limits per agent, a per-tool loop guard, a token cap derived from the remaining budget, $0.05 per turn and $0.50 per student per day (configurable), plus rate limits on login, chat and recommend. |
-| Account security | Argon2id hashes, HttpOnly SameSite session cookies (only the token hash is stored), no account enumeration, a CSRF origin check, and no secrets in the repo. |
+| Account security | Argon2id hashes, HttpOnly SameSite session cookies (only the token hash is stored), no account enumeration (login or signup), a CSRF origin check, a strict Content-Security-Policy, and no secrets in the repo. |
+| Privacy | Blocked prompts are never stored (only the reason and length are logged). Students can export all their data or delete their account. A Privacy page explains the data flow to Portkey and OpenAI. |
+| Mistaken actions | Every plan change is logged with one-click undo; desk cards can be snoozed or dismissed and restored. |
 
 ## Repo map
 
@@ -137,6 +142,8 @@ This started from the class's *Yale SOM Course Explorer* (lecture 8: a catalog b
 - **Calendar:** a subscription feed for Google, Outlook and Apple.
 - **Safety and cost:** a safety layer, per-run token and cost accounting, spend caps, and a test suite.
 - **Data:** seat limits and LDR/GSR flags merged in from SOM's public feed.
-- **Design:** a new Gen Z interface with CSS-only Labubus.
+- **Chief of staff:** Dan's Desk, with a code desk scan, a cached Chief of Staff brief (about $0.0002 a day), honest best fits and an undo log.
+- **Design:** a research-driven redesign ("Quiet Yale": calm layout, one Yale-blue accent, Geist type, no emoji, ⌘K; see `docs/design_brief.md`). The CSS-only Labubu component is still in the repo but no longer on the main screens.
+- **Privacy:** export, delete, a privacy page, CSP and generic signup.
 
 Not an official Yale tool. Requirements and dates follow the 2026–27 Yale Bulletin and SOM pages (sources in `backend/rules.py` and `docs/research.md`). Always confirm on the SOM internal site.

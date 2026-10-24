@@ -1,11 +1,13 @@
-/* Explore catalog: browse every real SOM offering with filters that answer real questions. */
-import { useCallback, useMemo, useState } from 'react'
+/* Catalog: browse every real SOM offering with filters that answer real questions.
+   Calm style: a quiet filter panel (common filters up front, the rest behind "More filters")
+   and results as a scannable list instead of a card grid. */
+import { useCallback, useMemo, useState, type ReactNode } from 'react'
+import { Check, ChevronDown, ChevronUp, Clock, MapPin, Plus, RotateCcw, Search, SlidersHorizontal, Users } from 'lucide-react'
 import type { Section } from '../api'
-import CourseCard from '../components/CourseCard'
 import CourseDrawer from '../components/CourseDrawer'
 import { sectionsClash } from '../components/Timetable'
 import { Empty, Spinner } from '../components/ui'
-import { PLANNING_TERM, TOPIC_EMOJI } from '../lib/format'
+import { enrollLabel, PLANNING_TERM } from '../lib/format'
 import { useApp } from '../state'
 import './pages-a.css'
 
@@ -25,12 +27,12 @@ const SESSIONS: { value: SessionFilter; label: string }[] = [
   { value: '2', label: 'Session 2' },
 ]
 const QUICK: { value: Quick; label: string; hint: string }[] = [
-  { value: 'ldr', label: '🧭 Counts for LDR', hint: 'Leadership Distribution Requirement (inferred)' },
-  { value: 'gsr', label: '🌍 Global Studies', hint: 'Counts toward the Global Studies Requirement (inferred)' },
-  { value: 'late', label: '😴 No classes before 10am', hint: 'Starts at 10:00 AM or later (or time TBA)' },
-  { value: 'fri', label: '🏖️ Fridays free', hint: 'No Friday meetings' },
-  { value: 'bid', label: '🎯 Bid only', hint: 'Enrollment is by bidding' },
-  { value: 'fits', label: '🧩 Fits my plan', hint: 'No time clash with anything already in your plan' },
+  { value: 'fits', label: 'Fits my plan', hint: 'No time clash with anything already in your plan' },
+  { value: 'ldr', label: 'Counts for Leadership', hint: 'Leadership Distribution Requirement (inferred)' },
+  { value: 'gsr', label: 'Global Studies', hint: 'Counts toward the Global Studies Requirement (inferred)' },
+  { value: 'late', label: 'Starts 10am or later', hint: 'Starts at 10:00 AM or later (or time TBA)' },
+  { value: 'fri', label: 'Fridays free', hint: 'No Friday meetings' },
+  { value: 'bid', label: 'Bid only', hint: 'Enrollment is by bidding' },
 ]
 const PAGE = 48
 
@@ -75,6 +77,7 @@ export default function Explore() {
   const [limit, setLimit] = useState(PAGE)
   const [open, setOpen] = useState<string | null>(null)
   const [adding, setAdding] = useState<string | null>(null)
+  const [moreOpen, setMoreOpen] = useState(false)
 
   const planned = useMemo(() => (plan?.items ?? []).map((i) => i.section), [plan])
 
@@ -133,6 +136,9 @@ export default function Explore() {
     setLimit(PAGE)
   }
 
+  // Filters tucked behind "More filters": count them so the toggle can say how many are on.
+  const hiddenCount = sessions.size + pickedTopics.size + (mbaOnly ? 0 : 1) + (showCore ? 1 : 0)
+  const showMore = moreOpen
   const activeCount = sessions.size + pickedTopics.size + quick.size + (q ? 1 : 0) + (mbaOnly ? 0 : 1) + (showCore ? 1 : 0) + (term === PLANNING_TERM ? 0 : 1)
   const reset = () => {
     setQ(''); setTerm(PLANNING_TERM as TermFilter); setSessions(new Set()); setPickedTopics(new Set()); setQuick(new Set())
@@ -150,18 +156,19 @@ export default function Explore() {
     <div>
       <div className="page-head">
         <div>
-          <h1>Explore the <span className="grad-text">catalog</span> 🔎</h1>
-          <p>Every real SOM course, straight from the public feed. Filter it down, tap a card for the full scoop, add what you vibe with.</p>
+          <h1>Catalog</h1>
+          <p>Every SOM course from the public feed. Filter the list, open a course for details, and add it to your plan.</p>
         </div>
       </div>
 
-      <div className="card flat ex-filters">
+      <div className="card ex-filters">
         <div className="ex-search-row">
           <label className="field ex-search">
             <span className="sr-only">Search courses</span>
+            <Search className="icon sm" aria-hidden="true" />
             <input
               type="search"
-              placeholder="Search by number, title, professor, topic… (try “negotiation” or “846”)"
+              placeholder="Search by number, title, professor or topic"
               value={q}
               onChange={(e) => { setQ(e.target.value); setLimit(PAGE) }}
             />
@@ -177,7 +184,7 @@ export default function Explore() {
         </div>
 
         <div className="ex-filter-row">
-          <span className="ex-label">Term</span>
+          <span className="section-label">Term</span>
           <div className="tabs" role="group" aria-label="Term">
             {TERM_TABS.map((t) => (
               <button key={t.value} type="button" className={term === t.value ? 'on' : ''} aria-pressed={term === t.value}
@@ -187,17 +194,7 @@ export default function Explore() {
         </div>
 
         <div className="ex-filter-row">
-          <span className="ex-label">Session</span>
-          <div className="row ex-chips" role="group" aria-label="Session">
-            {SESSIONS.map((s) => (
-              <button key={s.value} type="button" className={`chip ${sessions.has(s.value) ? 'on' : ''}`} aria-pressed={sessions.has(s.value)}
-                onClick={() => toggle(sessions, s.value, setSessions)}>{s.label}</button>
-            ))}
-          </div>
-        </div>
-
-        <div className="ex-filter-row">
-          <span className="ex-label">Quick</span>
+          <span className="section-label">Quick</span>
           <div className="row ex-chips" role="group" aria-label="Quick filters">
             {QUICK.map((f) => (
               <button key={f.value} type="button" title={f.hint} className={`chip ${quick.has(f.value) ? 'on' : ''}`} aria-pressed={quick.has(f.value)}
@@ -206,64 +203,92 @@ export default function Explore() {
           </div>
         </div>
 
-        {topics.length > 0 && (
-          <div className="ex-filter-row">
-            <span className="ex-label">Topics</span>
-            <div className="row ex-chips" role="group" aria-label="Topics">
-              {topics.map((t) => (
-                <button key={t} type="button" className={`chip ${pickedTopics.has(t) ? 'on' : ''}`} aria-pressed={pickedTopics.has(t)}
-                  onClick={() => toggle(pickedTopics, t, setPickedTopics)}>{TOPIC_EMOJI[t] ?? '•'} {t}</button>
-              ))}
+        {showMore && (
+          <div className="ex-more" id="ex-more">
+            <div className="ex-filter-row">
+              <span className="section-label">Session</span>
+              <div className="row ex-chips" role="group" aria-label="Session">
+                {SESSIONS.map((s) => (
+                  <button key={s.value} type="button" className={`chip ${sessions.has(s.value) ? 'on' : ''}`} aria-pressed={sessions.has(s.value)}
+                    onClick={() => toggle(sessions, s.value, setSessions)}>{s.label}</button>
+                ))}
+              </div>
+            </div>
+
+            {topics.length > 0 && (
+              <div className="ex-filter-row" style={{ alignItems: 'start' }}>
+                <span className="section-label" style={{ paddingTop: 4 }}>Topics</span>
+                <div className="row ex-chips" role="group" aria-label="Topics">
+                  {topics.map((t) => (
+                    <button key={t} type="button" className={`chip ${pickedTopics.has(t) ? 'on' : ''}`} aria-pressed={pickedTopics.has(t)}
+                      onClick={() => toggle(pickedTopics, t, setPickedTopics)}>{t}</button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="ex-filter-row">
+              <span className="section-label">Include</span>
+              <div className="row" style={{ gap: 18 }}>
+                <label className="toggle small"><input type="checkbox" checked={mbaOnly} onChange={(e) => { setMbaOnly(e.target.checked); setLimit(PAGE) }} /> MBA courses only</label>
+                <label className="toggle small"><input type="checkbox" checked={showCore} onChange={(e) => { setShowCore(e.target.checked); setLimit(PAGE) }} /> Core courses</label>
+              </div>
             </div>
           </div>
         )}
 
-        <div className="row between ex-foot">
-          <div className="row" style={{ gap: 18 }}>
-            <label className="toggle"><input type="checkbox" checked={mbaOnly} onChange={(e) => { setMbaOnly(e.target.checked); setLimit(PAGE) }} /> MBA courses only</label>
-            <label className="toggle"><input type="checkbox" checked={showCore} onChange={(e) => { setShowCore(e.target.checked); setLimit(PAGE) }} /> Show core courses</label>
-          </div>
-          {activeCount > 0 && <button type="button" className="link-btn small" onClick={reset}>Reset filters ↺</button>}
+        <div className="ex-foot">
+          <button type="button" className="btn sm ghost" aria-expanded={showMore} aria-controls="ex-more"
+            onClick={() => setMoreOpen(!showMore)}>
+            <SlidersHorizontal className="icon sm" />
+            {showMore ? 'Fewer filters' : 'More filters'}
+            {hiddenCount > 0 && <span className="badge pink mono" aria-label={`${hiddenCount} active`}>{hiddenCount}</span>}
+            {showMore ? <ChevronUp className="icon sm" /> : <ChevronDown className="icon sm" />}
+          </button>
+          {activeCount > 0 && (
+            <button type="button" className="btn sm ghost" onClick={reset}><RotateCcw className="icon sm" />Reset filters</button>
+          )}
         </div>
       </div>
 
       <div className="row between mt mb">
-        <span className="muted" aria-live="polite">
-          {sections.length ? <><b className="ex-count">{results.length}</b> {results.length === 1 ? 'course' : 'courses'} match</> : null}
+        <span className="muted small" aria-live="polite">
+          {sections.length ? <><span className="ex-count">{results.length}</span> {results.length === 1 ? 'course matches' : 'courses match'}</> : null}
         </span>
-        {quick.has('fits') && !planned.length && <span className="badge gray">Your plan is empty, so everything fits ✨</span>}
+        {quick.has('fits') && !planned.length && <span className="faint small">Your plan is empty, so everything fits.</span>}
       </div>
 
       {!sections.length ? (
         <div className="empty"><Spinner label="Loading the catalog…" /></div>
       ) : !results.length ? (
-        <Empty icon="🫠" title="No courses match — loosen a filter">
-          <p style={{ margin: 0 }}>Try fewer chips, another term, or a shorter search.</p>
-          <button type="button" className="btn primary sm" onClick={reset}>Reset all filters</button>
-        </Empty>
+        <div className="card">
+          <Empty icon={<Search className="icon lg" style={{ color: 'var(--faint)' }} />} title="No courses match these filters">
+            <p style={{ margin: 0 }}>Try fewer filters, another term, or a shorter search.</p>
+            <button type="button" className="btn primary sm" onClick={reset}>Reset all filters</button>
+          </Empty>
+        </div>
       ) : (
         <>
-          <div className="grid auto">
+          <div className="pa-list">
             {results.slice(0, limit).map(({ lead, count, inPlan }) => (
-              <CourseCard
+              <CourseRow
                 key={lead.key}
-                course={lead}
+                c={lead}
                 sectionCount={count}
                 onOpen={() => setOpen(lead.key)}
-                footer={
-                  <div className="row between">
-                    <button type="button" className="btn sm ghost" onClick={() => setOpen(lead.key)}>Details</button>
-                    {inPlan ? (
-                      <button type="button" className="btn sm lime" onClick={() => go('plan')} title="Already in your plan. Open My plan">✓ In plan</button>
-                    ) : user ? (
-                      <button type="button" className="btn sm primary" disabled={adding === lead.id}
-                        onClick={() => add(lead.id)} aria-label={`Add ${lead.number} ${lead.title} to my plan`}>
-                        {adding === lead.id ? 'Adding…' : '+ Add'}
-                      </button>
-                    ) : (
-                      <button type="button" className="btn sm" onClick={() => go('home')}>Sign in to add</button>
-                    )}
-                  </div>
+                action={
+                  inPlan ? (
+                    <button type="button" className="btn sm ghost" onClick={() => go('plan')} title="Already in your plan. Open My plan">
+                      <Check className="icon sm pa-ok" />In plan
+                    </button>
+                  ) : user ? (
+                    <button type="button" className="btn sm" disabled={adding === lead.id}
+                      onClick={() => add(lead.id)} aria-label={`Add ${lead.number} ${lead.title} to my plan`}>
+                      <Plus className="icon sm" />{adding === lead.id ? 'Adding…' : 'Add'}
+                    </button>
+                  ) : (
+                    <button type="button" className="btn sm" onClick={() => go('home')}>Sign in to add</button>
+                  )
                 }
               />
             ))}
@@ -271,7 +296,7 @@ export default function Explore() {
           {results.length > limit && (
             <div className="row mt-lg" style={{ justifyContent: 'center' }}>
               <button type="button" className="btn" onClick={() => setLimit((n) => n + PAGE)}>
-                Show more ({results.length - limit} left) 👇
+                Show more <span className="mono faint">({results.length - limit} left)</span><ChevronDown className="icon sm" />
               </button>
             </div>
           )}
@@ -279,6 +304,37 @@ export default function Explore() {
       )}
 
       {open && <CourseDrawer courseKey={open} onClose={close} />}
+    </div>
+  )
+}
+
+/** One course as a list row. Clicking anywhere opens the drawer; the action button doesn't. */
+function CourseRow({ c, sectionCount, onOpen, action }: { c: Section; sectionCount: number; onOpen: () => void; action: ReactNode }) {
+  const enrol = enrollLabel(c.enrollment)
+  return (
+    <div className="ex-row" onClick={onOpen}>
+      <div className="ex-row-main">
+        <span className="course-num">{c.number} · {c.session_name}</span>
+        <button type="button" className="ex-row-title" onClick={(e) => { e.stopPropagation(); onOpen() }}>{c.title}</button>
+        <span className="meta">
+          <span><Clock className="icon sm" /><span className="mono">{c.time}</span>{sectionCount > 1 ? <span className="faint">+{sectionCount - 1} more</span> : null}</span>
+          <span className="mono">{c.units} units</span>
+          {c.limit ? <span><Users className="icon sm" /><span className="mono">{c.limit}</span> seats</span> : null}
+          {c.faculty.length > 0 && <span className="hide-mobile">{c.faculty[0]}{c.faculty.length > 1 ? ' +' : ''}</span>}
+          {c.room && <span className="hide-mobile"><MapPin className="icon sm" />{c.room}</span>}
+        </span>
+        {c.description && <p className="ex-desc">{c.description}</p>}
+        <span className="row" style={{ gap: 6 }}>
+          <span className={`badge ${enrol.tone === 'amber' ? 'amber' : 'gray'}`}>{enrol.text}</span>
+          {c.ldr && <span className="badge gray" title="Leadership Distribution Requirement (inferred from SOM's feed)">Leadership</span>}
+          {c.gsr && <span className="badge gray" title="Counts toward the Global Studies Requirement (inferred)">Global Studies</span>}
+          {c.new && <span className="badge gray">New</span>}
+        </span>
+      </div>
+      <div className="ex-row-actions" onClick={(e) => e.stopPropagation()}>
+        <button type="button" className="btn sm ghost hide-mobile" onClick={onOpen}>Details</button>
+        {action}
+      </div>
     </div>
   )
 }

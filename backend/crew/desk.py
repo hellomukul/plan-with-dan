@@ -34,6 +34,7 @@ PLANNING_TERM = "202701"
 ADD_DROP = {"202603": ("2026-11-02", "Fall session-2 add/drop"), "202701": ("2027-01-26", "Spring add/drop")}
 SEVERITY = {"high": 0, "medium": 1, "low": 2}
 TOP_N = 3
+MAX_BRIEFS_PER_DAY = 3  # model-written briefs per student per day; after that, plain-code wording
 
 
 @dataclass
@@ -83,7 +84,7 @@ def scan(profile: dict, plan: list[PlanRow], catalog, global_choices: list[dict]
         cards.append(Card(
             kind="units_low", key=PLANNING_TERM, severity="high" if term_units else "medium",
             due=ADD_DROP[PLANNING_TERM][0],
-            title=f"Add {short:g} more units to Spring 2027",
+            title=f"Add {short:g} more unit{'s' if short != 1 else ''} to Spring 2027",
             detail=f"You have {term_units:g} of the 16-unit minimum. Your best fits below all fit your timetable.",
             action={"type": "scroll", "target": "fits", "label": "See best fits"},
             source="rules.DEGREE min_units_first_three_terms",
@@ -212,7 +213,9 @@ async def brief(db: Session, user_id: int, name: str, profile: dict, cards: list
                                              DeskBrief.cards_hash == digest)).first()
     if cached:
         return {"text": cached.text, "cached": True, "run_id": cached.run_id, "cost_usd": 0.0}
-    if not ai_available() or not top:
+    written_today = len(db.exec(select(DeskBrief).where(DeskBrief.user_id == user_id, DeskBrief.day == day,
+                                                         DeskBrief.run_id != "")).all())
+    if not ai_available() or not top or written_today >= MAX_BRIEFS_PER_DAY:
         text = _fallback_brief(top, name)
         db.add(DeskBrief(user_id=user_id, day=day, cards_hash=digest, text=text))
         db.commit()

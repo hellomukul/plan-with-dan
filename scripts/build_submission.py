@@ -39,9 +39,11 @@ CHAT = {"runs": 4, "input": 20368, "cached": 14601, "output": 1799, "cost": 0.00
 REC = {"runs": 9, "input": 6800, "cached": 1137, "output": 1080, "cost": 0.00115}
 NEWS = {"runs": 3, "input": 27791, "cached": 9834, "output": 948, "web": 3.7, "cost": 0.0390}
 NEWS_BEFORE = 0.1156
+DESK = {"input": 1329, "output": 86, "cost": 0.000176}
 MONTH = {"rec": 3, "chat": 20, "news": 8}
-per_user = MONTH["rec"] * REC["cost"] + MONTH["chat"] * CHAT["cost"] + MONTH["news"] * NEWS["cost"]
-per_user_no_news = MONTH["rec"] * REC["cost"] + MONTH["chat"] * CHAT["cost"]
+MONTH["desk"] = 30
+per_user = MONTH["rec"] * REC["cost"] + MONTH["chat"] * CHAT["cost"] + MONTH["news"] * NEWS["cost"] + MONTH["desk"] * DESK["cost"]
+per_user_no_news = MONTH["rec"] * REC["cost"] + MONTH["chat"] * CHAT["cost"] + MONTH["desk"] * DESK["cost"]
 
 
 def usd(x: float, d: int = 2) -> str:
@@ -55,14 +57,14 @@ SCALE_ROWS = "".join(
 )
 
 DIAGRAM = """
-<svg viewBox="0 0 980 520" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Agent architecture diagram" class="diagram">
+<svg viewBox="0 0 980 640" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Agent architecture diagram" class="diagram">
   <defs>
     <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#7d7494"/></marker>
     <style>
       .t{font:600 13px Inter,Arial,sans-serif;fill:#1d1626}.s{font:11px Inter,Arial,sans-serif;fill:#5b5470}
-      .ai{fill:#ffe3f0;stroke:#ff4fa3;stroke-width:1.6}.code{fill:#effbd9;stroke:#7fbf1f;stroke-width:1.6}
-      .io{fill:#eef1ff;stroke:#8a8fd6;stroke-width:1.4}.ln{stroke:#7d7494;stroke-width:1.5;fill:none;marker-end:url(#a)}
-      .h{font:700 14px 'Space Grotesk',Inter,Arial,sans-serif;fill:#ff2e93}
+      .ai{fill:#e6effa;stroke:#286dc0;stroke-width:1.6}.code{fill:#effbd9;stroke:#7fbf1f;stroke-width:1.6}
+      .io{fill:#f3f4f6;stroke:#9ca3af;stroke-width:1.4}.ln{stroke:#7d7494;stroke-width:1.5;fill:none;marker-end:url(#a)}
+      .h{font:700 14px Geist,Inter,Arial,sans-serif;fill:#00356b}
     </style>
   </defs>
   <text x="10" y="22" class="h">A · Chat turn ("Ask Dan" and AI News)</text>
@@ -98,49 +100,56 @@ DIAGRAM = """
   <rect x="635" y="330" width="135" height="60" rx="10" class="code"/><text x="647" y="354" class="t">Scheduler</text><text x="647" y="372" class="s">clash-free + backups</text>
   <rect x="795" y="330" width="135" height="60" rx="10" class="ai"/><text x="807" y="354" class="t">Critic agent</text><text x="807" y="372" class="s">honest watch-outs</text>
   <path d="M130 360 H153" class="ln"/><path d="M290 360 H313" class="ln"/><path d="M450 360 H473" class="ln"/><path d="M610 360 H633" class="ln"/><path d="M770 360 H793" class="ln"/>
-  <rect x="10" y="430" width="22" height="16" rx="4" class="ai"/><text x="40" y="443" class="s">LLM agent (gpt-6-luna, spends tokens)</text>
-  <rect x="300" y="430" width="22" height="16" rx="4" class="code"/><text x="330" y="443" class="s">deterministic code (free, testable)</text>
-  <rect x="560" y="430" width="22" height="16" rx="4" class="io"/><text x="590" y="443" class="s">student input / output</text>
-  <text x="10" y="480" class="s">Every agent shares one static primer (rules + safety) as the first part of its instructions, so the provider serves it from the prompt cache.</text>
-  <text x="10" y="498" class="s">Agents never write data: they suggest, the student clicks. Clashes, units, requirements and the GSA budget are always computed in code.</text>
+  <text x="10" y="425" class="h">C · Dan's Desk (chief of staff), once a day</text>
+  <rect x="10" y="440" width="150" height="60" rx="10" class="io"/><text x="22" y="464" class="t">Plan + profile</text><text x="22" y="482" class="s">deadlines · bids · GSA</text>
+  <rect x="190" y="440" width="170" height="60" rx="10" class="code"/><text x="202" y="464" class="t">Desk scan</text><text x="202" y="482" class="s">≤3 cards, due + source</text>
+  <rect x="390" y="440" width="170" height="60" rx="10" class="ai"/><text x="402" y="464" class="t">Chief of Staff agent</text><text x="402" y="482" class="s">brief from cards only</text>
+  <rect x="590" y="440" width="170" height="60" rx="10" class="code"/><text x="602" y="464" class="t">Best fits (code)</text><text x="602" y="482" class="s">labels · reasons · demand</text>
+  <rect x="790" y="440" width="180" height="60" rx="10" class="io"/><text x="802" y="464" class="t">Approve / snooze</text><text x="802" y="482" class="s">every change has undo</text>
+  <path d="M160 470 H188" class="ln"/><path d="M360 470 H388" class="ln"/><path d="M560 470 H588" class="ln"/><path d="M760 470 H788" class="ln"/>
+  <rect x="10" y="540" width="22" height="16" rx="4" class="ai"/><text x="40" y="553" class="s">LLM agent (gpt-6-luna, spends tokens)</text>
+  <rect x="300" y="540" width="22" height="16" rx="4" class="code"/><text x="330" y="553" class="s">deterministic code (free, testable)</text>
+  <rect x="560" y="540" width="22" height="16" rx="4" class="io"/><text x="590" y="553" class="s">student input / output</text>
+  <text x="10" y="590" class="s">Every agent shares one static primer (rules + safety) as the first part of its instructions, so the provider serves it from the prompt cache.</text>
+  <text x="10" y="608" class="s">Agents never write data: they suggest, the student clicks. Clashes, units, requirements and the GSA budget are always computed in code.</text>
 </svg>
 """
 
 CSS = """
 @page { size: letter; margin: 0.6in 0.65in; }
 * { box-sizing: border-box; }
-body { font-family: Inter, -apple-system, 'Segoe UI', Arial, sans-serif; color: #1d1626; line-height: 1.5; font-size: 10.5pt; margin: 0; background: #fff; }
+body { font-family: Geist, Inter, -apple-system, 'Segoe UI', Arial, sans-serif; color: #1d1626; line-height: 1.45; font-size: 10.2pt; margin: 0; background: #fff; }
 .wrap { max-width: 860px; margin: 0 auto; padding: 32px 24px 64px; }
-h1, h2, h3 { font-family: 'Space Grotesk', Inter, Arial, sans-serif; letter-spacing: -0.01em; line-height: 1.2; }
+h1, h2, h3 { font-family: Geist, Inter, Arial, sans-serif; letter-spacing: -0.01em; line-height: 1.2; }
 h1 { font-size: 30pt; margin: 0 0 6px; }
-h2 { font-size: 17pt; margin: 34px 0 10px; color: #c2116e; border-bottom: 2px solid #ffd0e6; padding-bottom: 4px; page-break-after: avoid; }
+h2 { font-size: 17pt; margin: 34px 0 10px; color: #00356b; border-bottom: 2px solid #cfe0f5; padding-bottom: 4px; page-break-after: avoid; }
 h3 { font-size: 12.5pt; margin: 20px 0 6px; page-break-after: avoid; }
 p { margin: 0 0 10px; }
-a { color: #c2116e; }
+a { color: #286dc0; }
 .sub { color: #5b5470; font-size: 12pt; }
-.hero { border-radius: 18px; padding: 26px 28px; background: linear-gradient(135deg, #1a0f1f, #2b1230 60%, #3a1446); color: #fff; }
-.hero h1 { color: #fff; } .hero .sub { color: #f3d6ea; } .hero a { color: #ff9ccf; }
-.pill { display: inline-block; padding: 2px 10px; border-radius: 999px; background: #ffe3f0; color: #a10f5d; font-size: 9.5pt; font-weight: 600; margin: 2px 4px 2px 0; }
+.hero { border-radius: 18px; padding: 26px 28px; background: #00356b; color: #fff; }
+.hero h1 { color: #fff; } .hero .sub { color: #d6e4f5; } .hero a { color: #9cc8ff; }
+.pill { display: inline-block; padding: 2px 10px; border-radius: 999px; background: #e6effa; color: #00356b; font-size: 9.5pt; font-weight: 600; margin: 2px 4px 2px 0; }
 .pill.lime { background: #ecfbd2; color: #4a7a05; } .pill.sky { background: #e3f4ff; color: #0f5f8f; }
 table { width: 100%; border-collapse: collapse; margin: 8px 0 14px; font-size: 9.6pt; page-break-inside: avoid; }
-th { text-align: left; background: #fbeef5; color: #7a1048; font-weight: 700; padding: 6px 8px; border-bottom: 2px solid #ffc4e0; }
-td { padding: 6px 8px; border-bottom: 1px solid #eee3ea; vertical-align: top; }
+th { text-align: left; background: #eef4fb; color: #00356b; font-weight: 700; padding: 6px 8px; border-bottom: 2px solid #cfe0f5; }
+td { padding: 6px 8px; border-bottom: 1px solid #e5e9ef; vertical-align: top; }
 .num { text-align: right; font-variant-numeric: tabular-nums; }
 figure { margin: 12px 0 18px; page-break-inside: avoid; }
-.shot { width: 100%; border-radius: 10px; border: 1px solid #e7dce3; box-shadow: 0 4px 16px rgba(60, 20, 50, 0.12); display: block; }
+.shot { width: 100%; border-radius: 10px; border: 1px solid #dde3ea; box-shadow: 0 4px 16px rgba(10, 30, 60, 0.12); display: block; }
 .half { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .half figure { margin: 6px 0 10px; }
 figcaption { font-size: 9pt; color: #6b6380; margin-top: 5px; }
-.callout { border-left: 4px solid #ff4fa3; background: #fff4f9; padding: 10px 14px; border-radius: 8px; margin: 10px 0 14px; page-break-inside: avoid; }
+.callout { border-left: 4px solid #286dc0; background: #f3f7fc; padding: 10px 14px; border-radius: 8px; margin: 10px 0 14px; page-break-inside: avoid; }
 .callout.lime { border-color: #7fbf1f; background: #f6fde9; } .callout.amber { border-color: #e2a400; background: #fff9e6; }
 .todo { border: 2px dashed #e2a400; background: #fffbea; padding: 12px 14px; border-radius: 10px; margin: 10px 0 14px; }
 .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 12px 0; }
-.kpi { border: 1px solid #f0dbe7; border-radius: 12px; padding: 10px 12px; background: #fffafc; }
-.kpi b { display: block; font-family: 'Space Grotesk', Inter, sans-serif; font-size: 17pt; color: #c2116e; }
+.kpi { border: 1px solid #dbe5f2; border-radius: 12px; padding: 10px 12px; background: #f8fbfe; }
+.kpi b { display: block; font-family: Geist, Inter, sans-serif; font-size: 17pt; color: #00356b; }
 .kpi span { font-size: 8.8pt; color: #6b6380; }
-.diagram { width: 100%; height: auto; border: 1px solid #efe2ea; border-radius: 12px; background: #fff; }
+.diagram { width: 100%; height: auto; border: 1px solid #e3e8ef; border-radius: 12px; background: #fff; }
 ol li, ul li { margin-bottom: 4px; }
-code { background: #f6eef3; padding: 1px 5px; border-radius: 5px; font-size: 9.5pt; }
+code { background: #eef2f7; padding: 1px 5px; border-radius: 5px; font-size: 9.5pt; }
 .small { font-size: 9.2pt; color: #6b6380; }
 .pb { page-break-before: always; }
 @media print { .wrap { padding: 0; } h2 { margin-top: 22px; } .hero { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
@@ -149,14 +158,14 @@ code { background: #f6eef3; padding: 1px 5px; border-radius: 5px; font-size: 9.5
 REPORT = f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Plan with Dan: Final Project Report · {AUTHOR}</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400&display=swap" rel="stylesheet">
 <style>{CSS}</style></head><body><div class="wrap">
 
 <!-- 1. TITLE + LINKS -->
 <section class="hero">
   <div class="pill">MGT 409 · AI Foundations for Managers · Final project</div>
-  <h1>Plan with Dan 🐶</h1>
-  <p class="sub"><b>An AI crew that turns a Yale SOM student's goals into a clash-free, requirement-aware semester plan, with real courses only, in about two minutes.</b></p>
+  <h1>Plan with Dan</h1>
+  <p class="sub"><b>An AI chief of staff for Yale SOM students: it surfaces the few planning decisions that matter this week and turns your goals into a clash-free, requirement-aware plan, with real courses only.</b></p>
   <p class="sub">{AUTHOR} · Yale SOM · October 2026<br>
   GitHub: <a href="{REPO_URL}">{REPO_URL}</a><br>
   Live app: <a href="{APP_URL}">{APP_URL}</a> (Render; first load can take ~1 min while the free server wakes up)</p>
@@ -164,9 +173,9 @@ REPORT = f"""<!doctype html>
 
 <div class="kpis">
   <div class="kpi"><b>453</b><span>real SOM course sections (Fall 2026 + Spring 2027)</span></div>
-  <div class="kpi"><b>8</b><span>AI agents + 4 code stages, 12 deterministic tools + web search</span></div>
+  <div class="kpi"><b>9</b><span>AI agents + a code "desk scan", 12 deterministic tools + web search</span></div>
   <div class="kpi"><b>{usd(CHAT['cost'], 4)}</b><span>average chat turn, 72% of input from prompt cache</span></div>
-  <div class="kpi"><b>27</b><span>automated tests incl. injection, hallucination, overspend</span></div>
+  <div class="kpi"><b>35</b><span>automated tests incl. injection, hallucination, overspend, privacy</span></div>
 </div>
 
 <!-- 2. MOTIVATION -->
@@ -193,9 +202,11 @@ REPORT = f"""<!doctype html>
 <tr><td><b>SOM course directory + auction app</b></td><td>The official listing and the auction itself</td><td>No planning, no clash help before bidding, no history, no advice</td></tr>
 <tr><td><b>Coursicle</b>, <b>Stellic</b></td><td>Generic schedule builder; licensed degree-audit</td><td>Nothing SOM-specific; Yale does not use Stellic</td></tr>
 <tr><td><b>Wharton Course Match, Booth iBid, Kellogg BidReg</b></td><td>Allocation built into each school's system</td><td>Only at those schools</td></tr>
+<tr><td><b>ChatGPT Pulse, Gemini Daily Brief, Google CC</b></td><td>Daily AI briefs from your inbox and calendar (Gemini's is free in the US since Sep 2026)</td><td>Generic: no SOM rules, deadlines, requirements or course data; Pulse drew "creepy/irrelevant" complaints</td></tr>
+<tr><td><b>Lindy, Motion, Sunsama, Reclaim</b></td><td>AI assistants and planners: approvals, auto-scheduling, daily planning rituals</td><td>Built for knowledge workers' email and calendars, not degree planning; paid</td></tr>
 <tr><td><b>ChatGPT / Claude / Gemini</b></td><td>Great conversation about goals</td><td>No current SOM catalog, so it invents courses, times and rules (documented in the Aurora study, arXiv 2602.17999)</td></tr>
 </table>
-<div class="callout"><b>What Plan with Dan does that none of them do:</b> it combines (1) an AI recommender that can <i>only</i> recommend real SOM courses and must quote the description to justify each pick; (2) clash checking on real session dates (half-terms included) with same-slot backups; (3) SOM-specific requirement tracking, including the 10-day GSA budget rule that most students don't know about; (4) a bid coach that is honest about missing data and crowdsources real outcomes for next year; and (5) one private calendar feed for Google, Outlook and Apple. It started from the class's lecture 8 course explorer: I kept the course data and the mascot and rewrote the backend and UI (see "What I added", Section 8).</div>
+<div class="callout"><b>What Plan with Dan does that none of them do:</b> it is a <i>chief of staff for SOM decisions</i>, not another inbox summary. Every morning, plain code scans the student's plan, requirements, deadlines, bids and Global Studies budget and produces at most three decision cards, each with a real due date and a cited source; an agent only words the brief. On top of that it combines (1) an AI recommender that can <i>only</i> recommend real SOM courses and must quote the description to justify each pick; (2) clash checking on real session dates (half-terms included) with same-slot backups; (3) SOM-specific requirement tracking, including the 10-day GSA budget rule that most students don't know about; (4) a bid coach that is honest about missing data and crowdsources real outcomes for next year; and (5) one private calendar feed for Google, Outlook and Apple. It started from the class's lecture 8 course explorer: I kept the course data and the mascot and rewrote the backend and UI (see "What I added", Section 8).</div>
 
 <!-- 4. AGENTS -->
 <h2 class="pb">3 · The agents</h2>
@@ -211,12 +222,14 @@ REPORT = f"""<!doctype html>
 <tr><td><b>AI News Desk</b></td><td>Current AI news with dated sources, then "Learn this at SOM"</td><td>OpenAI web search, <code>search_catalog</code></td><td>Cited markdown</td></tr>
 <tr><td><b>Curator</b></td><td>Picks 4–7 courses from a code-built shortlist for the quiz answers</td><td>none (shortlist is in the prompt)</td><td>Structured <code>Curation</code></td></tr>
 <tr><td><b>Critic</b></td><td>Reviews the final, code-checked plan against the goals</td><td>none</td><td>Structured <code>Critique</code></td></tr>
+<tr><td><b>Chief of Staff</b></td><td>Writes the 2–3 sentence brief on Dan's Desk from the decision cards only (cached once per day)</td><td>none (cards come from the code <code>desk scan</code>)</td><td>Structured <code>Brief</code></td></tr>
 </table>
 <h3>Design choices (and why)</h3>
 <ul>
   <li><b>Dispatcher, not a boss.</b> In class we built a boss that calls several specialists and reads all their reports. Here a cheap dispatcher (~1.3k tokens, $0.0002) sends each turn to <i>one</i> specialist that carries only its own tools. That is fewer tokens per turn and fewer chances for a specialist to wander outside its lane.</li>
   <li><b>The AI decides; code computes.</b> 12 tools are plain Python: clashes use real session dates, units and requirements follow the 2026–27 Bulletin, and the GSA budget rules are encoded. The model reasons about goals and trade-offs; it never does the math or remembers times.</li>
   <li><b>Code before and after the LLM in the recommender.</b> A BM25 retriever narrows ~100 eligible courses to 28 before the Curator runs. Afterwards, a validator, a scheduler and backup finding run in code. Only the Curator and Critic spend tokens.</li>
+  <li><b>Chief of staff, but code decides what matters.</b> The desk scan (clashes, the 16-unit minimum, SOM deadlines, Global Studies, Leadership, bid split, missing times, missing goals) is deterministic and every card cites its rule; the agent can't invent a date. Students approve, snooze (3 days) or dismiss each card, and every plan change is logged with <b>undo</b>.</li>
   <li><b>Human in the loop.</b> Agents can only <i>suggest</i> a course (<code>suggest_add</code>); the student clicks "Add".</li>
   <li><b>Model: <code>gpt-6-luna</code></b> through Portkey. It is the only model allowed on the course key, and at $0.10 / $0.50 per 1M tokens it is 100× cheaper than <code>gpt-6-astra</code>. Structured outputs and tool calling worked reliably in all test runs.</li>
 </ul>
@@ -229,9 +242,13 @@ REPORT = f"""<!doctype html>
   <li><b>Planner</b> calls <code>my_profile_and_plan</code> (year 1, 0 GSA days used), <code>requirements_status</code> (13 Spring units, LDR met, GSR not met), <code>global_options</code> (all six options with budget checks and matching Spring courses) and <code>plan_review</code> (no clashes).</li>
   <li><b>Output check (code)</b> verifies every MGT number mentioned exists in the catalog, then the answer and its receipt are saved.</li>
 </ol>
+<p><b>Run C: Dan's Desk.</b> When the same student opens the app, the desk scan finds three decisions (Spring is 3 units short of the 16-unit minimum, Fall session-2 add/drop closes Nov 2, and four bid courses have no point split). The Chief of Staff agent turns them into a brief (1,329 input / 86 output tokens, $0.00018), and the second load that day is served from cache at $0.</p>
+<div class="half">
+{fig("desk", "Dan's Desk (the new home): a brief written only from code-computed decision cards, the decisions list (approve / why / snooze / done), best fits with honest labels, and a side pane with what's next, plan meters and an undoable action log.")}
+{fig("desk_fits", "Best fits: a label instead of a percentage, at most two reason chips built from data, demand shown separately, and 'Not for me' that demotes similar courses. Sections outside the student's schedule preferences are hidden.")}
+</div>
 <p><b>Run B: "Find my courses".</b> The same student presses <i>Run Dan's crew</i>:</p>
 {fig("find_trace", "Recommender trace: Retriever (code) 93 eligible → 28 shortlisted (~65k tokens never sent) → Curator (5.3k in / 492 out, $0.0007) → Validator (code) kept 5, dropped 1 pick that was not in the shortlist → Scheduler (code) found clash-free sections → Critic ($0.0004). Total $0.001.")}
-{fig("find_picks", "The resulting cards. Each pick shows its priority, which goal it serves, a 'why', and a phrase copied from the real course description, verified by code. Each also shows its time, a timetable-fit badge, and backups in the same slot.")}
 
 <!-- 5. TOKENOMICS -->
 <h2>4 · Tokenomics</h2>
@@ -243,10 +260,11 @@ REPORT = f"""<!doctype html>
 <tr><td>Chat turn (Dispatcher + 1 specialist)</td><td class="num">{CHAT['runs']}</td><td class="num">{CHAT['input']:,}</td><td class="num">{CHAT['cached']:,} (72%)</td><td class="num">{CHAT['output']:,}</td><td class="num">0</td><td class="num"><b>{usd(CHAT['cost'], 4)}</b></td></tr>
 <tr><td>Find my courses (Curator + Critic)</td><td class="num">{REC['runs']}</td><td class="num">{REC['input']:,}</td><td class="num">{REC['cached']:,}</td><td class="num">{REC['output']:,}</td><td class="num">0</td><td class="num"><b>{usd(REC['cost'], 4)}</b></td></tr>
 <tr><td>AI news question (web search)</td><td class="num">{NEWS['runs']}</td><td class="num">{NEWS['input']:,}</td><td class="num">{NEWS['cached']:,}</td><td class="num">{NEWS['output']:,}</td><td class="num">{NEWS['web']}</td><td class="num"><b>{usd(NEWS['cost'], 4)}</b></td></tr>
+<tr><td>Dan's Desk brief (once per day, then cached)</td><td class="num">1</td><td class="num">{DESK['input']:,}</td><td class="num">0</td><td class="num">{DESK['output']:,}</td><td class="num">0</td><td class="num"><b>{usd(DESK['cost'], 5)}</b></td></tr>
 <tr><td>Blocked injection attempt</td><td class="num">2</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num"><b>$0</b></td></tr>
 </table>
 <h3>Per student per month, and at scale</h3>
-<p>Assumption for a planning month: 3 recommender runs, 20 chat turns and 8 news questions per student, which gives <b>{usd(per_user)}</b> per student per month (<b>{usd(per_user_no_news, 3)}</b> without the news desk; web search is about 90% of the cost). The daily cap of $0.50 per student bounds the worst case at $15 per student per month, even for a bot or a bug.</p>
+<p>Assumption for a planning month: one desk brief per day, 3 recommender runs, 20 chat turns and 8 news questions per student, which gives <b>{usd(per_user)}</b> per student per month (<b>{usd(per_user_no_news, 3)}</b> without the news desk; web search is about 90% of the cost). The daily cap of $0.50 per student bounds the worst case at $15 per student per month, even for a bot or a bug.</p>
 <table>
 <tr><th>Scale</th><th class="num">Students</th><th class="num">Monthly AI cost</th><th class="num">…without news</th><th class="num">Hard ceiling (caps)</th></tr>
 {SCALE_ROWS}
@@ -277,7 +295,9 @@ REPORT = f"""<!doctype html>
 <tr><td><b>Invented courses / facts</b></td><td>The Curator can only choose keys from its shortlist; the Validator drops anything else and strips "evidence" quotes not found in the description. The chat output check flags MGT numbers not in the catalog. Times, units and rules come only from tools.</td><td>Validator dropped an out-of-list pick on 7 runs (safety log); unit tests</td></tr>
 <tr><td><b>Wrong actions</b></td><td>Agents cannot write to the plan; they propose, and the student clicks "Add". The scheduler never claims a clashing pick "fits".</td><td>Find-page "Clashes with …" badges</td></tr>
 <tr><td><b>Loops / overspending</b></td><td>Request limit per agent, a per-tool loop guard (6 calls), a token ceiling computed from the remaining budget, $0.05 per turn and $0.50 per student per day caps, and rate limits (login 5/min, chat 20/min, recommend 6/min)</td><td>Spend-guard unit test; <code>over_run_budget</code> event</td></tr>
-<tr><td><b>Account security</b></td><td>Argon2id hashes, HttpOnly SameSite cookies (only the token's SHA-256 is stored), identical errors for wrong password vs no account, a cross-site (CSRF) origin check, path-traversal-safe static serving, and no secrets in the repo</td><td>Auth and CSRF tests; key-scan before commit</td></tr>
+<tr><td><b>Privacy</b></td><td>A Privacy page explains what's stored and that AI requests go through Portkey to OpenAI; one-click <b>export</b> of all your data and <b>account deletion</b> (password-confirmed); blocked prompts are no longer stored anywhere; signup no longer reveals whether an email is registered</td><td>Export/delete and generic-signup tests</td></tr>
+<tr><td><b>Mistaken actions</b></td><td>Every plan change (add, remove, switch, status) is written to an action log with one-click <b>undo</b>; desk cards can be snoozed, dismissed and restored</td><td>Undo test; toasts with Undo</td></tr>
+<tr><td><b>Account security</b></td><td>Argon2id hashes, HttpOnly SameSite cookies (only the token's SHA-256 is stored), identical errors for wrong password vs no account, a cross-site (CSRF) origin check, a strict Content-Security-Policy, path-traversal-safe static serving, and no secrets in the repo</td><td>Auth and CSRF tests; key-scan before commit</td></tr>
 </table>
 <div class="half">
 {fig("blocked", "Defense working: an injection attempt is blocked by the safety screen with five reasons, 0 model calls, $0.")}
@@ -323,15 +343,19 @@ REPORT = f"""<!doctype html>
   <li>The 8-agent crew (dispatcher pattern) and the 5-stage recommender.</li>
   <li>Student accounts with saved profiles, plans, Global Studies choices, chats and bids.</li>
   <li>Deterministic planning tools that fix the base app's half-term clash bug.</li>
-  <li>A calendar feed; the safety layer; per-run token accounting; 27 tests.</li>
+  <li>A calendar feed; the safety layer; per-run token accounting; 35 tests.</li>
   <li>Seat limits and requirement flags merged from SOM's public feed.</li>
-  <li>A new Gen Z interface with CSS-only Labubus.</li>
+  <li>Dan's Desk: a chief-of-staff home with a code desk scan, a cached Chief of Staff brief, honest best fits and an undo log.</li>
+  <li>A research-driven redesign ("Quiet Yale"): after the first version felt busy, I studied Linear's calm redesign, NN/g's visual-hierarchy and dashboard research, and Google's People + AI Guidebook on explaining recommendations. Result: one Yale-blue accent, Geist type, no emoji, bars instead of rings, a ⌘K command menu, and fit labels instead of percentages.</li>
+  <li>Privacy controls: export, delete, a privacy page, CSP, generic signup.</li>
 </ul>
 <div class="half">
 {fig("plan", "My plan: weekly timetable with session-1/2 tags, clash panel and week review.")}
-{fig("calendar_month", "Calendar: classes skip the Mar 8–19 IE/GNW break automatically (EXDATE), with SOM deadlines.")}
-{fig("global", "Global studies: GSA budget, a 'which one fits me?' helper and key dates.")}
 {fig("bids_history", "Bid coach: honest SAMPLE labelling until real student reports arrive.")}
+</div>
+<div class="half">
+{fig("privacy", "Privacy and data: what's stored, where it goes (Portkey → OpenAI), export and delete.")}
+{fig("cmdk", "⌘K command menu: jump to any page or course, or hand a question to Dan.")}
 </div>
 <p class="small">How to run: see the README (<code>pip install -r requirements.txt</code>, then <code>uvicorn backend.main:app</code>; the .env is read from the repo folder, then the folder above it). Sources for every SOM rule are in <code>backend/rules.py</code> and <code>docs/research.md</code>. Not an official Yale tool.</p>
 </div></body></html>
@@ -341,34 +365,34 @@ SLIDES = f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Plan with Dan · Slides · {AUTHOR}</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400&display=swap" rel="stylesheet">
 <style>
-:root {{ --pink:#ff4fa3; --lilac:#b98cff; --lime:#c6ff5e; }}
-.reveal {{ font-family: Inter, Arial, sans-serif; color: #f6f2ff; font-size: 30px; }}
-.reveal-viewport {{ background: radial-gradient(900px 500px at 85% -10%, rgba(255,79,163,.22), transparent 60%), radial-gradient(700px 500px at -10% 10%, rgba(185,140,255,.2), transparent 60%), #0b0a10; }}
-.reveal h1, .reveal h2, .reveal h3 {{ font-family: 'Space Grotesk', Inter, sans-serif; color: #fff; text-transform: none; letter-spacing: -0.02em; }}
+:root {{ --pink:#63aaff; --lilac:#8cc2ff; --lime:#3dd68c; }}
+.reveal {{ font-family: Geist, Inter, Arial, sans-serif; color: #f6f2ff; font-size: 30px; }}
+.reveal-viewport {{ background: #0b0b0c; }}
+.reveal h1, .reveal h2, .reveal h3 {{ font-family: Geist, Inter, sans-serif; color: #fff; text-transform: none; letter-spacing: -0.02em; }}
 .reveal h1 {{ font-size: 2.3em; }} .reveal h2 {{ font-size: 1.45em; margin-bottom: .4em; }}
-.grad {{ background: linear-gradient(90deg, var(--pink), var(--lilac) 60%, #6fd3ff); -webkit-background-clip: text; background-clip: text; color: transparent; }}
+.grad {{ color: var(--pink); }}
 .reveal ul {{ text-align: left; }} .reveal li {{ margin: .25em 0; }}
 .reveal .shot {{ border-radius: 14px; box-shadow: 0 10px 40px rgba(0,0,0,.5); max-height: 520px; margin: 0; }}
 .cols {{ display: grid; grid-template-columns: 1fr 1fr; gap: 26px; align-items: center; text-align: left; }}
 .cols > * {{ min-width: 0; }}
 .reveal .cols .shot {{ width: 100%; height: auto; max-height: 470px; object-fit: contain; }}
 .kpis {{ display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 20px; }}
-.kpi {{ background: #1a1724; border: 1px solid #2f2a3f; border-radius: 18px; padding: 16px; }}
-.kpi b {{ display: block; font-family: 'Space Grotesk', sans-serif; font-size: 1.5em; color: var(--pink); }}
+.kpi {{ background: #141416; border: 1px solid #27272b; border-radius: 18px; padding: 16px; }}
+.kpi b {{ display: block; font-family: Geist, sans-serif; font-size: 1.5em; color: var(--pink); }}
 .kpi span {{ font-size: .55em; color: #b3aac8; }}
 .small {{ font-size: .6em; color: #b3aac8; }}
-.tag {{ display: inline-block; padding: 4px 14px; border-radius: 999px; background: var(--lime); color: #182200; font-weight: 700; font-size: .55em; transform: rotate(-2deg); }}
-.reveal table {{ font-size: .55em; }} .reveal table th {{ color: var(--pink); border-bottom: 2px solid #3d3652; }} .reveal table td {{ border-bottom: 1px solid #2f2a3f; }}
+.tag {{ display: inline-block; padding: 4px 14px; border-radius: 999px; background: rgba(99,170,255,.12); border: 1px solid rgba(99,170,255,.42); color: #8cc2ff; font-weight: 500; font-size: .5em; }}
+.reveal table {{ font-size: .55em; }} .reveal table th {{ color: var(--pink); border-bottom: 2px solid #34343a; }} .reveal table td {{ border-bottom: 1px solid #27272b; }}
 .diagram {{ background: #fff; border-radius: 16px; padding: 8px; width: 100%; }}
 </style></head><body>
 <div class="reveal"><div class="slides">
 
 <section>
   <span class="tag">MGT 409 final project</span>
-  <h1>Plan with <span class="grad">Dan</span> 🐶</h1>
-  <p>An AI crew that turns an SOM student's goals into a clash-free, requirement-aware semester, with <b>real courses only</b>.</p>
+  <h1>Plan with <span class="grad">Dan</span></h1>
+  <p>Your <b>AI chief of staff</b> for the SOM semester: the few decisions that matter this week, and a clash-free plan from <b>real courses only</b>.</p>
   <p class="small">{AUTHOR} · Yale SOM · Oct 2026 · {REPO_URL}</p>
 </section>
 
@@ -388,6 +412,7 @@ SLIDES = f"""<!doctype html>
     <tr><th>Existing</th><th>Missing for SOM students</th></tr>
     <tr><td>CourseTable · MySOMClasses</td><td>No auction help, no SOM requirements, no recommender</td></tr>
     <tr><td>SOM directory + auction app</td><td>No planning or clash help before bidding</td></tr>
+    <tr><td>ChatGPT Pulse · Gemini Daily Brief</td><td>Generic inbox briefs, no SOM rules or deadlines</td></tr>
     <tr><td>ChatGPT</td><td>No SOM catalog: invents courses and times</td></tr>
   </table>
   <p>Plan with Dan: <b>an agent that can only recommend real courses</b> and quotes the description to prove it. Clash checks on real dates, GSA-budget rules, an honest bid coach, and a calendar feed.</p>
@@ -400,11 +425,8 @@ SLIDES = f"""<!doctype html>
 
 <section>
   <h2>Demo</h2>
-  <div class="cols">
-    {img("find_picks", "Find my courses picks")}
-    {img("chat_trace", "Chat trace")}
-  </div>
-  <p class="small">Left: real picks with quoted evidence, fit badges and backups. Right: Dispatcher → Planner → 4 tools, $0.001.</p>
+  {img("desk", "Dan's Desk")}
+  <p class="small">Dan's Desk: a brief written only from code-computed decisions, approve / snooze / done, best fits with honest labels, and undo for every change.</p>
 </section>
 
 <section>
@@ -430,7 +452,8 @@ SLIDES = f"""<!doctype html>
       <li>Validator dropped invented / out-of-list picks</li>
       <li>Caps: $0.05 per turn, $0.50 per day, loop guards</li>
       <li>Fixed by testing: history poisoning, budget overrun, wrong EMBA section</li>
-      <li>27 automated tests</li>
+      <li>Undo for every change · export / delete your data</li>
+      <li>35 automated tests</li>
     </ul>
   </div>
 </section>

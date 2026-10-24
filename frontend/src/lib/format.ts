@@ -50,25 +50,5 @@ export function enrollLabel(e: string): { text: string; tone: string } {
   return { text: e || '—', tone: 'gray' }
 }
 
-export const TOPIC_EMOJI: Record<string, string> = {
-  'AI & Machine Learning': '🤖',
-  'Data & Analytics': '📊',
-  Finance: '💸',
-  Entrepreneurship: '🚀',
-  'Marketing & Customers': '📣',
-  Strategy: '♟️',
-  'Operations & Supply Chain': '🏭',
-  'Leadership & People': '🧭',
-  Negotiation: '🤝',
-  Healthcare: '🩺',
-  'Sustainability & Climate': '🌱',
-  'Policy & Society': '🏛️',
-  Ethics: '⚖️',
-  'Global & International': '🌍',
-  'Real Estate': '🏙️',
-  'Nonprofit & Impact': '💚',
-  'Behavioral Science': '🧠',
-  'Technology & Product': '🛠️',
-  Accounting: '🧾',
-  'Media & Entertainment': '🎬',
-}
+/** Topics are shown as plain text in the Quiet Yale design; kept as an empty map for compatibility. */
+export const TOPIC_EMOJI: Record<string, string> = {}

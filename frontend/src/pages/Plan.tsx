@@ -1,5 +1,10 @@
-/* My plan: saved courses, requirement progress, weekly timetable, clashes and fixes. */
+/* My plan: saved courses, requirement progress, weekly timetable, clashes and fixes.
+   Calm style: bars for progress, status colour only where it means something, and every
+   change (remove, switch section, status) comes back with an Undo toast. */
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import {
+  BookOpen, CalendarPlus, Check, CircleAlert, Clock, Compass, Info, MapPin, Search, Sparkles, TriangleAlert, X,
+} from 'lucide-react'
 import { api, type Clash, type PlanItem, type PlanResponse, type Section } from '../api'
 import CourseDrawer from '../components/CourseDrawer'
 import Timetable, { sectionsClash } from '../components/Timetable'
@@ -12,21 +17,27 @@ type SessionView = 'all' | '1' | '2'
 type Status = PlanItem['status']
 
 const STATUSES: { value: Status; label: string }[] = [
-  { value: 'planned', label: '📝 Planned' },
-  { value: 'bidding', label: '🎯 Bidding' },
-  { value: 'enrolled', label: '✅ Enrolled' },
-  { value: 'completed', label: '🎓 Completed' },
+  { value: 'planned', label: 'Planned' },
+  { value: 'bidding', label: 'Bidding' },
+  { value: 'enrolled', label: 'Enrolled' },
+  { value: 'completed', label: 'Completed' },
 ]
-const NOTE_TONE = { good: 'lime', warn: 'amber', info: 'sky' } as const
-const NOTE_ICON = { good: '✨', warn: '⚠️', info: '💡' } as const
+const NOTE_ICON = {
+  good: <Check className="icon sm pa-ok" aria-label="Good" />,
+  warn: <TriangleAlert className="icon sm pa-warn" aria-label="Heads up" />,
+  info: <Info className="icon sm faint" aria-label="Note" />,
+} as const
 
 const units = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1))
 
-function termStatus(status: 'ok' | 'low' | 'needs_approval'): { text: string; tone: string } {
-  if (status === 'low') return { text: 'Below the 16-unit minimum', tone: 'amber' }
-  if (status === 'needs_approval') return { text: 'Over 24 units: needs approval', tone: 'red' }
-  return { text: 'In range (16–24) ✓', tone: 'lime' }
+function termStatus(status: 'ok' | 'low' | 'needs_approval'): { text: string; tone: string; cls: string } {
+  if (status === 'low') return { text: 'Below the 16-unit minimum', tone: 'amber', cls: 'pa-warn' }
+  if (status === 'needs_approval') return { text: 'Over 24 units, needs approval', tone: 'red', cls: 'pa-bad' }
+  return { text: 'In range (16–24)', tone: 'green', cls: 'pa-ok' }
 }
+
+/** What every plan change returns: the action id lets the toast offer Undo. */
+type Work = () => Promise<{ ok: boolean; action_id?: number }>
 
 function inSessionView(s: Section, view: SessionView): boolean {
   if (view === '1') return !s.session.endsWith('-2')
@@ -37,7 +48,7 @@ function inSessionView(s: Section, view: SessionView): boolean {
 const shortTime = (s: Section) => (s.start_min == null ? 'Time TBA' : s.time)
 
 export default function Plan() {
-  const { plan, refreshPlan, toast, go } = useApp()
+  const { plan, refreshPlan, toast, undoToast, go } = useApp()
   const [loaded, setLoaded] = useState(false)
   const [term, setTerm] = useState(PLANNING_TERM)
   const [view, setView] = useState<SessionView>('all')
@@ -50,25 +61,25 @@ export default function Plan() {
 
   const close = useCallback(() => setOpen(null), [])
 
-  const run = useCallback(async (id: number, work: () => Promise<unknown>, ok: string) => {
+  const run = useCallback(async (id: number, work: Work, ok: string) => {
     setBusy(id)
     try {
-      await work()
+      const r = await work()
       await refreshPlan()
-      toast(ok, 'good')
+      undoToast(ok, r?.action_id)
     } catch (e) {
-      toast((e as Error).message || 'That did not save. Try again?', 'bad')
+      toast((e as Error).message || 'That did not save. Try again.', 'bad')
     } finally {
       setBusy(null)
     }
-  }, [refreshPlan, toast])
+  }, [refreshPlan, toast, undoToast])
 
   if (!plan) {
     return (
       <div>
-        <div className="page-head"><div><h1>My plan 🗓️</h1></div></div>
+        <div className="page-head"><div><h1>My plan</h1><p>Your saved courses, your week, and how you're tracking on requirements.</p></div></div>
         {loaded ? (
-          <Empty icon="😵‍💫" title="Couldn't load your plan">
+          <Empty icon={<CircleAlert className="icon lg faint" />} title="Couldn't load your plan">
             <button type="button" className="btn primary sm" onClick={() => { setLoaded(false); refreshPlan().finally(() => setLoaded(true)) }}>Try again</button>
           </Empty>
         ) : <div className="empty"><Spinner label="Loading your plan…" /></div>}
@@ -79,13 +90,13 @@ export default function Plan() {
   if (!plan.items.length) {
     return (
       <div>
-        <div className="page-head"><div><h1>My plan 🗓️</h1><p>Your saved courses, timetable and requirement check live here.</p></div></div>
+        <div className="page-head"><div><h1>My plan</h1><p>Your saved courses, your week, and how you're tracking on requirements.</p></div></div>
         <div className="card">
-          <Empty icon="🪹" title="Your plan is empty (for now)">
-            <p style={{ margin: 0, maxWidth: 420 }}>Let Dan pick courses that fit your goals and schedule, or browse the full catalog yourself.</p>
+          <Empty icon={<Compass className="icon lg faint" />} title="Your plan is empty">
+            <p style={{ margin: 0, maxWidth: 420 }}>Let Dan pick courses that fit your goals and schedule, or browse the catalog yourself.</p>
             <div className="row" style={{ justifyContent: 'center' }}>
-              <button type="button" className="btn primary" onClick={() => go('find')}>✨ Let Dan recommend</button>
-              <button type="button" className="btn" onClick={() => go('explore')}>🔎 Explore catalog</button>
+              <button type="button" className="btn primary" onClick={() => go('find')}><Sparkles className="icon sm" />Let Dan recommend</button>
+              <button type="button" className="btn" onClick={() => go('explore')}><Search className="icon sm" />Browse the catalog</button>
             </div>
           </Empty>
         </div>
@@ -110,7 +121,7 @@ interface BodyProps {
   view: SessionView
   setView: (v: SessionView) => void
   busy: number | null
-  run: (id: number, work: () => Promise<unknown>, ok: string) => Promise<void>
+  run: (id: number, work: Work, ok: string) => Promise<void>
   onOpen: (key: string) => void
   go: ReturnType<typeof useApp>['go']
   children?: ReactNode
@@ -132,18 +143,19 @@ function PlanBody({ plan, term, setTerm, view, setView, busy, run, onOpen, go, c
   const corePct = p.core.target ? (100 * p.core.counted) / p.core.target : 0
   const elecPct = p.electives.target ? (100 * p.electives.planned) / p.electives.target : 0
   const hasHalves = items.some((i) => /-(1|2)$/.test(i.section.session))
+  const daysOn = info?.review.days_on_campus.length ?? 0
 
   return (
     <div>
       <div className="page-head">
         <div>
-          <h1>My <span className="grad-text">plan</span> 🗓️</h1>
-          <p>Everything you've saved, your week at a glance, and how you're tracking on degree requirements.</p>
+          <h1>My plan</h1>
+          <p>Your saved courses, your week, and how you're tracking on requirements.</p>
         </div>
-        <div className="card flat pl-headstat">
+        <div className="card pl-headstat">
           <div className="stat">
-            <span className="label">Spring 2027</span>
-            <span className="value">{units(springUnits)} <span className="muted small">units</span></span>
+            <span className="label">{TERM_NAMES[PLANNING_TERM]}</span>
+            <span className="value">{units(springUnits)} <span className="muted small" style={{ fontFamily: 'var(--font)' }}>units</span></span>
           </div>
           {spring
             ? <span className={`badge ${termStatus(spring.status).tone}`}>{termStatus(spring.status).text}</span>
@@ -153,44 +165,44 @@ function PlanBody({ plan, term, setTerm, view, setView, busy, run, onOpen, go, c
 
       {/* ---------------------------------------------------------- requirements */}
       <div className="card">
-        <div className="card-title">🎓 Requirement check</div>
-        <div className="grid four pl-req">
-          <div className="stack tight">
-            <div className="row between"><b>Core</b><span className="muted small">{units(p.core.counted)} / {units(p.core.target)} units</span></div>
-            <Bar pct={corePct} />
-            <span className="faint small">{p.core.counted >= p.core.target ? 'Core complete 🙌' : 'Counted from your year + planned core'}</span>
+        <div className="section-label"><span>Requirements</span></div>
+        <div className="pl-req">
+          <div className="meter">
+            <span>Core</span><span className="mono">{units(p.core.counted)} / {units(p.core.target)}</span>
+            <Bar pct={corePct} tone={p.core.counted >= p.core.target ? 'lime' : ''} />
+            <span>Electives <span className="faint small">· all terms</span></span><span className="mono">{units(p.electives.planned)} / {units(p.electives.target)}</span>
+            <Bar pct={elecPct} tone={p.electives.planned >= p.electives.target ? 'lime' : ''} />
           </div>
-          <div className="stack tight">
-            <div className="row between"><b>Electives</b><span className="muted small">{units(p.electives.planned)} / {units(p.electives.target)} units</span></div>
-            <Bar pct={elecPct} tone="lime" />
-            <span className="faint small">Planned across all terms</span>
-          </div>
-          <div className="stack tight">
-            <b>Leadership (LDR)</b>
-            <span>{p.ldr.met ? <span className="badge lime">✓ Met</span> : <span className="badge amber">Not yet: add an LDR course</span>}</span>
-          </div>
-          <div className="stack tight">
-            <b>Global Studies</b>
-            <span>
-              {p.gsr.met ? <span className="badge lime">✓ Met</span>
-                : p.gsr.in_plan.length ? <span className="badge sky">On track ({p.gsr.in_plan.length} in plan)</span>
-                  : <span className="badge amber">Not yet</span>}
-            </span>
-            {!p.gsr.met && <button type="button" className="link-btn small" style={{ textAlign: 'left' }} onClick={() => go('global')}>See Global options →</button>}
+          <div className="pl-kv">
+            <div>
+              <span>Leadership</span>
+              {p.ldr.met ? <span className="pa-inline-icon pa-ok"><Check className="icon sm" />Met</span> : <span className="pa-warn">Not yet, add a Leadership course</span>}
+            </div>
+            <div>
+              <span>Global Studies</span>
+              {p.gsr.met ? <span className="pa-inline-icon pa-ok"><Check className="icon sm" />Met</span>
+                : p.gsr.in_plan.length ? <span>On track <span className="faint mono">({p.gsr.in_plan.length} in plan)</span></span>
+                  : <span className="pa-warn">Not yet</span>}
+            </div>
+            {!p.gsr.met && (
+              <div><span /><button type="button" className="link-btn small" onClick={() => go('global')}>See Global Studies options</button></div>
+            )}
+            <div><span>Core status</span><span className="muted small">{p.core.counted >= p.core.target ? 'Complete' : 'Counted from your year and planned core'}</span></div>
           </div>
         </div>
         {p.terms.length > 0 && (
           <>
             <hr className="divider" />
-            <div className="row pl-terms">
+            <div className="section-label"><span>Units by term</span></div>
+            <div className="pl-terms">
               {p.terms.map((t) => {
                 const st = termStatus(t.status)
                 return (
-                  <span key={t.term} className="row" style={{ gap: 6 }}>
-                    <b className="small">{termName(t.term)}</b>
-                    <span className="muted small">{units(t.units)} units</span>
-                    <span className={`badge ${st.tone}`}>{st.text}</span>
-                  </span>
+                  <div key={t.term}>
+                    <span style={{ minWidth: 92 }}>{termName(t.term)}</span>
+                    <span className="mono muted">{units(t.units)} units</span>
+                    <span className={`small ${st.cls}`}>{st.text}</span>
+                  </div>
                 )
               })}
             </div>
@@ -208,7 +220,7 @@ function PlanBody({ plan, term, setTerm, view, setView, busy, run, onOpen, go, c
             const n = plan.items.filter((i) => i.section.term === t).length
             return (
               <button key={t} type="button" className={term === t ? 'on' : ''} aria-pressed={term === t} onClick={() => setTerm(t)}>
-                {termName(t)}{n ? ` · ${n}` : ''}
+                {termName(t)}{n ? <span className="mono faint">{n}</span> : null}
               </button>
             )
           })}
@@ -217,7 +229,7 @@ function PlanBody({ plan, term, setTerm, view, setView, busy, run, onOpen, go, c
           <div className="tabs" role="group" aria-label="Session">
             {(['all', '1', '2'] as const).map((v) => (
               <button key={v} type="button" className={view === v ? 'on' : ''} aria-pressed={view === v} onClick={() => setView(v)}>
-                {v === 'all' ? 'All' : `Session ${v}`}
+                {v === 'all' ? 'Both sessions' : `Session ${v}`}
               </button>
             ))}
           </div>
@@ -226,10 +238,10 @@ function PlanBody({ plan, term, setTerm, view, setView, busy, run, onOpen, go, c
 
       {!items.length ? (
         <div className="card">
-          <Empty icon="🌱" title={`Nothing in ${termName(term)} yet`}>
+          <Empty icon={<BookOpen className="icon lg faint" />} title={`Nothing in ${termName(term)} yet`}>
             <div className="row" style={{ justifyContent: 'center' }}>
-              <button type="button" className="btn primary sm" onClick={() => go('find')}>✨ Let Dan recommend</button>
-              <button type="button" className="btn sm" onClick={() => go('explore')}>🔎 Explore catalog</button>
+              <button type="button" className="btn primary sm" onClick={() => go('find')}><Sparkles className="icon sm" />Let Dan recommend</button>
+              <button type="button" className="btn sm" onClick={() => go('explore')}><Search className="icon sm" />Browse the catalog</button>
             </div>
           </Empty>
         </div>
@@ -237,20 +249,20 @@ function PlanBody({ plan, term, setTerm, view, setView, busy, run, onOpen, go, c
         <>
           <div className="grid pl-week">
             <div className="card">
-              <div className="row between mb">
-                <div className="card-title" style={{ margin: 0 }}>📅 Your week · {termName(term)}</div>
-                <span className="muted small">{units(info?.units ?? 0)} units</span>
+              <div className="section-label">
+                <span>Your week · {termName(term)}</span>
+                <span className="mono">{units(info?.units ?? 0)} units</span>
               </div>
               {view === 'all' && hasHalves && (
-                <p className="faint small">Half-term courses (S1/S2) never clash with each other: flip to Session 1 or 2 to see each half on its own.</p>
+                <p className="faint small">Half-term courses (S1 and S2) never clash with each other. Switch to Session 1 or 2 to see each half on its own.</p>
               )}
               <Timetable sections={shown} clashIds={clashIds} onOpen={(s) => onOpen(s.key)} />
               {tba.length > 0 && (
                 <div className="mt">
-                  <b className="small">🕒 Time TBA</b>
-                  <div className="row mt" style={{ gap: 6 }}>
+                  <div className="section-label"><span className="pa-inline-icon"><Clock className="icon sm" />Time TBA</span></div>
+                  <div className="row" style={{ gap: 6 }}>
                     {tba.map((s) => (
-                      <button key={s.id} type="button" className="chip" onClick={() => onOpen(s.key)}>{s.number} · {s.title}</button>
+                      <button key={s.id} type="button" className="chip" onClick={() => onOpen(s.key)}><span className="mono">{s.number}</span> {s.title}</button>
                     ))}
                   </div>
                 </div>
@@ -260,29 +272,34 @@ function PlanBody({ plan, term, setTerm, view, setView, busy, run, onOpen, go, c
             <div className="stack">
               <ConflictCard conflicts={conflicts} items={items} busy={busy} run={run} />
               <div className="card">
-                <div className="card-title">🧐 Week review</div>
+                <div className="section-label">
+                  <span>Week review</span>
+                  <span className="faint"><span className="mono">{daysOn}</span> {daysOn === 1 ? 'day' : 'days'} on campus</span>
+                </div>
                 <div className="row pl-days" aria-label="Days on campus">
                   {DAYS.map((d) => {
                     const on = info?.review.days_on_campus.includes(d)
                     return <span key={d} className={`pl-day ${on ? 'on' : ''}`} title={on ? 'On campus' : 'Free day'}>{DAY_NAMES[d]}</span>
                   })}
                 </div>
-                <p className="faint small mt" style={{ marginBottom: 8 }}>
-                  {info?.review.days_on_campus.length ?? 0} {info?.review.days_on_campus.length === 1 ? 'day' : 'days'} on campus
-                </p>
-                {info?.review.notes.length ? (
-                  <ul className="pl-review">
-                    {info.review.notes.map((n, i) => (
-                      <li key={i}><span className={`badge ${NOTE_TONE[n.kind]}`}>{NOTE_ICON[n.kind]} {n.kind}</span> <span>{n.text}</span></li>
-                    ))}
-                  </ul>
-                ) : <p className="muted small" style={{ margin: 0 }}>Nothing to flag. Clean week 😌</p>}
+                <div className="mt">
+                  {info?.review.notes.length ? (
+                    <ul className="pl-review">
+                      {info.review.notes.map((n, i) => (
+                        <li key={i}>{NOTE_ICON[n.kind]}<span>{n.text}</span></li>
+                      ))}
+                    </ul>
+                  ) : <p className="muted small" style={{ margin: 0 }}>Nothing to flag this week.</p>}
+                </div>
               </div>
             </div>
           </div>
 
-          <h3 className="mt-lg">📚 Courses in {termName(term)}</h3>
-          <div className="stack">
+          <div className="section-label mt-lg">
+            <span>Courses in {termName(term)}</span>
+            <span className="faint mono">{items.length}</span>
+          </div>
+          <div className="pa-list">
             {items.map((item) => (
               <PlanRow key={`${item.id}-${item.bid_points ?? ''}-${item.section.id}`} item={item} busy={busy === item.id} run={run} onOpen={onOpen} />
             ))}
@@ -305,15 +322,17 @@ function ConflictCard({ conflicts, items, busy, run }: {
   if (!conflicts.length) {
     return (
       <div className="card">
-        <div className="card-title">🧩 Time clashes</div>
-        <span className="badge lime">✓ No clashes. You're good!</span>
+        <div className="section-label"><span>Time clashes</span></div>
+        <span className="pa-inline-icon pa-ok small"><Check className="icon sm" />No clashes</span>
       </div>
     )
   }
   const byId = new Map(items.map((i) => [i.section.id, i]))
   return (
     <div className="card pl-clash">
-      <div className="card-title">😬 {conflicts.length} time {conflicts.length === 1 ? 'clash' : 'clashes'}</div>
+      <div className="section-label">
+        <span className="pa-inline-icon pa-bad"><TriangleAlert className="icon sm" /><span className="mono">{conflicts.length}</span> time {conflicts.length === 1 ? 'clash' : 'clashes'}</span>
+      </div>
       <div className="stack">
         {conflicts.map((c, idx) => {
           const sides = [byId.get(c.a_id), byId.get(c.b_id)].filter((x): x is PlanItem => !!x)
@@ -325,27 +344,31 @@ function ConflictCard({ conflicts, items, busy, run }: {
           })
           return (
             <div key={`${c.a_id}-${c.b_id}-${idx}`} className="pl-clash-row">
-              <div><b>{c.a}</b> <span className="muted">vs</span> <b>{c.b}</b> <span className="muted">on {DAY_NAMES[c.day] ?? c.day} {c.window}</span></div>
+              <div>
+                <span className="mono">{c.a}</span> <span className="faint">and</span> <span className="mono">{c.b}</span>
+                <div className="faint small">{DAY_NAMES[c.day] ?? c.day} <span className="mono">{c.window}</span></div>
+              </div>
               {fixes.length ? (
                 <div className="stack tight mt">
-                  <span className="faint small">💡 Fix it by switching to another section:</span>
+                  <span className="faint small">Fix it by switching to another section:</span>
                   <div className="row" style={{ gap: 6 }}>
                     {fixes.map(({ item, alt, fits }) => (
                       <button
                         key={`${item.id}-${alt.id}`}
                         type="button"
-                        className={`btn sm ${fits ? 'lime' : ''}`}
+                        className="btn sm"
                         disabled={busy === item.id}
-                        onClick={() => run(item.id, () => api.updatePlan(item.id, { course_id: alt.id }), `Switched ${alt.number} to §${alt.section} ✨`)}
-                        title={fits ? 'This section fits with the rest of your plan' : 'Heads up: this section still clashes with something'}
+                        onClick={() => run(item.id, () => api.updatePlan(item.id, { course_id: alt.id }), `Switched ${alt.number} to section ${alt.section}`)}
+                        title={fits ? 'This section fits with the rest of your plan' : 'This section still clashes with something'}
                       >
-                        Switch {alt.number} → §{alt.section} · {shortTime(alt)}{fits ? ' ✓' : ''}
+                        {fits ? <Check className="icon sm pa-ok" aria-label="Fits" /> : <TriangleAlert className="icon sm pa-warn" aria-label="Still clashes" />}
+                        <span>Switch <span className="mono">{alt.number}</span> to §<span className="mono">{alt.section}</span> · <span className="mono">{shortTime(alt)}</span></span>
                       </button>
                     ))}
                   </div>
                 </div>
               ) : (
-                <p className="faint small mt" style={{ margin: 0 }}>No other sections at a different time. Drop one, or check if half-terms make it work.</p>
+                <p className="faint small mt" style={{ margin: 0 }}>No other sections meet at a different time. Drop one, or check whether the half-terms make it work.</p>
               )}
             </div>
           )
@@ -370,24 +393,24 @@ function PlanRow({ item, busy, run, onOpen }: { item: PlanItem; busy: boolean; r
       return
     }
     if (n === item.bid_points) return
-    run(item.id, () => api.updatePlan(item.id, { bid_points: n }), `Saved ${n} bid points for ${s.number} 🎯`)
+    run(item.id, () => api.updatePlan(item.id, { bid_points: n }), `Saved ${n} bid points for ${s.number}`)
   }
 
   const remove = () => {
     if (!window.confirm(`Remove ${s.number} ${s.title} from your plan?`)) return
-    run(item.id, () => api.removeFromPlan(item.id), `Removed ${s.number} from your plan`)
+    run(item.id, () => api.removeFromPlan(item.id), `Removed ${s.number}`)
   }
 
   return (
-    <div className="card flat pl-row">
+    <div className="pl-row">
       <button type="button" className="pl-row-main" onClick={() => onOpen(s.key)} aria-label={`Details for ${s.number} ${s.title}`}>
         <span className="course-num">{s.number} §{s.section} · {s.session_name}</span>
         <span className="course-title">{s.title}</span>
         <span className="meta">
-          <span>🕒 {shortTime(s)}</span>
-          <span>📚 {units(s.units)} units</span>
-          {s.room && <span>📍 {s.room}</span>}
-          {item.added_by === 'dan' && <span className="badge pink">🐶 Dan's pick</span>}
+          <span><Clock className="icon sm" /><span className="mono">{shortTime(s)}</span></span>
+          <span className="mono">{units(s.units)} units</span>
+          {s.room && <span><MapPin className="icon sm" />{s.room}</span>}
+          {item.added_by === 'dan' && <span className="badge gray">Dan's pick</span>}
         </span>
       </button>
       <div className="pl-row-controls">
@@ -425,9 +448,13 @@ function PlanRow({ item, busy, run, onOpen }: { item: PlanItem; busy: boolean; r
         )}
         <div className="row pl-row-actions">
           {item.google_link && (
-            <a className="btn sm ghost" href={item.google_link} target="_blank" rel="noreferrer">📆 Add to Google Calendar</a>
+            <a className="btn sm ghost" href={item.google_link} target="_blank" rel="noreferrer" title="Add to Google Calendar">
+              <CalendarPlus className="icon sm" />Google Calendar
+            </a>
           )}
-          <button type="button" className="btn sm danger" disabled={busy} onClick={remove} aria-label={`Remove ${s.number} from plan`}>Remove</button>
+          <button type="button" className="btn sm danger" disabled={busy} onClick={remove} aria-label={`Remove ${s.number} from plan`}>
+            <X className="icon sm" />Remove
+          </button>
         </div>
       </div>
     </div>

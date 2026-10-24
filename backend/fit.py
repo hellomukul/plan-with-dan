@@ -159,10 +159,14 @@ def best_fits(ctx: FitContext, term: str = "202701", top: int = 3) -> dict:
     max_bm25 = max((s for _, s in ranked), default=0.0) or 1.0
 
     fits, swaps = [], []
+    pref_misses = 0
     for off, bm in ranked:
         sec = best_section(off, chosen, prefs, program)
         if sec is None:
             swaps.append(off)
+            continue
+        if prefs and not respects_prefs(sec, prefs):
+            pref_misses += 1  # e.g. only an 8:30 or Friday section exists: not a "best fit" for this student
             continue
         lead = off.lead
         course_tokens = set(_tokens(f"{lead.title} {lead.description} {' '.join(lead.topics)}"))
@@ -232,8 +236,9 @@ def best_fits(ctx: FitContext, term: str = "202701", top: int = 3) -> dict:
             {"id": "gsr", "title": "Global Studies options (study trips and courses)", "items": gsr_row},
         ] if r["items"]],
         "swap_count": len(swaps),
+        "pref_misses": pref_misses,
         "eligible": len(pool),
         "how": "Ranked in code from your goals and interests (text match), requirement gaps, and schedule fit. "
-               "Clashing, planned or already-taken courses are hidden. Demand comes from seat limits and "
+               "Clashing, planned or already-taken courses, and sections outside your schedule preferences, are hidden. Demand comes from seat limits and "
                "student-reported bids and is never part of fit.",
     }

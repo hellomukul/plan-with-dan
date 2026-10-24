@@ -1,5 +1,6 @@
 import type { Section } from '../api'
-import { enrollLabel, TOPIC_EMOJI } from '../lib/format'
+import { X } from 'lucide-react'
+import { enrollLabel } from '../lib/format'
 import { useApp } from '../state'
 import { Overlay } from './ui'
 
@@ -17,7 +18,7 @@ export default function CourseDrawer({ courseKey, onClose }: { courseKey: string
           <div className="course-num">{c.number} · {c.term_name} · {c.session_name}</div>
           <h2 style={{ marginTop: 4 }}>{c.title}</h2>
         </div>
-        <button className="btn icon ghost" onClick={onClose} aria-label="Close">✕</button>
+        <button className="btn icon ghost" onClick={onClose} aria-label="Close"><X className="icon" /></button>
       </div>
       <div className="row" style={{ gap: 6 }}>
         <span className={`badge ${enrol.tone}`}>{enrol.text}</span>
@@ -25,7 +26,7 @@ export default function CourseDrawer({ courseKey, onClose }: { courseKey: string
         {c.limit && <span className="badge gray">{c.limit} seats</span>}
         {c.ldr && <span className="badge lilac">Counts for LDR*</span>}
         {c.gsr && <span className="badge sky">Global Studies*</span>}
-        {c.topics.map((t) => <span key={t} className="badge gray">{TOPIC_EMOJI[t] ?? '•'} {t}</span>)}
+        {c.topics.map((t) => <span key={t} className="badge gray">{t}</span>)}
       </div>
       {(c.ldr || c.gsr) && <p className="faint small mt">* Inferred from attribute codes in SOM's public course feed. Confirm on the internal list.</p>}
 
@@ -36,13 +37,13 @@ export default function CourseDrawer({ courseKey, onClose }: { courseKey: string
             <div className="row between">
               <div>
                 <b>Section {s.section}</b> <span className="muted">· {s.time}</span>
-                <div className="small muted">📍 {s.room || 'Room TBA'} · 👩‍🏫 {s.faculty.join(', ') || 'TBA'}</div>
+                <div className="small muted">{s.room || 'Room TBA'} · {s.faculty.join(', ') || 'Instructor TBA'}</div>
                 {s.starts && <div className="small faint">{s.starts} → {s.ends}</div>}
               </div>
               {user ? (
                 plannedIds.has(s.id)
-                  ? <span className="badge lime">✓ in plan</span>
-                  : <button className="btn sm primary" onClick={() => addCourse(s.id)}>+ Add</button>
+                  ? <span className="badge green">In plan</span>
+                  : <button className="btn sm primary" onClick={() => addCourse(s.id)}>Add</button>
               ) : (
                 <button className="btn sm" onClick={() => go('home')}>Sign in to add</button>
               )}

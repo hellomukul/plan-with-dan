@@ -1,24 +1,23 @@
 import { useEffect, useState } from 'react'
 import { api, type Profile } from '../api'
 import HandsomeDan from '../mascots/HandsomeDan'
-import Labubu from '../mascots/Labubu'
-import { TOPIC_EMOJI } from '../lib/format'
+import { Briefcase, Clock, Coffee, GraduationCap, Globe2, BookOpen, Moon } from 'lucide-react'
 import { EMPTY_PROFILE, useApp } from '../state'
 
 const PROGRAMS = [
-  { v: 'MBA', label: 'MBA', big: '🎓' },
-  { v: 'EMBA', label: 'EMBA', big: '💼' },
-  { v: 'MAM', label: 'MAM', big: '🌐' },
-  { v: 'MMS', label: 'MMS', big: '📘' },
+  { v: 'MBA', label: 'MBA', big: <GraduationCap className="icon lg" /> },
+  { v: 'EMBA', label: 'EMBA', big: <Briefcase className="icon lg" /> },
+  { v: 'MAM', label: 'MAM', big: <Globe2 className="icon lg" /> },
+  { v: 'MMS', label: 'MMS', big: <BookOpen className="icon lg" /> },
 ]
 const COHORTS = ['Gold', 'Silver', 'Blue', 'Green', 'Red']
 const BACKGROUNDS = ['Consulting', 'Banking / Finance', 'Tech / Product', 'Healthcare', 'Nonprofit / Public', 'Startup', 'Marketing / Brand', 'Military', 'Education', 'Other']
-const SHORT_GOALS = ['Consulting internship', 'Investment banking', 'PE / VC', 'Product management', 'Healthcare', 'Start my own company', 'Social impact', 'Still exploring 🤷']
+const SHORT_GOALS = ['Consulting internship', 'Investment banking', 'PE / VC', 'Product management', 'Healthcare', 'Start my own company', 'Social impact', 'Still exploring']
 const LONG_GOALS = ['Run a company someday', 'Become a partner', 'Lead a mission-driven org', 'Build AI products', 'Invest in climate', 'Pivot industries']
 const TIMES = [
-  { v: 0, label: 'Any time', big: '⏰' },
-  { v: 540, label: 'Not before 9', big: '☕' },
-  { v: 600, label: 'Not before 10', big: '😴' },
+  { v: 0, label: 'Any time', big: <Clock className="icon lg" /> },
+  { v: 540, label: 'Not before 9', big: <Coffee className="icon lg" /> },
+  { v: 600, label: 'Not before 10', big: <Moon className="icon lg" /> },
 ]
 
 const STEPS = ['You', 'Background', 'Interests', 'Goals', 'Schedule']
@@ -56,7 +55,7 @@ export default function Onboarding({ editing = false }: { editing?: boolean }) {
       const completed = completedText.split(/[,\n;]+/).map((s) => s.trim().toUpperCase()).filter(Boolean)
       await api.saveProfile({ ...p, completed, onboarded: true })
       await refreshProfile()
-      toast('Profile saved 🐾', 'good')
+      toast('Profile saved', 'good')
       go(then)
     } catch (e) {
       toast((e as Error).message, 'bad')
@@ -71,7 +70,7 @@ export default function Onboarding({ editing = false }: { editing?: boolean }) {
     <div className="main" style={{ margin: '0 auto', maxWidth: 860 }}>
       <div className="row between mb">
         <div className="row">
-          <HandsomeDan size={52} furColor="#ff8cc6" />
+          <HandsomeDan size={40} furColor="#f4b183" bandanaColor="#00356b" />
           <div>
             <h2 style={{ margin: 0 }}>{editing ? 'Your profile' : `Hey${user?.name ? ` ${user.name}` : ''}! Let’s get to know you`}</h2>
             <div className="muted small">5 quick steps · ~1 minute · you can change anything later</div>
@@ -129,12 +128,12 @@ export default function Onboarding({ editing = false }: { editing?: boolean }) {
           <>
             <div className="row between">
               <h3 style={{ margin: 0 }}>What lights you up? <span className="muted small">(pick up to 6)</span></h3>
-              <span className="badge pink">{p.interests.length}/6</span>
+              <span className="mono faint">{p.interests.length}/6</span>
             </div>
             <div className="row">
               {topics.map((t) => (
                 <button key={t} className={`chip ${p.interests.includes(t) ? 'on' : ''}`} onClick={() => toggleInterest(t)}>
-                  {TOPIC_EMOJI[t] ?? '•'} {t}
+                  {t}
                 </button>
               ))}
             </div>
@@ -187,13 +186,12 @@ export default function Onboarding({ editing = false }: { editing?: boolean }) {
       <div className="row between mt">
         <button className="btn ghost" disabled={step === 0} onClick={() => setStep((s) => s - 1)}>← Back</button>
         <div className="row">
-          <Labubu size={54} fur={['#ff8cc6', '#b98cff', '#c6ff5e', '#6fd3ff', '#ffc857'][step]} mood={step === 4 ? 'wink' : 'grin'} dance />
           {step < STEPS.length - 1 ? (
             <button className="btn primary" disabled={!canNext} onClick={() => setStep((s) => s + 1)}>Next →</button>
           ) : (
             <>
-              <button className="btn" disabled={saving} onClick={() => save('home')}>Save</button>
-              <button className="btn primary" disabled={saving} onClick={() => save('find')}>Save & find my courses ✨</button>
+              <button className="btn" disabled={saving} onClick={() => save('find')}>Save and run AI deep dive</button>
+              <button className="btn primary" disabled={saving} onClick={() => save('home')}>Save and see my desk</button>
             </>
           )}
         </div>

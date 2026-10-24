@@ -5,7 +5,7 @@ import { api, streamChat, type ChatResult, type TraceStep } from '../api'
 import AgentTrace from '../components/AgentTrace'
 import { CostChip } from '../components/ui'
 import HandsomeDan from '../mascots/HandsomeDan'
-import Labubu from '../mascots/Labubu'
+import { Check, MessageCircle, Newspaper, ShieldAlert } from 'lucide-react'
 import { usd } from '../lib/format'
 import { useApp } from '../state'
 
@@ -50,6 +50,12 @@ export default function Chat() {
 
   useEffect(() => { bottom.current?.scrollIntoView({ behavior: 'smooth' }) }, [turns, live])
 
+  // A question handed over from Dan's Desk ("Ask Dan about this") or the ⌘K menu.
+  useEffect(() => {
+    const handoff = sessionStorage.getItem('pwd-ask')
+    if (handoff) { sessionStorage.removeItem('pwd-ask'); setInput(handoff) }
+  }, [])
+
   const send = async (text: string) => {
     const msg = text.trim()
     if (!msg || busy) return
@@ -61,7 +67,7 @@ export default function Chat() {
       const result = await streamChat(msg, mode, (s) => setLive((l) => [...l, s]))
       setTurns((t) => [...t, { role: 'assistant', content: result.answer, result }])
     } catch (e) {
-      setTurns((t) => [...t, { role: 'assistant', content: `😵 ${(e as Error).message}` }])
+      setTurns((t) => [...t, { role: 'assistant', content: `Something went wrong: ${(e as Error).message}` }])
     } finally {
       setBusy(false)
       setLive([])
@@ -75,22 +81,22 @@ export default function Chat() {
   const clear = async () => {
     await api.clearChat(mode)
     setTurns([])
-    toast('Chat cleared 🧹')
+    toast('Chat cleared')
   }
 
   return (
     <div style={{ maxWidth: 900 }}>
       <div className="page-head">
         <div>
-          <h1>{mode === 'dan' ? 'Ask Dan 🐶' : 'AI News Desk 📰'}</h1>
+          <h1>{mode === 'dan' ? 'Ask Dan' : 'AI news desk'}</h1>
           <p>{mode === 'dan'
             ? 'Courses, clashes, requirements, Global Studies, bids, careers. Dan routes your question to the right specialist, who checks real data.'
             : 'The latest AI news with sources, plus the SOM course where you can learn it.'}</p>
         </div>
         <div className="row">
           <div className="tabs">
-            <button className={mode === 'dan' ? 'on' : ''} onClick={() => setMode('dan')}>🐶 Ask Dan</button>
-            <button className={mode === 'news' ? 'on' : ''} onClick={() => setMode('news')}>📰 AI News</button>
+            <button className={mode === 'dan' ? 'on' : ''} onClick={() => setMode('dan')}><MessageCircle className="icon sm" />Ask Dan</button>
+            <button className={mode === 'news' ? 'on' : ''} onClick={() => setMode('news')}><Newspaper className="icon sm" />AI news</button>
           </div>
           {turns.length > 0 && <button className="btn sm ghost" onClick={clear}>Clear</button>}
         </div>
@@ -99,8 +105,8 @@ export default function Chat() {
       <div className="chat">
         {turns.length === 0 && !busy && (
           <div className="card stack" style={{ alignItems: 'center', textAlign: 'center' }}>
-            {mode === 'dan' ? <HandsomeDan size={90} furColor="#f4b183" /> : <Labubu size={90} fur="#6fd3ff" holding="coffee" />}
-            <h3 style={{ margin: 0 }}>{mode === 'dan' ? 'Woof! What are we planning?' : 'What’s happening in AI?'}</h3>
+            <HandsomeDan size={56} furColor="#f4b183" bandanaColor="#00356b" />
+            <h3 style={{ margin: 0 }}>{mode === 'dan' ? 'What are we planning?' : 'What’s happening in AI?'}</h3>
             <div className="row" style={{ justifyContent: 'center' }}>
               {PROMPTS[mode].map((p) => <button key={p} className="chip" onClick={() => send(p)}>{p}</button>)}
             </div>
@@ -114,7 +120,7 @@ export default function Chat() {
           return (
             <div key={i} className="stack" style={{ gap: 8, alignItems: 'flex-start' }}>
               <div className={`bubble bot md ${blocked ? 'blocked' : ''}`}>
-                {r?.agent && <div className="faint small" style={{ marginBottom: 4 }}>{r.agent === 'Dispatcher' ? '🐶 Dan' : `🐶 Dan · via ${r.agent}`}</div>}
+                {r?.agent && <div className="faint small row" style={{ marginBottom: 4, gap: 6 }}><span className="avatar"><HandsomeDan size={20} furColor="#f4b183" bandanaColor="#00356b" /></span>{r.agent === 'Dispatcher' ? 'Dan' : `Dan · via ${r.agent}`}</div>}
                 <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: (p) => <a {...p} target="_blank" rel="noreferrer" /> }}>{t.content}</ReactMarkdown>
               </div>
               {r && r.proposals.length > 0 && (
@@ -125,7 +131,7 @@ export default function Chat() {
                         <b>{p.number}</b> {p.title} <span className="faint small">· {p.term_name} · {p.time}</span>
                         <div className="muted small">{p.reason}</div>
                       </div>
-                      {plannedIds.has(p.course_id) ? <span className="badge lime">✓ added</span>
+                      {plannedIds.has(p.course_id) ? <span className="badge green"><Check className="icon sm" />Added</span>
                         : <button className="btn sm primary" onClick={() => addCourse(p.course_id, 'dan')}>+ Add</button>}
                     </div>
                   ))}
@@ -134,12 +140,12 @@ export default function Chat() {
               {r && (
                 <details className="small" style={{ width: '88%' }}>
                   <summary className="faint" style={{ cursor: 'pointer' }}>
-                    {blocked ? '🛡️ Blocked by the safety screen · $0' : <>How Dan answered · {usd(r.usage.total.cost_usd)}</>}
+                    {blocked ? 'Blocked by the safety screen · $0' : <>How Dan answered · {usd(r.usage.total.cost_usd)}</>}
                   </summary>
                   <div className="card flat mt stack">
                     <AgentTrace steps={r.trace} compact />
                     <CostChip usage={r.usage} />
-                    {r.safety.length > 0 && <div className="small" style={{ color: 'var(--amber)' }}>🛡️ {r.safety.join(' · ')}</div>}
+                    {r.safety.length > 0 && <div className="small row" style={{ color: 'var(--amber)', gap: 6 }}><ShieldAlert className="icon sm" />{r.safety.join(' · ')}</div>}
                   </div>
                 </details>
               )}

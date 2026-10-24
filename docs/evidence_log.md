@@ -54,3 +54,15 @@ Same demo student (first-year, interested in healthcare, PE and AI; Fridays free
 
 ## Report length
 `submission/report.html` prints to 14 letter pages (Chrome, no headers).
+
+## Oct 24 (evening): chief of staff + redesign
+
+**Dan's Desk brief:** Chief of Staff agent, 1,329 input / 86 output tokens, **$0.000176** per brief. It's cached per student, per day, per set of cards; a second load the same day cost $0 (`cached: true`). There's a cap of 3 model-written briefs per student per day, after which plain-code wording is used.
+
+**Bugs caught while testing the redesign (all fixed):**
+- **Best fits ignored schedule preferences.** An 8:30 AM and a Friday section appeared for a student who chose "not before 9" and "Fridays free". Fix: best fits hide sections that break saved preferences.
+- **The recommender's preference filter counted EMBA sections.** An EMBA-only section with no published time made MGT 879 look like it respected "not before 9". Fix: the filter now only considers sections in the student's own program.
+- **Loose goal matching.** "private" and "equity" were matched separately, so "the private sector" counted as private equity. Fix: compound terms (private equity, venture capital, …) must match as a whole, and the short-term goal counts double.
+- **Study trips crowded the top fits.** IE trips with no published time took all three best-fit slots. Fix: trips appear only in the Global Studies row.
+- **Blocked prompt previews.** Old safety-log entries still held the first 120 characters of blocked prompts. Fix: they're no longer stored, and existing previews were purged on startup.
+- **Mobile layout blowout.** A grid column on the desk grew to 1,500px on a 375px phone. Fix: grid columns can no longer stretch to fit their content.

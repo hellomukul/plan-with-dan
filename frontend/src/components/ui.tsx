@@ -1,5 +1,6 @@
 /* Small shared building blocks. */
 import { useEffect, useRef, type ReactNode } from 'react'
+import { AlertTriangle } from 'lucide-react'
 import { usd, tokens } from '../lib/format'
 import type { Usage } from '../api'
 
@@ -12,10 +13,10 @@ export function Spinner({ label }: { label?: string }) {
   )
 }
 
-export function Empty({ icon = '🐾', title, children }: { icon?: ReactNode; title: string; children?: ReactNode }) {
+export function Empty({ icon = null, title, children }: { icon?: ReactNode; title: string; children?: ReactNode }) {
   return (
     <div className="empty">
-      <div style={{ fontSize: 40 }}>{icon}</div>
+      {icon && <div style={{ color: 'var(--faint)' }}>{icon}</div>}
       <h3 style={{ color: 'var(--text)', margin: 0 }}>{title}</h3>
       {children}
     </div>
@@ -49,7 +50,7 @@ export function Ring({ pct, label, sub, color = 'var(--pink)' }: { pct: number; 
   )
 }
 
-export function Bar({ pct, tone = '' }: { pct: number; tone?: '' | 'lime' | 'amber' }) {
+export function Bar({ pct, tone = '' }: { pct: number; tone?: '' | 'lime' | 'amber' | 'gray' }) {
   return <div className={`bar ${tone}`}><span style={{ width: `${Math.max(0, Math.min(100, pct))}%` }} /></div>
 }
 
@@ -60,7 +61,7 @@ export function CostChip({ usage }: { usage?: Usage | null }) {
   const cachedPct = t.input_tokens ? Math.round((100 * t.cached_tokens) / t.input_tokens) : 0
   return (
     <span className="badge gray mono" title={`run ${usage.run_id} · ${usage.model}`}>
-      🧾 {t.requests} calls · {tokens(t.input_tokens)} in ({cachedPct}% cached) · {tokens(t.output_tokens)} out
+      {t.requests} calls · {tokens(t.input_tokens)} in ({cachedPct}% cached) · {tokens(t.output_tokens)} out
       {t.web_searches ? ` · ${t.web_searches} web` : ''} · {usd(t.cost_usd)}
     </span>
   )
@@ -69,7 +70,8 @@ export function CostChip({ usage }: { usage?: Usage | null }) {
 export function SampleBanner({ children }: { children?: ReactNode }) {
   return (
     <div className="sample-banner">
-      ⚠️ {children ?? 'SAMPLE data: illustrative numbers, not real SOM bid results. Real history comes from students reporting outcomes below.'}
+      <AlertTriangle className="icon sm" />
+      {children ?? 'SAMPLE data: illustrative numbers, not real SOM bid results. Real history comes from students reporting outcomes below.'}
     </div>
   )
 }

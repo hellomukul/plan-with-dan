@@ -1,6 +1,7 @@
 /* Bid coach: split auction points, browse crowdsourced bid history, report your own result.
    Honesty rule: SOM doesn't publish clearing prices. Rows marked sample_only are illustrative SAMPLE data. */
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { AlertTriangle, Check, Inbox, Info, Search, Send, ShoppingBag, X } from 'lucide-react'
 import { api, type BidCourse, type BidSplit } from '../api'
 import { Bar, Empty, SampleBanner, Spinner } from '../components/ui'
 import { TERM_NAMES } from '../lib/format'
@@ -10,11 +11,11 @@ import './pages-b.css'
 type Mine = Awaited<ReturnType<typeof api.bids>>['mine'][number]
 
 const PRIORITIES = [
-  { value: 1, label: '🔥 Must-have', short: 'Must' },
-  { value: 2, label: '💖 Want', short: 'Want' },
-  { value: 3, label: '🙂 Nice', short: 'Nice' },
+  { value: 1, label: 'Must-have', short: 'Must' },
+  { value: 2, label: 'Want', short: 'Want' },
+  { value: 3, label: 'Nice to have', short: 'Nice' },
 ] as const
-const PRIO_BADGE: Record<number, string> = { 1: 'pink', 2: 'lilac', 3: 'sky' }
+const PRIO_BADGE: Record<number, string> = { 1: 'pink', 2: 'gray', 3: 'gray' }
 const REPORT_TERMS = [
   { code: '202603', name: 'Fall 2026' },
   { code: '202701', name: 'Spring 2027' },
@@ -28,11 +29,8 @@ export default function Bids() {
     <>
       <div className="page-head">
         <div>
-          <h1>Bid coach 🎯</h1>
-          <p>
-            SOM runs electives, IE, GNW and SNOC through a points auction, and doesn't publish past clearing prices.
-            So we split your points with a transparent rule of thumb and crowdsource real results from classmates.
-          </p>
+          <h1>Bid coach</h1>
+          <p>SOM doesn't publish past clearing prices, so we split your points with a clear rule of thumb and pool real results from classmates.</p>
         </div>
       </div>
       <SplitSection />
@@ -43,7 +41,8 @@ export default function Bids() {
 
 /* ------------------------------------------------------------------ A. split my points */
 function SplitSection() {
-  const { plan, go, toast } = useApp()
+  const { plan, go, toast, celebrate } = useApp()
+  const celebrated = useRef(false)
   const [budget, setBudget] = useState('500')
   const [prio, setPrio] = useState<Record<string, number>>({})
   const [result, setResult] = useState<{ split: BidSplit[]; note: string } | null>(null)
@@ -73,6 +72,11 @@ function SplitSection() {
     try {
       const priorities = Object.fromEntries(courses.map((c) => [c.number, prio[c.number] ?? 2]))
       setResult(await api.suggestBids(budgetNum, priorities))
+      // The one designed delight moment: Dan cheers the first finished bid plan of this visit.
+      if (!celebrated.current) {
+        celebrated.current = true
+        celebrate('Bid plan ready. Go get those seats.')
+      }
     } catch (err) {
       setError((err as Error).message)
       toast('Could not split your points.', 'bad')
@@ -85,16 +89,13 @@ function SplitSection() {
 
   return (
     <section className="card pad-lg" aria-labelledby="split-h">
-      <div className="row" style={{ gap: 10, marginBottom: 6 }}>
-        <span className="pb-step" aria-hidden="true">A</span>
-        <h2 id="split-h" style={{ margin: 0 }}>Split my points</h2>
-      </div>
+      <h2 id="split-h" className="pb-h2" style={{ marginBottom: 6 }}><span className="pb-step" aria-hidden="true">1</span>Split my points</h2>
       <p className="muted small">Rank the bid courses in your plan and we'll suggest how to spread your budget. You still place the bids in SOM's auction app.</p>
 
       {plan === null ? (
         <Spinner label="Loading your plan…" />
       ) : courses.length === 0 ? (
-        <Empty icon="🛒" title="No bid courses in your plan yet">
+        <Empty icon={<ShoppingBag className="icon lg" style={{ color: 'var(--faint)' }} />} title="No bid courses in your plan yet">
           <p className="small" style={{ margin: 0 }}>Add a few auction electives first, then come back to split your points.</p>
           <button className="btn primary" onClick={() => go('explore')}>Browse the catalog</button>
         </Empty>
@@ -121,7 +122,7 @@ function SplitSection() {
             </p>
           </div>
 
-          <div className="stack tight">
+          <div className="pb-prios">
             {courses.map((c) => {
               const current = prio[c.number] ?? 2
               return (
@@ -137,7 +138,7 @@ function SplitSection() {
                         type="button"
                         role="radio"
                         aria-checked={current === p.value}
-                        className={`p${p.value} ${current === p.value ? 'on' : ''}`}
+                        className={current === p.value ? 'on' : ''}
                         onClick={() => setPrio((m) => ({ ...m, [c.number]: p.value }))}
                       >{p.label}</button>
                     ))}
@@ -149,7 +150,7 @@ function SplitSection() {
 
           <div className="row">
             <button className="btn primary" type="submit" disabled={busy || !budgetOk}>
-              {busy ? 'Splitting…' : '🎯 Split my points'}
+              {busy ? 'Splitting…' : 'Split my points'}
             </button>
             {error && <span className="error-text" role="alert">{error}</span>}
           </div>
@@ -175,7 +176,7 @@ function SplitSection() {
                 {result.split.map((r) => {
                   const p = PRIORITIES.find((x) => x.value === r.priority)
                   return (
-                    <tr key={r.number} className={r.sample_only ? 'pb-tr-sample' : ''}>
+                    <tr key={r.number}>
                       <td>
                         <span className="course-num">{r.number}</span>
                         <div className="small">{r.title}</div>
@@ -190,8 +191,8 @@ function SplitSection() {
                       </td>
                       <td className="pb-right"><span className="pb-points">{pts(r.suggested_points)}</span></td>
                       <td className="pb-share">
-                        <Bar pct={r.share * 100} tone={r.priority === 1 ? '' : 'lime'} />
-                        <div className="small faint">{Math.round(r.share * 100)}%</div>
+                        <Bar pct={r.share * 100} tone={r.priority === 1 ? '' : 'gray'} />
+                        <div className="pb-num faint" style={{ marginTop: 2 }}>{Math.round(r.share * 100)}%</div>
                       </td>
                     </tr>
                   )
@@ -199,12 +200,12 @@ function SplitSection() {
               </tbody>
             </table>
           </div>
-          <p className="small faint" style={{ margin: 0 }}>ℹ️ {result.note}</p>
+          <p className="small faint row" style={{ margin: 0, gap: 6, flexWrap: 'nowrap', alignItems: 'flex-start' }}><Info className="icon sm" style={{ marginTop: 2 }} aria-hidden="true" /><span>{result.note}</span></p>
         </div>
       )}
 
       <div className="divider" />
-      <div className="card-title">💡 Bidding tips</div>
+      <div className="section-label"><span>Bidding tips</span></div>
       <ul className="pb-list small muted">
         <li><b>Go big on 1–2 must-haves.</b> Spreading points evenly is how you lose the class you actually wanted.</li>
         <li><b>Keep a same-slot backup.</b> Have a second course in the same time slot ready in case you miss.</li>
@@ -250,27 +251,25 @@ function HistorySection({ courses, error, onRetry }: { courses: BidCourse[] | nu
     <section className="card pad-lg mt-lg" aria-labelledby="hist-h">
       <div className="pb-section-head">
         <div>
-          <div className="row" style={{ gap: 10 }}>
-            <span className="pb-step" aria-hidden="true">B</span>
-            <h2 id="hist-h">Bid history</h2>
-          </div>
-          <p>What classmates reported bidding, and whether they got in. Only as good as the reports, so add yours below 💌</p>
+          <h2 id="hist-h" className="pb-h2"><span className="pb-step" aria-hidden="true">2</span>Bid history</h2>
+          <p>What classmates reported bidding, and whether they got in. It's only as good as the reports, so add yours below.</p>
         </div>
-        <label className="field" style={{ width: 'min(280px, 100%)' }}>
+        <label className="field" style={{ width: 'min(280px, 100%)', position: 'relative' }}>
           <span className="pb-sr">Search courses</span>
-          <input type="search" placeholder="🔎 Search MGT 5xx or title" value={q} onChange={(e) => setQ(e.target.value)} />
+          <Search className="icon sm" aria-hidden="true" style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--faint)' }} />
+          <input type="search" placeholder="Search by course number or title" value={q} onChange={(e) => setQ(e.target.value)} style={{ paddingLeft: 30 }} />
         </label>
       </div>
 
       {error && !courses ? (
-        <Empty icon="😵‍💫" title="Couldn't load bid history">
+        <Empty icon={<AlertTriangle className="icon lg" style={{ color: 'var(--amber)' }} />} title="Couldn't load bid history">
           <p className="error-text" style={{ margin: 0 }}>{error}</p>
-          <button className="btn primary" onClick={onRetry}>Try again</button>
+          <button className="btn" onClick={onRetry}>Try again</button>
         </Empty>
       ) : !courses ? (
         <Spinner label="Loading bid history…" />
       ) : courses.length === 0 ? (
-        <Empty icon="🫙" title="No reports yet">Be the first: report your result below.</Empty>
+        <Empty icon={<Inbox className="icon lg" style={{ color: 'var(--faint)' }} />} title="No reports yet">Be the first: report your result below.</Empty>
       ) : (
         <div className="stack">
           {anySample && <SampleBanner />}
@@ -293,7 +292,7 @@ function HistorySection({ courses, error, onRetry }: { courses: BidCourse[] | nu
                 </thead>
                 <tbody>
                   {filtered.map((c) => (
-                    <tr key={c.course_number} className={c.sample_only ? 'pb-tr-sample' : ''}>
+                    <tr key={c.course_number}>
                       <td>
                         <div className="row" style={{ gap: 6 }}>
                           <span className="course-num">{c.course_number}</span>
@@ -303,9 +302,9 @@ function HistorySection({ courses, error, onRetry }: { courses: BidCourse[] | nu
                       </td>
                       <td className="pb-right pb-num">{c.seats ?? '–'}</td>
                       <td className="pb-right pb-num">{c.reports}</td>
-                      <td className="pb-right pb-num"><span style={{ color: 'var(--lime)' }}>{c.won ?? 0}</span> / <span style={{ color: 'var(--red)' }}>{c.lost ?? 0}</span></td>
+                      <td className="pb-right pb-num"><span className="pb-won">{c.won ?? 0}</span> / <span className="pb-lost">{c.lost ?? 0}</span></td>
                       <td className="pb-right pb-num">{pts(c.lowest_winning_bid)}</td>
-                      <td className="pb-right pb-num"><b>{pts(c.median_winning_bid)}</b></td>
+                      <td className="pb-right pb-num" style={{ color: 'var(--text)', fontWeight: 500 }}>{pts(c.median_winning_bid)}</td>
                       <td className="pb-right pb-num">{pts(c.highest_losing_bid)}</td>
                       <td className="small muted">{(c.terms ?? []).map((t) => TERM_NAMES[t] ?? t).join(', ') || '–'}</td>
                     </tr>
@@ -353,7 +352,7 @@ function ReportSection({ mine, onSaved }: { mine: Mine[]; onSaved: () => Promise
     setBusy(true)
     try {
       await api.reportBid({ course_number: num, term_code: term, points_bid: p, got_seat: gotSeat, clearing_points: cl })
-      toast('Thanks for reporting! Your classmates owe you one 💖', 'good')
+      toast('Thanks for reporting. Your classmates will bid smarter because of it.', 'good')
       setCourse(''); setPoints(''); setGotSeat(null); setClearing('')
       await onSaved()
     } catch (err) {
@@ -367,10 +366,7 @@ function ReportSection({ mine, onSaved }: { mine: Mine[]; onSaved: () => Promise
 
   return (
     <section className="card pad-lg mt-lg" aria-labelledby="report-h">
-      <div className="row" style={{ gap: 10, marginBottom: 6 }}>
-        <span className="pb-step" aria-hidden="true">C</span>
-        <h2 id="report-h" style={{ margin: 0 }}>Report your result</h2>
-      </div>
+      <h2 id="report-h" className="pb-h2"><span className="pb-step" aria-hidden="true">3</span>Report your result</h2>
       <div className="grid two mt">
         <form onSubmit={submit} className="pb-form" noValidate>
           <label className="field full">
@@ -401,8 +397,8 @@ function ReportSection({ mine, onSaved }: { mine: Mine[]; onSaved: () => Promise
           <fieldset className="pb-fieldset full">
             <legend>Did you get a seat?</legend>
             <div className="pb-yesno" role="radiogroup">
-              <button type="button" role="radio" aria-checked={gotSeat === true} className={`chip yes ${gotSeat === true ? 'on' : ''}`} onClick={() => setGotSeat(true)}>🎉 Yes, I got in</button>
-              <button type="button" role="radio" aria-checked={gotSeat === false} className={`chip no ${gotSeat === false ? 'on' : ''}`} onClick={() => setGotSeat(false)}>😭 No seat</button>
+              <button type="button" role="radio" aria-checked={gotSeat === true} className={`chip yes ${gotSeat === true ? 'on' : ''}`} onClick={() => setGotSeat(true)}>{gotSeat === true && <Check className="icon sm" aria-hidden="true" />}Yes, I got in</button>
+              <button type="button" role="radio" aria-checked={gotSeat === false} className={`chip no ${gotSeat === false ? 'on' : ''}`} onClick={() => setGotSeat(false)}>{gotSeat === false && <X className="icon sm" aria-hidden="true" />}No seat</button>
             </div>
           </fieldset>
           <label className="field full">
@@ -410,19 +406,19 @@ function ReportSection({ mine, onSaved }: { mine: Mine[]; onSaved: () => Promise
             <input type="number" min={0} step={1} inputMode="numeric" value={clearing} onChange={(e) => setClearing(e.target.value)} placeholder="Leave blank if unsure" />
           </label>
           <div className="full row">
-            <button className="btn primary" type="submit" disabled={busy}>{busy ? 'Sending…' : '📮 Submit report'}</button>
+            <button className="btn" type="submit" disabled={busy}><Send className="icon sm" aria-hidden="true" />{busy ? 'Sending…' : 'Submit report'}</button>
             {error && <span className="error-text" role="alert">{error}</span>}
           </div>
         </form>
 
         <div className="stack">
           <div className="pb-callout">
-            <b>Why report? 🤝</b> SOM keeps past clearing prices behind a login, so every bid is a guess. Each report you add is
+            <span><b>Why report?</b> SOM keeps past clearing prices behind a login, so every bid is a guess. Each report you add is
             pooled anonymously into the history above: classmates see counts, medians and ranges per course, never your name.
-            The more people report, the less everyone overspends.
+            The more people report, the less everyone overspends.</span>
           </div>
           <div>
-            <div className="card-title" style={{ marginBottom: 8 }}>🗂️ My reports</div>
+            <div className="section-label"><span>My reports</span>{mine.length > 0 && <span className="faint mono">{mine.length}</span>}</div>
             {mine.length === 0 ? (
               <p className="small muted" style={{ margin: 0 }}>Nothing yet. Your first report shows up here.</p>
             ) : (
@@ -443,7 +439,7 @@ function ReportSection({ mine, onSaved }: { mine: Mine[]; onSaved: () => Promise
                         <td><span className="course-num">{r.course_number}</span> {r.source === 'sample' && <SampleTag />}</td>
                         <td className="small muted">{TERM_NAMES[r.term_code] ?? (r.term_code || '–')}</td>
                         <td className="pb-right pb-num">{pts(r.points_bid)}</td>
-                        <td>{r.got_seat ? <span className="badge lime">Got in</span> : <span className="badge red">No seat</span>}</td>
+                        <td>{r.got_seat ? <span className="badge green"><Check className="icon sm" />Got in</span> : <span className="badge red"><X className="icon sm" />No seat</span>}</td>
                         <td className="pb-right pb-num">{pts(r.clearing_points)}</td>
                       </tr>
                     ))}

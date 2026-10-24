@@ -1,5 +1,9 @@
-/* Calendar: month view of classes + academic dates, and one-tap sync to Google / Outlook / Apple. */
+/* Calendar: month view of classes + academic dates, and one-tap sync to Google / Outlook / Apple.
+   Calm style: plain labels, small colour squares for event kinds, one primary action. */
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  CalendarDays, ChevronLeft, ChevronRight, CircleAlert, Clock, Copy, Download, House, Lock, Mail, RotateCcw, Smartphone,
+} from 'lucide-react'
 import { api, type CalendarEvents, type CalendarLinks } from '../api'
 import { Empty, Spinner } from '../components/ui'
 import { daysUntil, prettyDate, relDays } from '../lib/format'
@@ -7,24 +11,24 @@ import { useApp } from '../state'
 import './pages-a.css'
 
 type EvKind = 'class' | 'deadline' | 'exam' | 'break' | 'holiday' | 'global'
-interface Ev { kind: EvKind; label: string; detail: string; sort: number; emoji: string }
+interface Ev { kind: EvKind; label: string; detail: string; sort: number }
 
-const KIND_STYLE: Record<string, { cls: EvKind; emoji: string; name: string }> = {
-  deadline: { cls: 'deadline', emoji: '⏰', name: 'Deadline' },
-  classes: { cls: 'deadline', emoji: '📅', name: 'Term dates' },
-  grades: { cls: 'deadline', emoji: '📊', name: 'Grades' },
-  milestone: { cls: 'deadline', emoji: '🎓', name: 'Milestone' },
-  exam: { cls: 'exam', emoji: '📝', name: 'Exams' },
-  break: { cls: 'break', emoji: '🌴', name: 'Break' },
-  holiday: { cls: 'holiday', emoji: '🎉', name: 'Holiday' },
-  global: { cls: 'global', emoji: '🌍', name: 'Global week' },
+const KIND_STYLE: Record<string, { cls: EvKind; name: string }> = {
+  deadline: { cls: 'deadline', name: 'Deadline' },
+  classes: { cls: 'deadline', name: 'Term dates' },
+  grades: { cls: 'deadline', name: 'Grades' },
+  milestone: { cls: 'deadline', name: 'Milestone' },
+  exam: { cls: 'exam', name: 'Exams' },
+  break: { cls: 'break', name: 'Break' },
+  holiday: { cls: 'holiday', name: 'Holiday' },
+  global: { cls: 'global', name: 'Global week' },
 }
 const LEGEND: { cls: EvKind; label: string }[] = [
-  { cls: 'class', label: '🎒 Your classes' },
-  { cls: 'deadline', label: '⏰ Deadlines & dates' },
-  { cls: 'exam', label: '📝 Exams' },
-  { cls: 'global', label: '🌍 Global week' },
-  { cls: 'break', label: '🌴 Breaks & holidays' },
+  { cls: 'class', label: 'Your classes' },
+  { cls: 'deadline', label: 'Deadlines and dates' },
+  { cls: 'exam', label: 'Exams' },
+  { cls: 'global', label: 'Global week' },
+  { cls: 'break', label: 'Breaks and holidays' },
 ]
 const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const MAX_IN_CELL = 3
@@ -70,15 +74,14 @@ export default function Calendar() {
     const push = (date: string, ev: Ev) => { const a = map.get(date); if (a) a.push(ev); else map.set(date, [ev]) }
     for (const d of events.deadlines) {
       const st = KIND_STYLE[d.kind] ?? KIND_STYLE.deadline
-      push(d.date, { kind: st.cls, label: d.title, detail: st.name, sort: -1, emoji: st.emoji })
+      push(d.date, { kind: st.cls, label: d.title, detail: st.name, sort: -1 })
     }
     for (const c of events.classes) {
       push(c.date, {
         kind: 'class',
         label: `${courseNumber(c.title)} ${shortClock(c.start_min)}`,
-        detail: `${c.title} · ${fullClock(c.start_min)}–${fullClock(c.end_min)}${c.room ? ` · 📍 ${c.room}` : ''}`,
+        detail: `${c.title} · ${fullClock(c.start_min)}–${fullClock(c.end_min)}${c.room ? ` · ${c.room}` : ''}`,
         sort: c.start_min,
-        emoji: '🎒',
       })
     }
     for (const a of map.values()) a.sort((x, y) => x.sort - y.sort)
@@ -100,7 +103,7 @@ export default function Calendar() {
     if (!links) return
     try {
       await navigator.clipboard.writeText(links.feed_url)
-      toast('Feed link copied 📋 Paste it into “Subscribe from URL”.', 'good')
+      toast('Feed link copied. Paste it into “Subscribe from URL” in your calendar app.', 'good')
     } catch {
       toast('Could not copy. Select the link in the box and copy it manually.', 'bad')
     }
@@ -111,7 +114,7 @@ export default function Calendar() {
     setRotating(true)
     try {
       setLinks(await api.rotateCalendar())
-      toast('New private link made 🔐 Old one is dead.', 'good')
+      toast('New private link created. The old link no longer works.', 'good')
     } catch (e) {
       toast((e as Error).message || 'Could not reset the link.', 'bad')
     } finally {
@@ -122,14 +125,14 @@ export default function Calendar() {
   const head = (
     <div className="page-head">
       <div>
-        <h1>Calendar 📆</h1>
-        <p>Your classes plus every SOM deadline in one place, and a private feed so it all shows up in the calendar app you actually use.</p>
+        <h1>Calendar</h1>
+        <p>Your classes and SOM deadlines in one place, with a private feed for the calendar app you already use.</p>
       </div>
     </div>
   )
 
   if (error) {
-    return <div>{head}<div className="card"><Empty icon="😵‍💫" title="Couldn't load your calendar"><button type="button" className="btn primary sm" onClick={() => { setError(false); load() }}>Try again</button></Empty></div></div>
+    return <div>{head}<div className="card"><Empty icon={<CircleAlert className="icon lg faint" />} title="Couldn't load your calendar"><button type="button" className="btn primary sm" onClick={() => { setError(false); load() }}>Try again</button></Empty></div></div>
   }
   if (!events || !links || !month) {
     return <div>{head}<div className="empty"><Spinner label="Loading your calendar…" /></div></div>
@@ -165,12 +168,12 @@ export default function Calendar() {
         <div className="card">
           <div className="row between mb">
             <div className="row" style={{ gap: 8 }}>
-              <button type="button" className="btn icon" onClick={() => shift(-1)} aria-label="Previous month">‹</button>
+              <button type="button" className="btn icon ghost" onClick={() => shift(-1)} aria-label="Previous month"><ChevronLeft className="icon" /></button>
               <h2 className="cal-title" aria-live="polite">{monthLabel}</h2>
-              <button type="button" className="btn icon" onClick={() => shift(1)} aria-label="Next month">›</button>
+              <button type="button" className="btn icon ghost" onClick={() => shift(1)} aria-label="Next month"><ChevronRight className="icon" /></button>
             </div>
             <div className="row" style={{ gap: 8 }}>
-              <span className="muted small">{classesThisMonth} class {classesThisMonth === 1 ? 'meeting' : 'meetings'}</span>
+              <span className="muted small hide-mobile"><span className="mono">{classesThisMonth}</span> class {classesThisMonth === 1 ? 'meeting' : 'meetings'}</span>
               <button type="button" className="btn sm" onClick={goToday}>Today</button>
             </div>
           </div>
@@ -191,7 +194,7 @@ export default function Calendar() {
                 >
                   <span className="num">{c.day}</span>
                   {evs.slice(0, MAX_IN_CELL).map((e, i) => (
-                    <span key={i} className={`ev ${e.kind}`} title={e.kind === 'class' ? e.detail : e.label}>{e.kind === 'class' ? e.label : `${e.emoji} ${e.label}`}</span>
+                    <span key={i} className={`ev ${e.kind}`} title={e.kind === 'class' ? e.detail : e.label}>{e.label}</span>
                   ))}
                   {extra > 0 && <span className="cal-more">+{extra} more</span>}
                 </button>
@@ -200,12 +203,12 @@ export default function Calendar() {
           </div>
 
           <div className="row cal-legend mt">
-            {LEGEND.map((l) => <span key={l.cls} className={`ev ${l.cls}`}>{l.label}</span>)}
+            {LEGEND.map((l) => <span key={l.cls}><i className={`cal-swatch ${l.cls}`} aria-hidden="true" />{l.label}</span>)}
           </div>
           {!events.classes.length && (
             <p className="faint small mt" style={{ marginBottom: 0 }}>
-              No classes showing yet: add courses with published times to your plan.{' '}
-              <button type="button" className="link-btn" onClick={() => go('explore')}>Explore catalog →</button>
+              No classes showing yet. Add courses with published times to your plan.{' '}
+              <button type="button" className="link-btn" onClick={() => go('explore')}>Browse the catalog</button>
             </p>
           )}
         </div>
@@ -213,84 +216,96 @@ export default function Calendar() {
         {/* ------------------------------------------------ side: day + upcoming */}
         <div className="stack">
           <div className="card">
-            <div className="card-title">{selected === today ? '📍 Today' : '🗓️'} {selected ? prettyDate(selected) : ''}</div>
-            {selected && <p className="faint small" style={{ marginTop: -6 }}>{relDays(daysUntil(selected, parseIso(today)))}</p>}
+            <div className="section-label">
+              <span>{selected === today ? 'Today · ' : ''}{selected ? prettyDate(selected) : ''}</span>
+              {selected && selected !== today && <span className="faint">{relDays(daysUntil(selected, parseIso(today)))}</span>}
+            </div>
             {dayEvents.length ? (
               <ul className="cal-list">
                 {dayEvents.map((e, i) => (
                   <li key={i}>
-                    <span className={`cal-dot ${e.kind}`} aria-hidden="true" />
+                    <span className={`cal-swatch ${e.kind}`} aria-hidden="true" />
                     <div>
-                      <div className="cal-item-title">{e.kind === 'class' ? e.label : `${e.emoji} ${e.label}`}</div>
+                      <div className={`cal-item-title ${e.kind === 'class' ? 'mono' : ''}`}>{e.label}</div>
                       <div className="muted small">{e.detail}</div>
                     </div>
                   </li>
                 ))}
               </ul>
-            ) : <p className="muted small" style={{ margin: 0 }}>Nothing on this day. Touch grass 🌿</p>}
+            ) : <p className="muted small" style={{ margin: 0 }}>Nothing on this day.</p>}
           </div>
 
           <div className="card">
-            <div className="card-title">⏳ Upcoming deadlines</div>
+            <div className="section-label"><span>Upcoming deadlines</span></div>
             {upcoming.length ? (
               <ul className="cal-list">
                 {upcoming.map((d) => (
                   <li key={d.date + d.title}>
-                    <span className={`cal-dot ${d.st.cls}`} aria-hidden="true" />
+                    <span className={`cal-swatch ${d.st.cls}`} aria-hidden="true" />
                     <button type="button" className="cal-upcoming" onClick={() => { const t = parseIso(d.date); setMonth({ y: t.getFullYear(), m: t.getMonth() }); setSelected(d.date) }}>
-                      <span className="cal-item-title">{d.st.emoji} {d.title}</span>
-                      <span className="muted small">{prettyDate(d.date)} · <b className={d.rel === 'today' || d.rel === 'tomorrow' ? 'cal-soon' : ''}>{d.rel}</b></span>
+                      <span className="cal-item-title">{d.title}</span>
+                      <span className="muted small"><span className="mono">{prettyDate(d.date)}</span> · <span className={d.rel === 'today' || d.rel === 'tomorrow' ? 'cal-soon' : ''}>{d.rel}</span></span>
                     </button>
                   </li>
                 ))}
               </ul>
-            ) : <p className="muted small" style={{ margin: 0 }}>No more deadlines on the books 🎉</p>}
+            ) : <p className="muted small" style={{ margin: 0 }}>No more deadlines on the books.</p>}
           </div>
         </div>
       </div>
 
       {/* ------------------------------------------------ sync */}
-      <div className="card glow mt-lg">
-        <div className="card-title">🔗 Put your classes in your calendar</div>
+      <div className="card mt-lg">
+        <div className="section-label"><span>Sync to your calendar app</span></div>
         <p className="muted" style={{ maxWidth: 720 }}>
-          Subscribe once and your planned classes stay in sync with your phone and laptop. Change your plan here and your calendar follows.
+          Subscribe once and your planned classes stay in sync on your phone and laptop. Change your plan here and your calendar follows.
         </p>
 
         {links.is_local && (
           <div className="cal-note amber">
-            <b>🏠 You're running Plan with Dan locally.</b> Subscription links only work when the app is online, because Google and Outlook
-            have to reach this server to fetch your feed. For now, use <b>Download .ics</b> and import the file instead.
+            <House className="icon sm" />
+            <span>
+              <b>You're running Plan with Dan locally.</b> Subscription links only work when the app is online, because Google and Outlook
+              have to reach this server to fetch your feed. For now, use <b>Download .ics</b> and import the file instead.
+            </span>
           </div>
         )}
 
-        <div className="row mt">
-          <a className="btn primary" href={links.google_subscribe} target="_blank" rel="noreferrer">📅 Google Calendar</a>
-          <a className="btn" href={links.outlook_subscribe} target="_blank" rel="noreferrer">📨 Outlook</a>
-          <a className="btn" href={links.webcal_url}>🍎 Apple Calendar</a>
-          <a className="btn lime" href="/api/plan.ics" download="plan-with-dan.ics">⬇️ Download .ics</a>
+        {/* One primary action: Download when running locally (subscriptions can't reach us), otherwise Google. */}
+        <div className="row mt cal-sync-btns">
+          <a className={`btn ${links.is_local ? '' : 'primary'}`} href={links.google_subscribe} target="_blank" rel="noreferrer"><CalendarDays className="icon sm" />Google Calendar</a>
+          <a className="btn" href={links.outlook_subscribe} target="_blank" rel="noreferrer"><Mail className="icon sm" />Outlook</a>
+          <a className="btn" href={links.webcal_url}><Smartphone className="icon sm" />Apple Calendar</a>
+          <a className={`btn ${links.is_local ? 'primary' : ''}`} href="/api/plan.ics" download="plan-with-dan.ics"><Download className="icon sm" />Download .ics</a>
         </div>
 
         <div className="cal-feed mt">
           <label className="cal-feed-label" htmlFor="cal-feed-url">Your private feed link</label>
           <div className="input-row">
             <input id="cal-feed-url" type="text" readOnly value={links.feed_url} onFocus={(e) => e.currentTarget.select()} className="mono" />
-            <button type="button" className="btn" onClick={copy}>📋 Copy feed link</button>
+            <button type="button" className="btn" onClick={copy}><Copy className="icon sm" />Copy link</button>
           </div>
         </div>
 
         <div className="grid two mt">
-          <div className="cal-note sky">
-            <b>⏱️ How fast does it update?</b> Apple Calendar and Outlook refresh fairly quickly. Google refreshes subscribed calendars
-            slowly, so changes can take up to ~24 hours to show up there.
+          <div className="cal-note">
+            <Clock className="icon sm" />
+            <span>
+              <b>How fast does it update?</b> Apple Calendar and Outlook refresh fairly quickly. Google refreshes subscribed calendars
+              slowly, so changes can take up to about 24 hours to appear there.
+            </span>
           </div>
-          <div className="cal-note pink">
-            <b>🔐 This link is private.</b> Anyone who has it can see your class schedule. Don't post it anywhere; if you shared it by
-            accident, reset it below (old subscriptions will stop updating).
+          <div className="cal-note">
+            <Lock className="icon sm" />
+            <span>
+              <b>This link is private.</b> Anyone who has it can see your class schedule, so don't post it anywhere. If you shared it by
+              accident, reset it below (old subscriptions will stop updating).
+            </span>
           </div>
         </div>
 
         <div className="row end mt">
-          <button type="button" className="btn sm danger" onClick={rotate} disabled={rotating}>{rotating ? 'Resetting…' : '♻️ Reset private link'}</button>
+          <button type="button" className="btn sm danger" onClick={rotate} disabled={rotating}><RotateCcw className="icon sm" />{rotating ? 'Resetting…' : 'Reset private link'}</button>
         </div>
       </div>
     </div>

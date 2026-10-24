@@ -1,4 +1,6 @@
-/* Weekly Mon–Fri timetable, 8:00–20:00, with absolutely positioned course blocks. */
+/* Weekly Mon–Fri timetable, 8:00–20:00, with absolutely positioned course blocks.
+   Calm style: every block looks the same; only a clash gets colour (red). */
+import { TriangleAlert } from 'lucide-react'
 import type { Section } from '../api'
 import { clock, DAYS, DAY_NAMES } from '../lib/format'
 import '../pages/pages-a.css'
@@ -7,7 +9,6 @@ const START = 8 * 60
 const END = 20 * 60
 const PX_PER_MIN = 0.8 // 48px per hour
 const HEIGHT = (END - START) * PX_PER_MIN
-const TONES = ['pink', 'lilac', 'sky', 'lime', 'amber'] as const
 
 /** True when two sections meet at the same time: same term, overlapping dates, a shared day, overlapping minutes. */
 // eslint-disable-next-line react-refresh/only-export-components
@@ -55,8 +56,6 @@ interface Props {
 
 export default function Timetable({ sections, clashIds = new Set(), onOpen }: Props) {
   const timed = sections.filter((s) => s.start_min != null && s.end_min != null && s.days.length > 0)
-  const toneByKey = new Map<string, string>()
-  timed.forEach((s) => { if (!toneByKey.has(s.key)) toneByKey.set(s.key, TONES[toneByKey.size % TONES.length]) })
   const hours = Array.from({ length: (END - START) / 60 }, (_, i) => START + i * 60)
 
   return (
@@ -82,12 +81,12 @@ export default function Timetable({ sections, clashIds = new Set(), onOpen }: Pr
                 <button
                   key={s.id}
                   type="button"
-                  className={`tt-block tone-${toneByKey.get(s.key)} ${clash ? 'clash' : ''}`}
+                  className={`tt-block ${clash ? 'clash' : ''}`}
                   style={{ top, height: Math.max(22, bottom - top - 2), left: `calc(${lane * w}% + 3px)`, right: 'auto', width: `calc(${w}% - 6px)` }}
                   onClick={() => onOpen?.(s)}
-                  title={`${s.number} §${s.section} ${s.title}\n${clock(s.start_min)}–${clock(s.end_min)}${s.room ? ` · ${s.room}` : ''}${clash ? '\nTime clash!' : ''}`}
+                  title={`${s.number} §${s.section} ${s.title}\n${clock(s.start_min)}–${clock(s.end_min)}${s.room ? ` · ${s.room}` : ''}${clash ? '\nTime clash' : ''}`}
                 >
-                  <b>{clash ? '⚠️ ' : ''}{s.number}</b>
+                  <b>{clash && <TriangleAlert className="icon xs" aria-label="Time clash" />}{s.number}</b>
                   <span className="tt-time">{clock(s.start_min).replace(/ (AM|PM)$/, '')}–{clock(s.end_min)}</span>
                   {s.session.endsWith('-1') && <span className="tt-sess">S1</span>}
                   {s.session.endsWith('-2') && <span className="tt-sess">S2</span>}

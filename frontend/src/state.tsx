@@ -3,9 +3,9 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { api, type PlanResponse, type Profile, type Section, type User } from './api'
 
 export type Route =
-  | 'home' | 'find' | 'explore' | 'plan' | 'global' | 'bids' | 'calendar' | 'chat' | 'usage' | 'profile'
+  | 'home' | 'find' | 'explore' | 'plan' | 'global' | 'bids' | 'calendar' | 'chat' | 'usage' | 'profile' | 'privacy'
 
-export interface Toast { id: number; text: string; tone?: 'good' | 'bad' }
+export interface Toast { id: number; text: string; tone?: 'good' | 'bad'; action?: { label: string; run: () => void } }
 
 interface AppState {
   user: User | null
@@ -19,8 +19,12 @@ interface AppState {
   refreshProfile: () => Promise<void>
   refreshPlan: () => Promise<void>
   addCourse: (courseId: string, by?: 'student' | 'dan') => Promise<void>
-  toast: (text: string, tone?: 'good' | 'bad') => void
+  toast: (text: string, tone?: 'good' | 'bad', action?: Toast['action']) => void
+  undoToast: (text: string, actionId?: number) => void
+  dismissToast: (id: number) => void
   toasts: Toast[]
+  celebration: string | null
+  celebrate: (text: string) => void
   sectionById: Map<string, Section>
   plannedIds: Set<string>
 }
@@ -57,10 +61,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }, [])
 
-  const toast = useCallback((text: string, tone?: 'good' | 'bad') => {
+  const [celebration, setCelebration] = useState<string | null>(null)
+
+  const dismissToast = useCallback((id: number) => setToasts((t) => t.filter((x) => x.id !== id)), [])
+
+  const toast = useCallback((text: string, tone?: 'good' | 'bad', action?: Toast['action']) => {
     const id = Date.now() + Math.random()
-    setToasts((t) => [...t, { id, text, tone }])
-    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 4200)
+    setToasts((t) => [...t, { id, text, tone, action }])
+    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), action ? 7000 : 4200)
+  }, [])
+
+  const celebrate = useCallback((text: string) => {
+    setCelebration(text)
+    setTimeout(() => setCelebration(null), 3200)
   }, [])
 
   useEffect(() => {
@@ -78,24 +91,36 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (user) { refreshProfile(); refreshPlan() } else { setProfile(null); setPlan(null) }
   }, [user, refreshProfile, refreshPlan])
 
+  const undoToast = useCallback((text: string, actionId?: number) => {
+    toast(text, 'good', actionId ? {
+      label: 'Undo',
+      run: async () => {
+        await api.undo(actionId)
+        await refreshPlan()
+        toast('Undone')
+      },
+    } : undefined)
+  }, [toast, refreshPlan])
+
   const addCourse = useCallback(async (courseId: string, by: 'student' | 'dan' = 'student') => {
     try {
       const r = await api.addToPlan(courseId, by)
       await refreshPlan()
       if (r.clashes && r.clashes.length) {
-        toast(`Added, but it clashes with ${r.clashes.map((c) => (c.a_id === courseId ? c.b : c.a)).join(', ')} 😬`, 'bad')
-      } else toast(r.switched ? 'Switched to that section ✨' : 'Added to your plan ✨', 'good')
+        toast(`Added, but it clashes with ${r.clashes.map((c) => (c.a_id === courseId ? c.b : c.a)).join(', ')}`, 'bad',
+          r.action_id ? { label: 'Undo', run: async () => { await api.undo(r.action_id!); await refreshPlan() } } : undefined)
+      } else undoToast(r.switched ? 'Switched to that section' : 'Added to your plan', r.action_id)
     } catch (e) {
       toast((e as Error).message, 'bad')
     }
-  }, [refreshPlan, toast])
+  }, [refreshPlan, toast, undoToast])
 
   const sectionById = useMemo(() => new Map(sections.map((s) => [s.id, s])), [sections])
   const plannedIds = useMemo(() => new Set((plan?.items ?? []).map((i) => i.section.id)), [plan])
 
   const value: AppState = {
     user, profile, sections, topics, plan, route, go, setUser, refreshProfile, refreshPlan, addCourse, toast, toasts,
-    sectionById, plannedIds,
+    undoToast, dismissToast, celebration, celebrate, sectionById, plannedIds,
   }
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }

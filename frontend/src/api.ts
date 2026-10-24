@@ -218,6 +218,53 @@ export interface UsageResponse {
 
 export interface SafetyEvent { kind: string; detail: Record<string, unknown>; at: string; run_id: string }
 
+export interface DeskCard {
+  id: string
+  kind: string
+  title: string
+  detail: string
+  due: string | null
+  days_left: number | null
+  severity: 'high' | 'medium' | 'low'
+  action: { type: 'go' | 'scroll'; route?: string; target?: string; label: string }
+  source: string
+  why: string
+}
+
+export interface DeskResponse {
+  today: string
+  brief: { text: string; cached: boolean; run_id: string; cost_usd: number }
+  top: DeskCard[]
+  later: DeskCard[]
+  hidden: number
+}
+
+export interface Fit {
+  key: string
+  section_id: string
+  number: string
+  title: string
+  session: string
+  time: string
+  units: number
+  room: string
+  faculty: string[]
+  topics: string[]
+  ldr: boolean
+  gsr: boolean
+  enrollment: string
+  tier: 'Strong fit' | 'Good fit' | 'Worth a look'
+  score: number
+  chips: string[]
+  trip: boolean
+  why: { evidence: string; counter: string; factors: Record<string, number> }
+  demand: { level: 'High' | 'Medium' | 'Low' | 'Unknown'; seats: number | null; reports: number; sample: boolean }
+}
+
+export interface BestFits { term: string; top: Fit[]; rows: { id: string; title: string; items: Fit[] }[]; swap_count: number; eligible: number; how: string }
+
+export interface ActionEntry { id: number; action: string; summary: string; by: string; undone: boolean; at: string }
+
 export class ApiError extends Error {
   status: number
   constructor(status: number, message: string) {
@@ -247,7 +294,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 export const api = {
   health: () => request<{ ok: boolean; model: string; ai_connected: boolean; budgets: { per_turn_usd: number; per_day_usd: number } }>('GET', '/api/health'),
   me: () => request<{ user: User | null }>('GET', '/api/auth/me'),
-  signup: (email: string, password: string, name: string) => request<{ user: User }>('POST', '/api/auth/signup', { email, password, name }),
+  signup: (email: string, password: string, name: string) => request<{ user: User | null; message?: string }>('POST', '/api/auth/signup', { email, password, name }),
   login: (email: string, password: string) => request<{ user: User }>('POST', '/api/auth/login', { email, password }),
   logout: () => request<{ ok: boolean }>('POST', '/api/auth/logout', {}),
 
@@ -258,10 +305,19 @@ export const api = {
 
   plan: () => request<PlanResponse>('GET', '/api/plan'),
   addToPlan: (course_id: string, added_by: 'student' | 'dan' = 'student') =>
-    request<{ ok: boolean; id: number; clashes?: Clash[]; switched?: boolean }>('POST', '/api/plan', { course_id, added_by }),
+    request<{ ok: boolean; id: number; clashes?: Clash[]; switched?: boolean; action_id?: number }>('POST', '/api/plan', { course_id, added_by }),
   updatePlan: (id: number, patch: { status?: PlanItem['status']; bid_points?: number; course_id?: string }) =>
-    request<{ ok: boolean }>('PATCH', `/api/plan/${id}`, patch),
-  removeFromPlan: (id: number) => request<{ ok: boolean }>('DELETE', `/api/plan/${id}`),
+    request<{ ok: boolean; action_id?: number }>('PATCH', `/api/plan/${id}`, patch),
+  removeFromPlan: (id: number) => request<{ ok: boolean; action_id?: number }>('DELETE', `/api/plan/${id}`),
+  actions: () => request<{ actions: ActionEntry[] }>('GET', '/api/actions'),
+  undo: (actionId: number) => request<{ ok: boolean }>('POST', `/api/actions/${actionId}/undo`, {}),
+
+  desk: () => request<DeskResponse>('GET', '/api/desk'),
+  deskCard: (id: string, status: 'done' | 'snoozed' | 'dismissed' | 'active') => request<{ ok: boolean }>('POST', `/api/desk/${id}`, { status }),
+  bestFits: (term = '202701') => request<BestFits>('GET', `/api/bestfits?term=${term}`),
+  dismissFit: (key: string, reason = '') => request<{ ok: boolean }>('POST', '/api/bestfits/dismiss', { key, reason }),
+  undismissFit: (key: string) => request<{ ok: boolean }>('DELETE', `/api/bestfits/dismiss?key=${encodeURIComponent(key)}`),
+  deleteAccount: (password: string) => request<{ ok: boolean }>('POST', '/api/account/delete', { password }),
 
   requirements: () => request<RequirementsResponse>('GET', '/api/requirements'),
   saveGlobal: (c: GlobalChoice) => request<{ ok: boolean }>('POST', '/api/global', c),

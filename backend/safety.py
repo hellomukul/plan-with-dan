@@ -61,7 +61,7 @@ def screen_input(text: str) -> Screen:
 
 
 REFUSAL = (
-    "I can't help with that one 🙅 — it looks like an attempt to change my rules or get at private "
+    "I can't help with that one. It looks like an attempt to change my rules or get at private "
     "data ({why}). I only help with your own SOM planning, courses and AI news. Try asking me "
     "something like “find me a spring elective on healthcare strategy”."
 )
@@ -104,7 +104,7 @@ def check_output(text: str, known_numbers: set[str]) -> tuple[str, list[str]]:
     if unknown:
         issues.append("mentions course numbers not in the SOM catalog: " + ", ".join(unknown))
         out += (
-            "\n\n> ⚠️ Heads-up: I couldn't find " + ", ".join(unknown)
+            "\n\n> Heads-up: I couldn't find " + ", ".join(unknown)
             + " in the current SOM catalog, so double-check before bidding."
         )
     return out, issues

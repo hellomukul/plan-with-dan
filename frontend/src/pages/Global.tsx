@@ -1,5 +1,9 @@
 /* Global studies: plan the Global Studies Requirement (GSR) against the 10-day GSA budget, plus the LDR. */
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  AlertTriangle, Check, Compass, ExternalLink, Globe, GraduationCap, Monitor, Plane, Plus, Sprout, X,
+  type LucideIcon,
+} from 'lucide-react'
 import { api, type GlobalChoice, type GsrOption, type RequirementsResponse } from '../api'
 import CourseDrawer from '../components/CourseDrawer'
 import { Empty, Spinner } from '../components/ui'
@@ -7,24 +11,24 @@ import { daysUntil, prettyDate, relDays } from '../lib/format'
 import { useApp } from '../state'
 import './pages-b.css'
 
-const OPTION_EMOJI: Record<string, string> = {
-  ie: '✈️', gnw: '🌐', snoc: '💻', gse_india: '🪷', gse_spring: '🌱', exchange: '🎒',
+const OPTION_ICON: Record<string, LucideIcon> = {
+  ie: Plane, gnw: Globe, snoc: Monitor, gse_india: Compass, gse_spring: Sprout, exchange: GraduationCap,
 }
 /** Options where SOM covers lodging/meals but the student books their own flights (docs/research.md §2). */
 const PAY_AIRFARE = new Set(['ie', 'gse_india', 'gse_spring'])
 const STATUSES: { value: GlobalChoice['status'] | ''; label: string }[] = [
   { value: '', label: 'Not tracking' },
-  { value: 'considering', label: '🤔 Considering' },
-  { value: 'applied', label: '📝 Applied' },
-  { value: 'done', label: '✅ Done' },
+  { value: 'considering', label: 'Considering' },
+  { value: 'applied', label: 'Applied' },
+  { value: 'done', label: 'Done' },
 ]
 const TARGET_TERMS = ['Spring 2027', 'Fall 2027', 'Spring 2028']
 
 type FitKey = 'travel' | 'fullTerm' | 'tight'
 const FIT_QUESTIONS: { key: FitKey; label: string }[] = [
-  { key: 'travel', label: '🧳 I want to travel' },
-  { key: 'fullTerm', label: '🗺️ I want a full term abroad' },
-  { key: 'tight', label: '💸 My budget is tight' },
+  { key: 'travel', label: 'I want to travel' },
+  { key: 'fullTerm', label: 'I want a full term abroad' },
+  { key: 'tight', label: 'My budget is tight' },
 ]
 
 /** Pure client logic: which options to spotlight for the toggles, with a one-line why. Uses only facts from rules.py. */
@@ -74,7 +78,7 @@ export default function Global() {
       <>
         <PageHead />
         <div className="card">
-          <Empty icon="😵‍💫" title="Couldn't load Global Studies">
+          <Empty icon={<AlertTriangle className="icon lg" style={{ color: 'var(--amber)' }} />} title="Couldn't load Global studies">
             <p className="error-text" style={{ margin: 0 }}>{error}</p>
             <button className="btn primary" onClick={() => void load()}>Try again</button>
           </Empty>
@@ -98,14 +102,14 @@ export default function Global() {
   const draftChanged = draftValid && draftNum !== gsr.gsa_used
 
   const saveDays = async () => {
-    if (!profile) { toast('Your profile is still loading. Try again in a sec.', 'bad'); return }
+    if (!profile) { toast('Your profile is still loading. Try again in a moment.', 'bad'); return }
     if (!draftValid) { toast(`Pick a whole number from 0 to ${gsr.gsa_days}.`, 'bad'); return }
     setSavingDays(true)
     try {
       await api.saveProfile({ ...profile, gsa_days_used: draftNum })
       await Promise.all([refreshProfile(), load()])
       setDaysDraft(null)
-      toast('GSA days updated ✨', 'good')
+      toast('GSA days updated', 'good')
     } catch (e) {
       toast((e as Error).message, 'bad')
     } finally {
@@ -127,8 +131,8 @@ export default function Global() {
           status: patch.status ?? prev?.status ?? 'considering',
           note: prev?.note ?? '',
         })
-        if (patch.status === 'done') toast('Global Studies: done! 🌍🎉', 'good')
-        else if (patch.status) toast(`${opt.name}: ${patch.status} ✓`, 'good')
+        if (patch.status === 'done') toast('Global Studies marked done. Nice work.', 'good')
+        else if (patch.status) toast(`${opt.name}: marked ${patch.status}`, 'good')
       }
       await load()
     } catch (e) {
@@ -138,26 +142,26 @@ export default function Global() {
     }
   }
 
-  const ldrShown = showAllLdr ? ldr.courses : ldr.courses.slice(0, 9)
+  const ldrShown = showAllLdr ? ldr.courses : ldr.courses.slice(0, 10)
 
   return (
     <>
       <PageHead />
 
-      {/* ------------------------------------------------ hero: GSA budget + status */}
-      <div className="card glow pad-lg pb-hero">
+      {/* ------------------------------------------------ GSA budget + status */}
+      <div className="card pad-lg pb-hero">
         <div>
-          <div className="pb-kicker">Global Studies Account (GSA)</div>
-          <div className="pb-big mt" aria-live="polite">
+          <div className="section-label"><span>Global Studies Account (GSA)</span></div>
+          <div className="pb-big" aria-live="polite">
             {left} <small>of {gsr.gsa_days} funded days left</small>
           </div>
           <div className="pb-days" role="img" aria-label={`${left} of ${gsr.gsa_days} GSA days left, ${gsr.gsa_used} used`}>
             {Array.from({ length: gsr.gsa_days }, (_, i) => (
-              <span key={i} className={`pb-day ${i < left ? 'left' : ''}`}>{i < left ? i + 1 : '·'}</span>
+              <span key={i} className={`pb-day ${i < left ? 'left' : ''}`}>{i + 1}</span>
             ))}
           </div>
           <p className="small muted" style={{ marginTop: 8 }}>
-            Every student starts with 10 funded days. They're never topped up, and unused days are forfeited, so spend them on purpose 🎯
+            Every student starts with 10 funded days. They're never topped up, and unused days are forfeited, so spend them on purpose.
           </p>
 
           <div className="row mt" style={{ gap: 8 }}>
@@ -175,7 +179,7 @@ export default function Global() {
               onKeyDown={(e) => { if (e.key === 'Enter' && draftChanged) void saveDays() }}
               aria-invalid={!draftValid}
             />
-            <button className="btn sm primary" onClick={() => void saveDays()} disabled={!draftChanged || savingDays}>
+            <button className={`btn sm ${draftChanged ? 'primary' : ''}`} onClick={() => void saveDays()} disabled={!draftChanged || savingDays}>
               {savingDays ? 'Saving…' : 'Save'}
             </button>
           </div>
@@ -183,31 +187,33 @@ export default function Global() {
         </div>
 
         <div className="stack">
-          <div className="pb-kicker">Your GSR status</div>
-          {progress.gsr.met
-            ? <div><span className="sticker">GSR complete ✅</span></div>
-            : <div className="row" style={{ gap: 8 }}><span className="badge amber">Not done yet</span><span className="small muted">Complete one option before you graduate.</span></div>}
-          <div className="pb-callout">
-            <b>In your plan:</b>{' '}
-            {progress.gsr.in_plan.length ? progress.gsr.in_plan.join(' · ') : 'no Global Studies course yet.'}
+          <div>
+            <div className="section-label"><span>Your GSR status</span></div>
+            {progress.gsr.met
+              ? <span className="badge green"><Check className="icon sm" />Complete</span>
+              : <div className="row" style={{ gap: 8 }}><span className="badge amber">Not done yet</span><span className="small muted">Complete one option before you graduate.</span></div>}
           </div>
-          <div className="pb-callout">
-            <b>Tracking:</b>{' '}
-            {choices.size
-              ? [...choices.values()].map((c) => {
-                const name = gsr.options.find((o) => o.key === c.option_key)?.name ?? c.option_key
-                return `${name} (${c.status}${c.target_term ? `, ${c.target_term}` : ''})`
-              }).join(' · ')
-              : 'nothing yet. Pick a status on any option below 👇'}
-          </div>
+          <dl className="pb-kv">
+            <dt>In your plan</dt>
+            <dd>{progress.gsr.in_plan.length ? progress.gsr.in_plan.join(' · ') : 'No Global Studies course yet.'}</dd>
+            <dt>Tracking</dt>
+            <dd>
+              {choices.size
+                ? [...choices.values()].map((c) => {
+                  const name = gsr.options.find((o) => o.key === c.option_key)?.name ?? c.option_key
+                  return `${name} (${c.status}${c.target_term ? `, ${c.target_term}` : ''})`
+                }).join(' · ')
+                : 'Nothing yet. Pick a status on any option below.'}
+            </dd>
+          </dl>
         </div>
       </div>
 
       {/* ------------------------------------------------ helper + dates */}
       <div className="grid two mt-lg">
         <div className="card">
-          <div className="card-title">🔮 Which one fits me?</div>
-          <p className="small muted">Flip what's true for you and we'll spotlight the options that match. Simple rules, no AI.</p>
+          <div className="section-label"><span>Which one fits me?</span></div>
+          <p className="small muted">Turn on what's true for you and we'll highlight the options that match. Simple rules, no AI.</p>
           <div className="pb-toggles">
             {FIT_QUESTIONS.map((q) => (
               <button
@@ -228,18 +234,18 @@ export default function Global() {
               {Object.keys(recs).length ? (
                 <ul className="pb-list small">
                   {gsr.options.filter((o) => recs[o.key]).map((o) => (
-                    <li key={o.key}><b>{OPTION_EMOJI[o.key]} {o.name}</b> <span className="muted">· {recs[o.key]}</span></li>
+                    <li key={o.key}><b>{o.name}</b> <span className="muted">· {recs[o.key]}</span></li>
                   ))}
                 </ul>
               ) : (
-                <p className="small muted" style={{ margin: 0 }}>Nothing matches that combo with your current GSA days. Try loosening a toggle.</p>
+                <p className="small muted" style={{ margin: 0 }}>Nothing matches that combination with your current GSA days. Try turning one off.</p>
               )}
             </div>
           )}
         </div>
 
         <div className="card">
-          <div className="card-title">📅 Key dates</div>
+          <div className="section-label"><span>Key dates</span></div>
           <ol className="pb-timeline">
             {gsr.weeks.map((w) => {
               const d = daysUntil(w.start)
@@ -249,9 +255,9 @@ export default function Global() {
                   <span className="pb-dot" aria-hidden="true" />
                   <div className="row between" style={{ gap: 6 }}>
                     <b>{w.name}</b>
-                    <span className={`badge ${past ? 'gray' : d <= 60 ? 'amber' : 'sky'}`}>{past ? 'done' : relDays(d)}</span>
+                    <span className={`badge ${!past && d <= 60 ? 'amber' : 'gray'}`}>{past ? 'Done' : relDays(d)}</span>
                   </div>
-                  <div className="small muted">{prettyDate(w.start)} → {prettyDate(w.end)}, {w.start.slice(0, 4)}</div>
+                  <div className="pb-date">{prettyDate(w.start)} – {prettyDate(w.end)}, {w.start.slice(0, 4)}</div>
                 </li>
               )
             })}
@@ -265,79 +271,90 @@ export default function Global() {
       {/* ------------------------------------------------ options */}
       <div className="pb-section-head mt-lg">
         <div>
-          <h2>Your 6 ways to finish the GSR</h2>
-          <p>Pick one. Each card checks it against your GSA days and lists the real matching courses from SOM's public catalog.</p>
+          <h2>Six ways to finish the GSR</h2>
+          <p>Pick one. Each option is checked against your GSA days and lists the matching courses from SOM's public catalog.</p>
         </div>
       </div>
-      <div className="grid two">
+      <div className="pb-opts">
         {gsr.options.map((opt) => {
           const choice = choices.get(opt.key)
           const highlighted = anyFit && Boolean(recs[opt.key])
           const dim = anyFit && !highlighted
           const bc = opt.budget_check
-          const fitsTone = !bc.ok ? 'red' : /out of pocket/i.test(bc.reason) ? 'amber' : 'lime'
+          const fitsTone = !bc.ok ? 'no' : /out of pocket/i.test(bc.reason) ? 'warn' : 'ok'
+          const CheckIcon = fitsTone === 'ok' ? Check : fitsTone === 'warn' ? AlertTriangle : X
+          const Icon = OPTION_ICON[opt.key] ?? Globe
           return (
-            <article key={opt.key} className={`card pb-opt ${highlighted ? 'glow' : ''} ${dim ? 'dim' : ''}`} aria-labelledby={`opt-${opt.key}`}>
-              {highlighted && <span className="sticker pb-fit">Good fit ✨</span>}
-              <div className="row top" style={{ gap: 12, flexWrap: 'nowrap' }}>
-                <span className="pb-opt-emoji" aria-hidden="true">{OPTION_EMOJI[opt.key] ?? '🌍'}</span>
-                <div style={{ minWidth: 0 }}>
-                  <h3 id={`opt-${opt.key}`} style={{ marginBottom: 6 }}>{opt.name}</h3>
+            <article key={opt.key} className={`pb-opt ${highlighted ? 'hi' : ''} ${dim ? 'dim' : ''}`} aria-labelledby={`opt-${opt.key}`}>
+              <div className="pb-opt-head">
+                <span className="pb-opt-icon" aria-hidden="true"><Icon className="icon" /></span>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div className="row between" style={{ gap: 8, alignItems: 'flex-start' }}>
+                    <h3 id={`opt-${opt.key}`}>{opt.name}</h3>
+                    {highlighted && <span className="badge pink">Good fit</span>}
+                  </div>
                   <div className="row" style={{ gap: 6 }}>
                     <span className="badge gray">{opt.units != null ? `${opt.units} units` : 'Units vary'}</span>
-                    <span className="badge sky">{opt.gsa_days ? `~${opt.gsa_days} GSA days` : '0 GSA days'}</span>
-                    {PAY_AIRFARE.has(opt.key) && <span className="badge amber">✈️ You pay airfare</span>}
-                    {opt.requires_full_gsa && <span className="badge pink">Needs all 10 days</span>}
+                    <span className="badge gray">{opt.gsa_days ? `~${opt.gsa_days} GSA days` : '0 GSA days'}</span>
+                    {PAY_AIRFARE.has(opt.key) && <span className="badge amber"><Plane className="icon sm" />You pay airfare</span>}
+                    {opt.requires_full_gsa && <span className="badge amber">Needs all 10 days</span>}
                   </div>
                 </div>
               </div>
-              {highlighted && <div className="pb-why">→ {recs[opt.key]}</div>}
+              {highlighted && <div className="pb-why"><Check className="icon sm" aria-hidden="true" /><span>{recs[opt.key]}</span></div>}
 
-              <div className={`badge ${fitsTone}`} style={{ whiteSpace: 'normal', alignSelf: 'flex-start', padding: '4px 10px' }}>
-                {bc.ok ? (fitsTone === 'lime' ? '✓ ' : '⚠️ ') : '✕ '}{bc.reason}
+              <div className={`pb-check ${fitsTone}`}>
+                <CheckIcon className="icon sm" aria-hidden="true" />
+                <span><span className="pb-sr">{fitsTone === 'ok' ? 'Fits your budget: ' : fitsTone === 'warn' ? 'Partly fits: ' : 'Does not fit: '}</span>{bc.reason}</span>
               </div>
 
-              <dl className="pb-kv">
-                <dt>When</dt><dd>{opt.timing}</dd>
-                <dt>Enrol</dt><dd>{opt.enrol}</dd>
-                <dt>Cost</dt><dd>{opt.cost}</dd>
-              </dl>
+              <div className="pb-opt-body">
+                <dl className="pb-kv">
+                  <dt>When</dt><dd>{opt.timing}</dd>
+                  <dt>Enrol</dt><dd>{opt.enrol}</dd>
+                  <dt>Cost</dt><dd>{opt.cost}</dd>
+                </dl>
 
-              <div className="stack tight">
-                <div className="small faint" style={{ fontWeight: 700 }}>MATCHING COURSES</div>
-                {opt.courses.length ? opt.courses.map((c) => {
-                  const inPlan = c.section_ids.some((id) => plannedIds.has(id))
-                  return (
-                    <div key={c.key} className="pb-course">
-                      <div className="pb-course-main">
-                        <div className="course-num">{c.number}</div>
-                        <div className="pb-course-title">{c.title}</div>
-                        <div className="small muted">
-                          {c.term_name ?? 'Term TBA'} · {c.time || 'Time TBA'}{c.seats ? ` · ${c.seats} seats` : ''}
-                        </div>
-                      </div>
-                      <div className="row" style={{ gap: 6 }}>
-                        <button className="btn sm ghost" onClick={() => setDrawerKey(c.key)} aria-label={`Details for ${c.number} ${c.title}`}>Details</button>
-                        {inPlan
-                          ? <span className="badge lime">✓ in plan</span>
-                          : (
-                            <button
-                              className="btn sm primary"
-                              disabled={!c.section_ids.length}
-                              onClick={() => c.section_ids[0] && void addCourse(c.section_ids[0]).then(load)}
-                              aria-label={`Add ${c.number} to my plan`}
-                            >+ Add</button>
-                          )}
-                      </div>
+                <div>
+                  <div className="section-label"><span>Matching courses</span></div>
+                  {opt.courses.length ? (
+                    <div className="pb-courses">
+                      {opt.courses.map((c) => {
+                        const inPlan = c.section_ids.some((id) => plannedIds.has(id))
+                        return (
+                          <div key={c.key} className="pb-course">
+                            <div className="pb-course-main">
+                              <div className="course-num">{c.number}</div>
+                              <div className="pb-course-title">{c.title}</div>
+                              <div className="small muted">
+                                {c.term_name ?? 'Term TBA'} · <span className="mono">{c.time || 'Time TBA'}</span>{c.seats ? <> · <span className="mono">{c.seats}</span> seats</> : ''}
+                              </div>
+                            </div>
+                            <div className="row" style={{ gap: 6 }}>
+                              <button className="btn sm ghost" onClick={() => setDrawerKey(c.key)} aria-label={`Details for ${c.number} ${c.title}`}>Details</button>
+                              {inPlan
+                                ? <span className="badge green"><Check className="icon sm" />In plan</span>
+                                : (
+                                  <button
+                                    className="btn sm"
+                                    disabled={!c.section_ids.length}
+                                    onClick={() => c.section_ids[0] && void addCourse(c.section_ids[0]).then(load)}
+                                    aria-label={`Add ${c.number} to my plan`}
+                                  ><Plus className="icon sm" />Add</button>
+                                )}
+                            </div>
+                          </div>
+                        )
+                      })}
                     </div>
-                  )
-                }) : (
-                  <p className="small muted" style={{ margin: 0 }}>
-                    {opt.key === 'exchange'
-                      ? "Not a catalog course: you apply through Academic Affairs & Student Life."
-                      : 'No matching course in the public Fall 2026 / Spring 2027 feed yet. Check back when the next term posts.'}
-                  </p>
-                )}
+                  ) : (
+                    <p className="small muted" style={{ margin: 0 }}>
+                      {opt.key === 'exchange'
+                        ? 'Not a catalog course: you apply through Academic Affairs and Student Life.'
+                        : 'No matching course in the public Fall 2026 or Spring 2027 feed yet. Check back when the next term posts.'}
+                    </p>
+                  )}
+                </div>
               </div>
 
               <div className="pb-track" aria-busy={busyOption === opt.key}>
@@ -354,7 +371,7 @@ export default function Global() {
                         className={on ? 'on' : ''}
                         disabled={busyOption === opt.key || (on && s.value === '')}
                         onClick={() => !on && void track(opt, { status: s.value })}
-                      >{s.label}</button>
+                      >{s.value === 'done' && on && <Check className="icon sm" />}{s.label}</button>
                     )
                   })}
                 </div>
@@ -377,35 +394,37 @@ export default function Global() {
       </div>
 
       <div className="pb-sources mt">
-        <span>📚 Sources:</span>
-        {sources.gsr && <a href={sources.gsr} target="_blank" rel="noreferrer">SOM Global Studies Requirement ↗</a>}
-        {sources.gsr_funding && <a href={sources.gsr_funding} target="_blank" rel="noreferrer">GSA funding rules (Bulletin) ↗</a>}
-        {sources.gnw && <a href={sources.gnw} target="_blank" rel="noreferrer">Global Network Weeks ↗</a>}
+        <span>Sources:</span>
+        {sources.gsr && <a href={sources.gsr} target="_blank" rel="noreferrer">SOM Global Studies Requirement<ExternalLink className="icon sm" /></a>}
+        {sources.gsr_funding && <a href={sources.gsr_funding} target="_blank" rel="noreferrer">GSA funding rules (Bulletin)<ExternalLink className="icon sm" /></a>}
+        {sources.gnw && <a href={sources.gnw} target="_blank" rel="noreferrer">Global Network Weeks<ExternalLink className="icon sm" /></a>}
       </div>
 
       {/* ------------------------------------------------ LDR */}
-      <div className="card mt-lg">
-        <div className="row between top">
-          <div className="card-title" style={{ marginBottom: 4 }}>🧭 Leadership Distribution Requirement (LDR)</div>
+      <section className="card mt-lg" aria-labelledby="ldr-h">
+        <div className="row between top" style={{ marginBottom: 6 }}>
+          <h2 id="ldr-h" className="pb-h2">Leadership Distribution Requirement (LDR)</h2>
           {progress.ldr.met
-            ? <span className="badge lime">✓ Covered in your plan</span>
+            ? <span className="badge green"><Check className="icon sm" />Covered in your plan</span>
             : <span className="badge amber">Not covered yet</span>}
         </div>
-        <p className="muted">{ldr.summary}</p>
+        <p className="muted small">{ldr.summary}</p>
         <div className="pb-callout mb">
-          <b>Heads up:</b> {ldr.how_flagged} {ldr.petition}
+          <span><b>Worth knowing:</b> {ldr.how_flagged} {ldr.petition}</span>
         </div>
         {ldr.courses.length ? (
           <>
-            <div className="pb-ldr-list">
+            <div className="section-label"><span>LDR-flagged courses</span><span className="faint mono">{ldr.courses.length}</span></div>
+            <ul className="pb-ldr-list">
               {ldrShown.map((c) => (
-                <div key={`${c.number}-${c.term_name}`} className="pb-ldr-item">
-                  <div className="course-num">{c.number} <span className="faint" style={{ fontWeight: 500 }}>· {c.term_name || 'Term TBA'}</span></div>
-                  <div>{c.title}</div>
-                </div>
+                <li key={`${c.number}-${c.term_name}`}>
+                  <span className="course-num">{c.number}</span>
+                  <span className="pb-ldr-title">{c.title}</span>
+                  <span className="faint small">{c.term_name || 'Term TBA'}</span>
+                </li>
               ))}
-            </div>
-            {ldr.courses.length > 9 && (
+            </ul>
+            {ldr.courses.length > 10 && (
               <button className="btn sm ghost mt" onClick={() => setShowAllLdr((v) => !v)} aria-expanded={showAllLdr}>
                 {showAllLdr ? 'Show fewer' : `Show all ${ldr.courses.length} flagged courses`}
               </button>
@@ -415,9 +434,9 @@ export default function Global() {
           <p className="small muted">No LDR-flagged MBA courses in the public feed right now.</p>
         )}
         {ldr.source && (
-          <div className="pb-sources mt"><span>📚 Source:</span><a href={ldr.source} target="_blank" rel="noreferrer">MBA curriculum (Bulletin) ↗</a></div>
+          <div className="pb-sources mt"><span>Source:</span><a href={ldr.source} target="_blank" rel="noreferrer">MBA curriculum (Bulletin)<ExternalLink className="icon sm" /></a></div>
         )}
-      </div>
+      </section>
 
       {drawerKey && <CourseDrawer courseKey={drawerKey} onClose={() => { setDrawerKey(null); void load() }} />}
     </>
@@ -428,8 +447,8 @@ function PageHead() {
   return (
     <div className="page-head">
       <div>
-        <h1>Global studies 🌍</h1>
-        <p>Plan your Global Studies Requirement around your 10 funded GSA days, and keep an eye on the Leadership requirement too.</p>
+        <h1>Global studies</h1>
+        <p>Plan your Global Studies Requirement around your 10 funded GSA days, and keep the Leadership requirement in view.</p>
       </div>
     </div>
   )

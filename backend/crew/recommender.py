@@ -56,7 +56,7 @@ def retrieve(ctx, term: str) -> tuple[list, dict]:
     pool = [
         o for o in cat.eligible(term, program=program)
         if o.lead.number.upper() not in completed and o.key not in planned_keys
-        and any(respects_prefs(s, prefs) for s in o.sections)
+        and any(respects_prefs(s, prefs) for s in o.sections if program in s.programs)
         and o.lead.units > 0
     ]
     ranked = cat.search(_query(p), pool, limit=len(pool))

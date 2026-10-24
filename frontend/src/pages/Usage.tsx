@@ -1,5 +1,10 @@
 /* Cost & safety: a transparency page with real token/dollar logs, a scale estimator and the safety log. */
 import { useEffect, useMemo, useState } from 'react'
+import {
+  AlertTriangle, Ban, Check, Coins, DoorOpen, Eraser, Fence, Gauge, Inbox, KeyRound, ListChecks, Mail, Newspaper,
+  Receipt, RefreshCw, Repeat, ScanSearch, ShieldAlert, ShieldCheck, Timer, Trash2, Info,
+  type LucideIcon,
+} from 'lucide-react'
 import { api, type SafetyEvent, type UsageResponse } from '../api'
 import { Bar, Empty, Spinner } from '../components/ui'
 import { tokens, usd } from '../lib/format'
@@ -8,24 +13,26 @@ import './pages-b.css'
 type Health = Awaited<ReturnType<typeof api.health>>
 type ByFeature = Awaited<ReturnType<typeof api.usageAll>>['by_feature']
 
-const FEATURES: Record<string, { label: string; emoji: string }> = {
-  chat: { label: 'Ask Dan', emoji: '🐶' },
-  news: { label: 'News scout', emoji: '📰' },
-  recommend: { label: 'Find my courses', emoji: '✨' },
+const FEATURES: Record<string, string> = {
+  chat: 'Ask Dan',
+  news: 'AI news',
+  recommend: 'Find my courses',
+  desk: "Dan's Desk brief",
 }
-const featureLabel = (f: string) => FEATURES[f] ? `${FEATURES[f].emoji} ${FEATURES[f].label}` : f
+const featureLabel = (f: string) => FEATURES[f] ?? f
 
-const EVENT_LABELS: Record<string, { label: string; icon: string; tone: string }> = {
-  input_blocked: { label: 'Prompt blocked before the AI saw it', icon: '🛑', tone: 'red' },
-  output_checked: { label: 'Answer cleaned up by the output check', icon: '🧽', tone: 'amber' },
-  recommendation_dropped: { label: 'Recommendation dropped by the validator', icon: '🗑️', tone: 'amber' },
-  budget_stop: { label: 'Stopped: spend cap reached', icon: '💸', tone: 'red' },
-  over_run_budget: { label: 'Turn went over its per-turn budget', icon: '⏱️', tone: 'amber' },
-  usage_limit_hit: { label: 'Loop / token limit hit', icon: '🔁', tone: 'amber' },
-  provider_content_filter: { label: "Provider's content filter stepped in", icon: '🧯', tone: 'amber' },
-  login_failed: { label: 'Failed sign-in attempt', icon: '🔐', tone: 'red' },
-  signup_existing_email: { label: 'Sign-up with an existing email', icon: '📧', tone: 'gray' },
-  agent_error: { label: 'An agent hit an error', icon: '⚠️', tone: 'gray' },
+const EVENT_LABELS: Record<string, { label: string; icon: LucideIcon; tone: string }> = {
+  input_blocked: { label: 'Prompt blocked before the AI saw it (text not stored)', icon: Ban, tone: 'red' },
+  output_checked: { label: 'Answer cleaned up by the output check', icon: Eraser, tone: 'amber' },
+  recommendation_dropped: { label: 'Recommendation dropped by the validator', icon: Trash2, tone: 'amber' },
+  news_without_sources: { label: 'News answer without sources (warned)', icon: Newspaper, tone: 'amber' },
+  budget_stop: { label: 'Stopped: spend cap reached', icon: Coins, tone: 'red' },
+  over_run_budget: { label: 'Turn went over its per-turn budget', icon: Timer, tone: 'amber' },
+  usage_limit_hit: { label: 'Loop or token limit hit', icon: Repeat, tone: 'amber' },
+  provider_content_filter: { label: "Provider's content filter stepped in", icon: ShieldAlert, tone: 'amber' },
+  login_failed: { label: 'Failed sign-in attempt', icon: KeyRound, tone: 'red' },
+  signup_existing_email: { label: 'Sign-up with an existing email', icon: Mail, tone: 'gray' },
+  agent_error: { label: 'An agent hit an error', icon: AlertTriangle, tone: 'gray' },
 }
 
 const STUDENT_PRESETS = [
@@ -35,12 +42,12 @@ const STUDENT_PRESETS = [
   { n: 10000, label: '10,000' },
 ]
 
-const DEFENSES = [
-  { icon: '🚪', title: 'Input screen', text: "Every message is checked for prompt-injection tricks (\"ignore your instructions\", asking for keys or other students' data, fake control tags) and length before any model call. Blocked prompts cost $0." },
-  { icon: '🧱', title: 'Untrusted-text fencing', text: 'Web results, course descriptions and your notes are wrapped as data, so the model treats them as information, never as instructions.' },
-  { icon: '🔍', title: 'Output check', text: 'Answers are scanned for anything that looks like a secret (redacted) and for course numbers that aren\'t in the real SOM catalog (flagged).' },
-  { icon: '✅', title: 'Recommendation validator', text: "Plain code drops any recommended course that doesn't exist, or whose quoted \"evidence\" isn't really in the course description." },
-  { icon: '🧮', title: 'Spend caps + loop limits', text: 'Per-turn and per-student daily dollar caps use real token counts from the log, and each agent has a cap on model calls and tokens so it can\'t loop forever.' },
+const DEFENSES: { icon: LucideIcon; title: string; text: string }[] = [
+  { icon: DoorOpen, title: 'Input screen', text: "Every message is checked for prompt-injection tricks (\"ignore your instructions\", asking for keys or other students' data, fake control tags) and length before any model call. Blocked prompts cost $0, and their text is never stored." },
+  { icon: Fence, title: 'Untrusted-text fencing', text: 'Web results, course descriptions and your notes are wrapped as data, so the model treats them as information, never as instructions.' },
+  { icon: ScanSearch, title: 'Output check', text: 'Answers are scanned for anything that looks like a secret (redacted) and for course numbers that aren\'t in the real SOM catalog (flagged).' },
+  { icon: ListChecks, title: 'Recommendation validator', text: "Plain code drops any recommended course that doesn't exist, or whose quoted \"evidence\" isn't really in the course description." },
+  { icon: Gauge, title: 'Spend caps and loop limits', text: 'Per-turn and per-student daily dollar caps use real token counts from the log, and each agent has a cap on model calls and tokens so it can\'t loop forever.' },
 ]
 
 /** Server timestamps are UTC; older rows may lack an offset. */
@@ -105,10 +112,10 @@ export default function Usage() {
   const head = (
     <div className="page-head">
       <div>
-        <h1>Cost & safety 🧾</h1>
-        <p>Every AI call is metered: tokens, dollars and the guardrails that fired. Nothing here is estimated except the scale calculator.</p>
+        <h1>Cost and safety</h1>
+        <p>Every AI call is metered: tokens, dollars and the guardrails that fired. Only the scale calculator is an estimate.</p>
       </div>
-      <button className="btn sm ghost" onClick={() => void load()} disabled={refreshing}>{refreshing ? 'Refreshing…' : '↻ Refresh'}</button>
+      <button className="btn sm ghost" onClick={() => void load()} disabled={refreshing}><RefreshCw className="icon sm" aria-hidden="true" />{refreshing ? 'Refreshing…' : 'Refresh'}</button>
     </div>
   )
 
@@ -118,7 +125,7 @@ export default function Usage() {
       <>
         {head}
         <div className="card">
-          <Empty icon="😵‍💫" title="Couldn't load usage">
+          <Empty icon={<AlertTriangle className="icon lg" style={{ color: 'var(--amber)' }} />} title="Couldn't load usage">
             <p className="error-text" style={{ margin: 0 }}>{data.errors[0]}</p>
             <button className="btn primary" onClick={() => void load()}>Try again</button>
           </Empty>
@@ -131,7 +138,7 @@ export default function Usage() {
     <>
       {head}
       {data.errors.length > 0 && (
-        <div className="pb-callout mb" role="status">⚠️ Some panels couldn't load ({data.errors.join('; ')}). The rest is up to date.</div>
+        <div className="pb-callout warn mb" role="status"><AlertTriangle className="icon sm" aria-hidden="true" /><span>Some panels couldn't load ({data.errors.join('; ')}). The rest is up to date.</span></div>
       )}
       {data.usage && <MySpend usage={data.usage} health={data.health} />}
       {data.usage && <RecentRuns runs={data.usage.runs} />}
@@ -149,49 +156,51 @@ function MySpend({ usage, health }: { usage: UsageResponse; health: Health | nul
   const perTurn = health?.budgets.per_turn_usd ?? usage.run_budget_usd
   return (
     <>
-      <div className="card glow pad-lg pb-hero">
+      <div className="card pad-lg pb-hero">
         <div>
-          <div className="pb-kicker">My AI spend · last 24 hours</div>
-          <div className="pb-big mt">{usd(usage.today_usd)} <small>of {usd(usage.daily_budget_usd, 2)} daily cap</small></div>
+          <div className="section-label"><span>My AI spend · last 24 hours</span></div>
+          <div className="pb-big">{usd(usage.today_usd)} <small>of {usd(usage.daily_budget_usd, 2)} daily cap</small></div>
           <div className="mt"><Bar pct={pct} tone={pct >= 80 ? 'amber' : 'lime'} /></div>
           <p className="small muted" style={{ marginTop: 8, marginBottom: 0 }}>
-            {pct >= 100 ? "You've hit today's cap. AI features pause until older spend rolls off 💤"
+            {pct >= 100 ? "You've hit today's cap. AI features pause until older spend rolls off."
               : `${Math.round(pct)}% used. When you hit the cap, AI features pause instead of overspending.`}
           </p>
         </div>
         <div className="stack tight">
-          <div className="row between"><span className="muted small">Model</span><span className="badge pink mono">{health?.model ?? usage.model}</span></div>
-          <div className="row between"><span className="muted small">Per-turn cap</span><b>{usd(perTurn, 2)}</b></div>
-          <div className="row between"><span className="muted small">Daily cap per student</span><b>{usd(health?.budgets.per_day_usd ?? usage.daily_budget_usd, 2)}</b></div>
+          <div className="section-label"><span>Limits</span></div>
+          <div className="row between"><span className="muted small">Model</span><span className="badge gray mono">{health?.model ?? usage.model}</span></div>
+          <div className="row between"><span className="muted small">Per-turn cap</span><span className="pb-num">{usd(perTurn, 2)}</span></div>
+          <div className="row between"><span className="muted small">Daily cap per student</span><span className="pb-num">{usd(health?.budgets.per_day_usd ?? usage.daily_budget_usd, 2)}</span></div>
           {health && (
             <div className="row between">
               <span className="muted small">AI provider</span>
-              {health.ai_connected ? <span className="badge lime">● connected</span> : <span className="badge gray">offline</span>}
+              {health.ai_connected ? <span className="badge green"><Check className="icon sm" />Connected</span> : <span className="badge gray">Offline</span>}
             </div>
           )}
         </div>
       </div>
 
-      <div className="grid four mt">
-        <div className="card stat">
+      <div className="section-label mt-lg"><span>My totals</span><span className="faint">across your recent runs</span></div>
+      <div className="pb-stats">
+        <div className="stat">
           <span className="label">Input tokens</span>
           <span className="value">{tokens(t.input_tokens)}</span>
           <span className="pb-stat-sub">{tokens(t.cached_tokens)} cached ({cachedPct}%), billed cheaper</span>
         </div>
-        <div className="card stat">
+        <div className="stat">
           <span className="label">Output tokens</span>
           <span className="value">{tokens(t.output_tokens)}</span>
           <span className="pb-stat-sub">what the model wrote</span>
         </div>
-        <div className="card stat">
+        <div className="stat">
           <span className="label">Web searches</span>
           <span className="value">{t.web_searches}</span>
           <span className="pb-stat-sub">billed per search</span>
         </div>
-        <div className="card stat">
+        <div className="stat">
           <span className="label">Total cost</span>
-          <span className="value" style={{ color: 'var(--lime)' }}>{usd(t.cost_usd)}</span>
-          <span className="pb-stat-sub">across your recent runs</span>
+          <span className="value">{usd(t.cost_usd)}</span>
+          <span className="pb-stat-sub">real token prices, not estimates</span>
         </div>
       </div>
     </>
@@ -202,9 +211,9 @@ function MySpend({ usage, health }: { usage: UsageResponse; health: Health | nul
 function RecentRuns({ runs }: { runs: UsageResponse['runs'] }) {
   return (
     <section className="card mt-lg" aria-labelledby="runs-h">
-      <div className="card-title" id="runs-h">🧾 My recent runs</div>
+      <div className="section-label" id="runs-h"><span className="pb-label-icon"><Receipt className="icon sm" aria-hidden="true" />My recent runs</span></div>
       {runs.length === 0 ? (
-        <Empty icon="🫥" title="No AI runs yet">Ask Dan something or hit “Find my courses”, and each run's receipt lands here.</Empty>
+        <Empty icon={<Inbox className="icon lg" style={{ color: 'var(--faint)' }} />} title="No AI runs yet">Ask Dan something or hit “Find my courses”, and each run's receipt lands here.</Empty>
       ) : (
         <div className="table-wrap">
           <table className="table">
@@ -224,13 +233,13 @@ function RecentRuns({ runs }: { runs: UsageResponse['runs'] }) {
               {runs.map((r) => (
                 <tr key={r.run_id}>
                   <td style={{ whiteSpace: 'nowrap' }}>{featureLabel(r.feature)}</td>
-                  <td className="small muted" style={{ whiteSpace: 'nowrap' }}>{when(r.at)}</td>
-                  <td><div className="pb-agents">{[...new Set(r.agents)].map((a) => <span key={a} className="badge lilac">{a}</span>)}</div></td>
+                  <td className="pb-num muted">{when(r.at)}</td>
+                  <td><div className="pb-agents">{[...new Set(r.agents)].map((a) => <span key={a} className="badge gray">{a}</span>)}</div></td>
                   <td className="pb-right pb-num">{tokens(r.input_tokens)}</td>
                   <td className="pb-right pb-num muted">{tokens(r.cached_tokens)}</td>
                   <td className="pb-right pb-num">{tokens(r.output_tokens)}</td>
                   <td className="pb-right pb-num">{r.web_searches}</td>
-                  <td className="pb-right pb-num"><b>{usd(r.cost_usd)}</b></td>
+                  <td className="pb-right pb-num" style={{ color: 'var(--text)', fontWeight: 500 }}>{usd(r.cost_usd)}</td>
                 </tr>
               ))}
             </tbody>
@@ -259,10 +268,10 @@ function AcrossStudents({ rows }: { rows: ByFeature }) {
 
   return (
     <section className="card mt-lg pad-lg" aria-labelledby="all-h">
-      <div className="card-title" id="all-h">🌐 Across all students</div>
+      <div className="section-label" id="all-h"><span>Across all students</span></div>
       <p className="small muted">Anonymous totals by feature from every logged run in this app. No names, no individual data.</p>
       {rows.length === 0 ? (
-        <Empty icon="📭" title="No runs logged yet">Once anyone uses an AI feature, real averages show up here.</Empty>
+        <Empty icon={<Inbox className="icon lg" style={{ color: 'var(--faint)' }} />} title="No runs logged yet">Once anyone uses an AI feature, real averages show up here.</Empty>
       ) : (
         <>
           <div className="table-wrap">
@@ -304,7 +313,7 @@ function AcrossStudents({ rows }: { rows: ByFeature }) {
           </div>
 
           <div className="divider" />
-          <h3>📈 What would this cost at scale?</h3>
+          <h3>What would this cost at scale?</h3>
           <div className="pb-est mt">
             <div className="stack">
               <div>
@@ -318,7 +327,7 @@ function AcrossStudents({ rows }: { rows: ByFeature }) {
                 </div>
               </div>
               <label className="field">
-                <span>Runs per student per month: <b style={{ color: 'var(--text)' }}>{runsPerMonth}</b></span>
+                <span>Runs per student per month: <span className="mono" style={{ color: 'var(--text)' }}>{runsPerMonth}</span></span>
                 <input type="range" min={1} max={100} step={1} value={runsPerMonth} onChange={(e) => setRunsPerMonth(Number(e.target.value))} />
               </label>
               <div>
@@ -333,11 +342,11 @@ function AcrossStudents({ rows }: { rows: ByFeature }) {
               </div>
             </div>
             <div className="pb-est-out" aria-live="polite">
-              <div className="pb-kicker">Estimated cost per month</div>
-              <div className="pb-big mt">{money(monthly)}</div>
+              <div className="section-label"><span>Estimated cost per month</span></div>
+              <div className="pb-big">{money(monthly)}</div>
               <p className="small muted" style={{ marginTop: 10, marginBottom: 0 }}>
-                {usd(avg)} per run × {runsPerMonth} runs × {students.toLocaleString('en-US')} student{students === 1 ? '' : 's'}
-                {' '}= <b style={{ color: 'var(--text)' }}>{money(perStudent)}</b> per student per month.
+                <span className="mono">{usd(avg)}</span> per run × <span className="mono">{runsPerMonth}</span> runs × <span className="mono">{students.toLocaleString('en-US')}</span> student{students === 1 ? '' : 's'}
+                {' '}= <span className="mono" style={{ color: 'var(--text)' }}>{money(perStudent)}</span> per student per month.
               </p>
               <p className="small faint" style={{ marginTop: 8, marginBottom: 0 }}>
                 The per-run cost comes from real logged runs ({totals.runs.toLocaleString('en-US')} so far), not a price sheet.
@@ -356,24 +365,25 @@ function SafetyLog({ events }: { events: SafetyEvent[] | null }) {
   return (
     <div className="grid two mt-lg" style={{ alignItems: 'start' }}>
       <section className="card" aria-labelledby="safety-h">
-        <div className="card-title" id="safety-h">🛡️ My safety log</div>
-        <p className="small muted">The last 50 times a guardrail fired on your account.</p>
+        <div className="section-label" id="safety-h"><span className="pb-label-icon"><ShieldCheck className="icon sm" aria-hidden="true" />My safety log</span></div>
+        <p className="small muted">The last 50 times a guardrail fired on your account. Blocked prompts are logged with the reason and length only, never the text you typed.</p>
         {events === null ? (
           <p className="small error-text">Couldn't load the safety log.</p>
         ) : events.length === 0 ? (
-          <Empty icon="😇" title="All quiet">No guardrail has needed to step in for you yet.</Empty>
+          <Empty icon={<ShieldCheck className="icon lg" style={{ color: 'var(--green)' }} />} title="All quiet">No guardrail has needed to step in for you yet.</Empty>
         ) : (
           <ul className="pb-events">
             {events.map((ev, i) => {
-              const meta = EVENT_LABELS[ev.kind] ?? { label: ev.kind.replace(/_/g, ' '), icon: '•', tone: 'gray' }
+              const meta = EVENT_LABELS[ev.kind] ?? { label: ev.kind.replace(/_/g, ' '), icon: Info, tone: 'gray' }
+              const Icon = meta.icon
               const detail = summarise(ev.detail)
               return (
                 <li key={`${ev.at}-${i}`} className="pb-event">
-                  <span className="pb-event-icon" aria-hidden="true">{meta.icon}</span>
+                  <span className={`pb-event-icon ${meta.tone}`} aria-hidden="true"><Icon className="icon" /></span>
                   <div style={{ minWidth: 0 }}>
                     <div className="row between" style={{ gap: 6 }}>
                       <b className="small">{meta.label}</b>
-                      <span className="small faint">{when(ev.at)}</span>
+                      <span className="pb-num faint">{when(ev.at)}</span>
                     </div>
                     <span className={`badge ${meta.tone} mono`} style={{ marginTop: 4 }}>{ev.kind}</span>
                     {detail && <div className="pb-event-detail">{detail}</div>}
@@ -386,20 +396,20 @@ function SafetyLog({ events }: { events: SafetyEvent[] | null }) {
       </section>
 
       <section className="card" aria-labelledby="def-h">
-        <div className="card-title" id="def-h">🔒 The 5 defenses, in plain words</div>
+        <div className="section-label" id="def-h"><span>The 5 defenses, in plain words</span></div>
         <div className="stack">
           {DEFENSES.map((d, i) => (
             <div key={d.title} className="pb-defense">
               <span className="pb-step" aria-hidden="true">{i + 1}</span>
               <div>
-                <h4>{d.icon} {d.title}</h4>
+                <h4><d.icon className="icon sm" aria-hidden="true" />{d.title}</h4>
                 <p>{d.text}</p>
               </div>
             </div>
           ))}
         </div>
         <div className="pb-callout mt">
-          <b>Blocked prompts cost $0.</b> The input screen is plain code that runs before any model call, so a blocked message never spends a single token.
+          <span><b>Blocked prompts cost $0 and leave no text behind.</b> The input screen is plain code that runs before any model call, so a blocked message never spends a token. The log keeps only why it was blocked and how long it was.</span>
         </div>
       </section>
     </div>

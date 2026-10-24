@@ -235,6 +235,23 @@ engine = _make_engine()
 
 def init_db() -> None:
     SQLModel.metadata.create_all(engine)
+    _strip_prompt_previews()
+
+
+def _strip_prompt_previews() -> None:
+    """Older versions kept the first 120 characters of blocked prompts. Remove them."""
+    from sqlmodel import select as _select
+    with Session(engine) as db:
+        for ev in db.exec(_select(AuditEvent).where(AuditEvent.detail.contains('"preview"'))).all():
+            data = json.loads(ev.detail or "{}")
+            data.pop("preview", None)
+            ev.detail = json.dumps(data)
+            db.add(ev)
+        for m in db.exec(_select(ChatMessage).where(ChatMessage.meta.contains('"blocked": true'),
+                                                    ChatMessage.role == "user")).all():
+            m.content = "(message blocked by the safety screen; text not stored)"
+            db.add(m)
+        db.commit()
 
 
 def get_db() -> Iterator[Session]:

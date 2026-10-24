@@ -19,7 +19,7 @@ function describe(s: TraceStep): { cls: string; text: ReactNode } | null {
       return { cls: 'agent', text: <>Dispatcher → <b>{String(s.specialist).replace('_', ' ')}</b></> }
     case 'tool': {
       const args = s.args && Object.keys(s.args).length ? Object.values(s.args).map(String).join(', ') : ''
-      return { cls: 'tool', text: <>🔧 <b>{s.tool}</b>{args ? <span className="faint"> ({args.slice(0, 60)})</span> : ''}{s.allowed === false ? ' · loop guard stopped it' : ''}</> }
+      return { cls: 'tool', text: <><b>{s.tool}</b>{args ? <span className="faint"> ({args.slice(0, 60)})</span> : ''}{s.allowed === false ? ' · loop guard stopped it' : ''}</> }
     }
     case 'retrieve':
       return { cls: 'code', text: <><b>Retriever</b> (code): {String(s.eligible)} eligible → {String(s.shortlist)} shortlisted · ~{tokens(Number(s.approx_tokens_saved))} tokens saved</> }
@@ -30,7 +30,7 @@ function describe(s: TraceStep): { cls: string; text: ReactNode } | null {
     case 'assemble':
       return { cls: 'code', text: <><b>Scheduler</b> (code): {String(s.fitted)} fit clash-free{(s.not_fitting as string[])?.length ? `, ${(s.not_fitting as string[]).join(', ')} clash` : ''}</> }
     case 'safety':
-      return { cls: 'safety', text: <>🛡️ <b>{String(s.check).replaceAll('_', ' ')}</b></> }
+      return { cls: 'safety', text: <>Safety check: <b>{String(s.check).replaceAll('_', ' ')}</b></> }
     default:
       return null
   }

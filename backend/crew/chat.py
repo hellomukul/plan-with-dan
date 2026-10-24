@@ -71,7 +71,7 @@ async def run_turn(db: Session, user_id: int | None, message: str, mode: str = "
 
     if not ai_available():
         result["answer"] = ("Dan's AI brain isn't connected (no PORTKEY_API_KEY or OPENAI_API_KEY found). "
-                            "Everything else — search, planner, calendar, bids — still works.")
+                            "Everything else (search, planner, calendar, bids) still works.")
         return _finish(run, result)
 
     _save(db, user_id, mode, "user", screen.text)
@@ -88,7 +88,7 @@ async def run_turn(db: Session, user_id: int | None, message: str, mode: str = "
             route = routed.output
             run.emit("route", specialist=route.specialist, task=route.task)
             if route.specialist == "none":
-                result.update(answer=route.direct_reply or "Woof! Ask me about courses, your plan, bids or AI news. 🐶",
+                result.update(answer=route.direct_reply or "Ask me about courses, your plan, bids or AI news.",
                               agent="Dispatcher")
                 return _wrap_up(run, result, known, user_id, mode)
             chosen, task = route.specialist, route.task
@@ -103,24 +103,24 @@ async def run_turn(db: Session, user_id: int | None, message: str, mode: str = "
         result.update(answer=str(answer.output), agent=label, proposals=ctx.proposals)
         if chosen == "news_desk" and "http" not in result["answer"]:
             run.audit("news_without_sources")
-            result["answer"] += "\n\n> ⚠️ I couldn't attach source links this time — treat this as unverified and check a news site."
+            result["answer"] += "\n\n> I couldn't attach source links this time — treat this as unverified and check a news site."
         if run.guard.spent_run > run.guard.run_budget:
             run.audit("over_run_budget", spent=round(run.guard.spent_run, 4), budget=run.guard.run_budget)
     except BudgetExceeded as exc:
         run.audit("budget_stop", detail=str(exc))
-        result.update(answer=f"⏸️ {exc}", safety=["budget"])
+        result.update(answer=f"{exc}", safety=["budget"])
     except ModelHTTPError as exc:
         if "content management policy" in str(exc) or "content_filter" in str(exc):
             # Second line of defence: the provider's own safety filter refused the prompt.
             run.audit("provider_content_filter", detail=str(exc)[:200])
             result.update(answer="That request tripped the AI provider's safety filter, so I didn't run it. "
-                                 "Try rephrasing it as a planning question. 🐶", safety=["provider_filter"])
+                                 "Try rephrasing it as a planning question.", safety=["provider_filter"])
         else:
             run.audit("agent_error", detail=f"ModelHTTPError: {str(exc)[:300]}")
-            result.update(answer="Ruh-roh 🐶 — I hit a snag talking to the model. Try again in a moment.")
+            result.update(answer="I hit a snag talking to the model. Try again in a moment.")
     except Exception as exc:  # keep the chat alive; the trace shows what happened
         run.audit("agent_error", detail=f"{type(exc).__name__}: {str(exc)[:300]}")
-        result.update(answer="Ruh-roh 🐶 — I hit a snag talking to the model. Try again in a moment.")
+        result.update(answer="I hit a snag talking to the model. Try again in a moment.")
     return _wrap_up(run, result, known, user_id, mode)
 
 

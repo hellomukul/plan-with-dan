@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
+import { Check, Clock, UserRound, Armchair } from 'lucide-react'
 import type { Section } from '../api'
-import { enrollLabel, TOPIC_EMOJI } from '../lib/format'
+import { enrollLabel } from '../lib/format'
 import { useApp } from '../state'
 
 interface Props {
@@ -23,13 +24,13 @@ export default function CourseCard({ course: c, sectionCount = 1, onOpen, footer
           <div className="course-num">{c.number} · {c.session_name}</div>
           <div className="course-title">{c.title}</div>
         </div>
-        {inPlan && <span className="badge lime">✓ in plan</span>}
+        {inPlan && <span className="badge green"><Check className="icon sm" />In plan</span>}
       </div>
       <div className="meta">
-        <span>🕒 {c.time}{sectionCount > 1 ? ` (+${sectionCount - 1} more)` : ''}</span>
-        <span>📚 {c.units} units</span>
-        {c.limit && <span>🪑 {c.limit} seats</span>}
-        {c.faculty.length > 0 && <span>👩‍🏫 {c.faculty[0]}{c.faculty.length > 1 ? ' +' : ''}</span>}
+        <span><Clock className="icon sm" />{c.time}{sectionCount > 1 ? ` (+${sectionCount - 1} more)` : ''}</span>
+        <span>{c.units} units</span>
+        {c.limit && <span><Armchair className="icon sm" />{c.limit} seats</span>}
+        {c.faculty.length > 0 && <span><UserRound className="icon sm" />{c.faculty[0]}{c.faculty.length > 1 ? ' +' : ''}</span>}
       </div>
       {!compact && c.description && <p className="muted small clamp-3" style={{ margin: 0 }}>{c.description}</p>}
       <div className="row" style={{ gap: 6 }}>
@@ -38,7 +39,7 @@ export default function CourseCard({ course: c, sectionCount = 1, onOpen, footer
         {c.gsr && <span className="badge sky" title="Counts toward the Global Studies Requirement (inferred)">Global</span>}
         {c.new && <span className="badge lime">New</span>}
         {c.topics.slice(0, compact ? 2 : 3).map((t) => (
-          <span key={t} className="badge gray">{TOPIC_EMOJI[t] ?? '•'} {t}</span>
+          <span key={t} className="badge gray">{t}</span>
         ))}
       </div>
       {footer && <div onClick={(e) => e.stopPropagation()}>{footer}</div>}

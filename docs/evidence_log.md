@@ -124,3 +124,6 @@ All P0 and P1 bugs from `docs/persona_testing.md` were fixed. Tests went from 35
 
   `render.yaml` now pins Render to Ohio, next to Neon.
 - **Cleanup:** all test rows were removed. Neon is empty except the 48 SAMPLE bid rows the app seeds on startup.
+- **Demo account copied to Neon (Oct 24).** Used `db_tools.py backup --only demo.student@yale.edu`, then `restore`. That copied 104 rows: profile, 5 plan items, 11 chat messages, 15 recommendations and cost history. Sessions, the tester and probe accounts, and their bid reports were left out.
+  - On the app running against Neon: login worked, Spring showed 26 units, and the undo log and usage history were intact.
+  - A new signup got id 3 (no ID clash) and was then deleted.

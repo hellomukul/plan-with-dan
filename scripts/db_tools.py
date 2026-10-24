@@ -2,6 +2,7 @@
 
     python scripts/db_tools.py stats                 # row counts, which database is in use
     python scripts/db_tools.py backup                # JSON snapshot of every table -> backups/
+    python scripts/db_tools.py backup --only EMAIL   # just one account's data (no sessions, no sample rows)
     python scripts/db_tools.py restore FILE.json     # load a snapshot into an EMPTY database
     python scripts/db_tools.py reset-password EMAIL  # set a new password for a friend (prompts, never echoes)
 
@@ -43,14 +44,32 @@ def stats() -> None:
             print(f"  {t.name:<20} {n}")
 
 
-def backup() -> Path:
+def backup(only_email: str | None = None) -> Path:
     init_db()
     BACKUPS.mkdir(exist_ok=True)
     out: dict[str, list[dict]] = {}
+    uid = None
+    if only_email:
+        from auth import normalise_email
+        with Session(engine) as s:
+            user = s.exec(select(User).where(User.email == normalise_email(only_email))).first()
+        if not user:
+            sys.exit("No account with that email.")
+        uid = user.id
     with engine.connect() as conn:
         for t in _tables():
-            out[t.name] = [dict(r._mapping) for r in conn.execute(t.select())]
-    path = BACKUPS / f"plan-with-dan-{datetime.now():%Y%m%d-%H%M%S}.json"
+            q = t.select()
+            if uid is not None:
+                if t.name == "authsession":
+                    continue  # sessions stay behind: the student signs in again on the new database
+                q = q.where(t.c.id == uid) if t.name == "user" else q.where(t.c.user_id == uid)
+            rows = [dict(r._mapping) for r in conn.execute(q)]
+            if uid is not None and t.name == "bidreport":
+                for r in rows:
+                    r.pop("id", None)  # nothing references bid report ids; let the new database number them
+            out[t.name] = rows
+    tag = f"-only-user{uid}" if uid is not None else ""
+    path = BACKUPS / f"plan-with-dan-{datetime.now():%Y%m%d-%H%M%S}{tag}.json"
     path.write_text(json.dumps({"format": 1, "tables": out}, default=lambda v: v.isoformat()
                                if isinstance(v, (date, datetime)) else str(v)))
     path.chmod(0o600)
@@ -108,7 +127,7 @@ if __name__ == "__main__":
     if cmd == "stats":
         stats()
     elif cmd == "backup":
-        backup()
+        backup(rest[1] if len(rest) == 2 and rest[0] == "--only" else None)
     elif cmd == "restore" and rest:
         restore(rest[0])
     elif cmd == "reset-password" and rest:

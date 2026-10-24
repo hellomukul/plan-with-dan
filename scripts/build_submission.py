@@ -175,7 +175,7 @@ REPORT = f"""<!doctype html>
   <div class="kpi"><b>453</b><span>real SOM course sections (Fall 2026 + Spring 2027)</span></div>
   <div class="kpi"><b>9</b><span>AI agents + a code "desk scan", 12 deterministic tools + web search</span></div>
   <div class="kpi"><b>{usd(CHAT['cost'], 4)}</b><span>average chat turn, 72% of input from prompt cache</span></div>
-  <div class="kpi"><b>35</b><span>automated tests incl. injection, hallucination, overspend, privacy</span></div>
+  <div class="kpi"><b>49</b><span>automated tests incl. injection, hallucination, overspend, privacy</span></div>
 </div>
 
 <!-- 2. MOTIVATION -->
@@ -295,7 +295,7 @@ REPORT = f"""<!doctype html>
 <tr><td><b>Invented courses / facts</b></td><td>The Curator can only choose keys from its shortlist; the Validator drops anything else and strips "evidence" quotes not found in the description. The chat output check flags MGT numbers not in the catalog. Times, units and rules come only from tools.</td><td>Validator dropped an out-of-list pick on 7 runs (safety log); unit tests</td></tr>
 <tr><td><b>Wrong actions</b></td><td>Agents cannot write to the plan; they propose, and the student clicks "Add". The scheduler never claims a clashing pick "fits".</td><td>Find-page "Clashes with …" badges</td></tr>
 <tr><td><b>Loops / overspending</b></td><td>Request limit per agent, a per-tool loop guard (6 calls), a token ceiling computed from the remaining budget, $0.05 per turn and $0.50 per student per day caps, and rate limits (login 5/min, chat 20/min, recommend 6/min)</td><td>Spend-guard unit test; <code>over_run_budget</code> event</td></tr>
-<tr><td><b>Privacy</b></td><td>A Privacy page explains what's stored and that AI requests go through Portkey to OpenAI; one-click <b>export</b> of all your data and <b>account deletion</b> (password-confirmed); blocked prompts are no longer stored anywhere; signup no longer reveals whether an email is registered</td><td>Export/delete and generic-signup tests</td></tr>
+<tr><td><b>Privacy</b></td><td>A Privacy page explains what's stored and that AI requests go through Portkey to OpenAI; one-click <b>export</b> of all your data and <b>account deletion</b> (password-confirmed); blocked prompts are no longer stored anywhere; signup gives a generic message with equal timing (it can't fully hide an existing email without email verification, and we say so)</td><td>Export/delete and generic-signup tests</td></tr>
 <tr><td><b>Mistaken actions</b></td><td>Every plan change (add, remove, switch, status) is written to an action log with one-click <b>undo</b>; desk cards can be snoozed, dismissed and restored</td><td>Undo test; toasts with Undo</td></tr>
 <tr><td><b>Account security</b></td><td>Argon2id hashes, HttpOnly SameSite cookies (only the token's SHA-256 is stored), identical errors for wrong password vs no account, a cross-site (CSRF) origin check, a strict Content-Security-Policy, path-traversal-safe static serving, and no secrets in the repo</td><td>Auth and CSRF tests; key-scan before commit</td></tr>
 </table>
@@ -324,6 +324,7 @@ REPORT = f"""<!doctype html>
 <tr><td>Bid price information</td><td>Not public</td><td>Crowdsourced reports build real history from next term</td><td>Bid coach</td></tr>
 </table>
 <div class="todo"><b>Pilot user test (fill in before submitting).</b> Protocol: <code>docs/user_test.md</code>. Classmate: ____ (year __). Old way: ____ min to 3 non-clashing electives (clash check done? Y/N). With Plan with Dan: ____ min to a clash-free plan; would bid on __/__ picks. Usefulness ___/10. Quote: "__________________". Screenshot of their plan: attached.</div>
+<p><b>Simulated persona testing (not a substitute for the pilot).</b> Six AI tester agents each played a different student (an anxious first-year on a phone, a second-year power user, a budget-minded international student, EMBA/MMS students, a security tester, a career switcher) against the real app for about $0.16 in total. They found 8 serious bugs that every other test had missed, including first-year spring core not being counted toward units, chat proposing another program's section, stale Global Network Week listings and signup timing. All were fixed and covered by 14 new tests (<code>docs/persona_testing.md</code>).</p>
 <p>If one hour per student per term is saved, SOM's ~700 full-time MBAs save ~1,400 hours a year for about $3,000 a year in AI cost at the assumptions above. The bigger win is quality: plans that actually map to each student's goals and never break the rules.</p>
 
 <!-- 8. LIMITS -->
@@ -343,7 +344,7 @@ REPORT = f"""<!doctype html>
   <li>The 8-agent crew (dispatcher pattern) and the 5-stage recommender.</li>
   <li>Student accounts with saved profiles, plans, Global Studies choices, chats and bids.</li>
   <li>Deterministic planning tools that fix the base app's half-term clash bug.</li>
-  <li>A calendar feed; the safety layer; per-run token accounting; 35 tests.</li>
+  <li>A calendar feed; the safety layer; per-run token accounting; 49 tests.</li>
   <li>Seat limits and requirement flags merged from SOM's public feed.</li>
   <li>Dan's Desk: a chief-of-staff home with a code desk scan, a cached Chief of Staff brief, honest best fits and an undo log.</li>
   <li>A research-driven redesign ("Quiet Yale"): after the first version felt busy, I studied Linear's calm redesign, NN/g's visual-hierarchy and dashboard research, and Google's People + AI Guidebook on explaining recommendations. Result: one Yale-blue accent, Geist type, no emoji, bars instead of rings, a ⌘K command menu, and fit labels instead of percentages.</li>
@@ -453,7 +454,7 @@ SLIDES = f"""<!doctype html>
       <li>Caps: $0.05 per turn, $0.50 per day, loop guards</li>
       <li>Fixed by testing: history poisoning, budget overrun, wrong EMBA section</li>
       <li>Undo for every change · export / delete your data</li>
-      <li>35 automated tests</li>
+      <li>49 automated tests</li>
     </ul>
   </div>
 </section>

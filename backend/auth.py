@@ -3,9 +3,11 @@
 - Passwords: Argon2id via pwdlib (the hashing FastAPI's own docs recommend).
 - Sessions: a random token in an HttpOnly, SameSite=Lax cookie. Only the
   token's SHA-256 is stored, so a leaked database cannot be replayed.
-- Login and signup are rate limited per IP, and give the same answer whether
-  or not an email exists (no account enumeration). Unknown emails still run a
-  hash check so response times match.
+- Login gives the same answer whether or not an email exists, and unknown
+  emails still run a hash check so response times match.
+- Signup can't fully hide whether an email is registered without email
+  verification (a new account gets signed in; an existing one doesn't). We
+  keep the timing equal (both paths hash) and rate limit it, and say so.
 """
 
 from __future__ import annotations
@@ -24,6 +26,7 @@ from sqlmodel import Session, select
 
 from config import SECURE_COOKIES, SESSION_DAYS
 from db import AuthSession, Profile, User, aware, get_db, log_audit, utcnow
+from safety import screen_input
 
 COOKIE = "pwd_session"
 MIN_PASSWORD = 12
@@ -117,14 +120,17 @@ def signup(request: Request, response: Response, body: SignupIn, db: Session = D
     problem = password_problem(body.password, email)
     if problem:
         raise HTTPException(422, problem)
+    name = " ".join(body.name.split())[:80]
+    if name and not screen_input(name).allowed:
+        raise HTTPException(422, "Please use your real name.")
+    password_hash = hasher.hash(body.password)  # hash on both paths so timing doesn't reveal existing emails
     if db.exec(select(User).where(User.email == email)).first():
-        # Don't reveal whether an email is registered: same status as a new signup, no session.
         log_audit(db, "signup_existing_email")
         return {"user": None, "message": "Check your details. If you already have an account with this email, log in instead."}
     user = User(
         email=email,
-        name=body.name.strip()[:80],
-        password_hash=hasher.hash(body.password),
+        name=name,
+        password_hash=password_hash,
         cal_token=secrets.token_urlsafe(24),
     )
     db.add(user)
@@ -139,7 +145,10 @@ def signup(request: Request, response: Response, body: SignupIn, db: Session = D
 @router.post("/login")
 @limiter.limit("5/minute")
 def login(request: Request, response: Response, body: LoginIn, db: Session = Depends(get_db)):
-    email = body.email.strip().lower()
+    try:
+        email = normalise_email(body.email)
+    except HTTPException:
+        email = body.email.strip().lower()
     user = db.exec(select(User).where(User.email == email)).first()
     ok = hasher.verify(body.password, user.password_hash if user else DUMMY_HASH)
     if not (user and ok):
@@ -147,6 +156,17 @@ def login(request: Request, response: Response, body: LoginIn, db: Session = Dep
         raise HTTPException(401, "Invalid email or password.")
     _start_session(db, user, request, response)
     return {"user": public_user(user)}
+
+
+def purge_expired_sessions() -> int:
+    """Delete expired sessions (run at startup)."""
+    from db import engine
+    with Session(engine) as db:
+        old = db.exec(select(AuthSession).where(AuthSession.expires_at < utcnow())).all()
+        for s in old:
+            db.delete(s)
+        db.commit()
+        return len(old)
 
 
 @router.post("/logout")

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { LogOut, Search, Shield, UserRound } from 'lucide-react'
+import { Ellipsis, LogOut, Search, Shield, UserRound } from 'lucide-react'
 import { api } from './api'
 import CommandPalette from './components/CommandPalette'
 import CourseDrawer from './components/CourseDrawer'
@@ -40,6 +40,8 @@ function Shell() {
   const [checked, setChecked] = useState(false)
   const [cmdk, setCmdk] = useState(false)
   const [drawerKey, setDrawerKey] = useState<string | null>(null)
+  const [moreOpen, setMoreOpen] = useState(false)
+  useEffect(() => { setMoreOpen(false) }, [route])
   const closeDrawer = useCallback(() => setDrawerKey(null), [])
 
   useEffect(() => {
@@ -53,12 +55,13 @@ function Shell() {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setCmdk((v) => !v); return }
       const tag = (e.target as HTMLElement)?.tagName
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || e.metaKey || e.ctrlKey) return
-      if (e.key === 'g') { pendingG = true; setTimeout(() => { pendingG = false }, 900); return }
-      if (pendingG) {
+      if (pendingG) {  // checked first, so "g g" reaches Global studies
+        pendingG = false
         const hit = NAV.find((n) => n.keys?.split(' ')[1]?.toLowerCase() === e.key.toLowerCase())
         if (hit) go(hit.route)
-        pendingG = false
+        return
       }
+      if (e.key === 'g') { pendingG = true; setTimeout(() => { pendingG = false }, 900) }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -118,7 +121,25 @@ function Shell() {
             <n.icon className="icon" />{n.mobile}
           </button>
         ))}
+        <button className={moreOpen || !NAV.some((n) => n.mobile && n.route === route) ? 'active' : ''}
+          onClick={() => setMoreOpen((v) => !v)} aria-expanded={moreOpen} aria-controls="more-sheet">
+          <Ellipsis className="icon" />More
+        </button>
       </nav>
+      {moreOpen && (
+        <div className="overlay more-overlay" onClick={() => setMoreOpen(false)}>
+          <div className="more-sheet" id="more-sheet" role="dialog" aria-label="More pages" onClick={(e) => e.stopPropagation()}>
+            {NAV.filter((n) => !n.mobile).map((n) => (
+              <a key={n.route} href={`#/${n.route}`} className={`nav-item ${route === n.route ? 'active' : ''}`}>
+                <n.icon className="icon" /><span>{n.label}</span>
+              </a>
+            ))}
+            <a href="#/profile" className="nav-item"><UserRound className="icon" /><span>Profile and goals</span></a>
+            <a href="#/privacy" className="nav-item"><Shield className="icon" /><span>Privacy and data</span></a>
+            <button className="nav-item" onClick={logout}><LogOut className="icon" /><span>Sign out</span></button>
+          </div>
+        </div>
+      )}
       <CommandPalette open={cmdk} onClose={() => setCmdk(false)} onOpenCourse={setDrawerKey} />
       {drawerKey && <CourseDrawer courseKey={drawerKey} onClose={closeDrawer} />}
       <Celebration />

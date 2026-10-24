@@ -9,13 +9,15 @@ full-term clashes with both halves; fall never clashes with spring).
 from __future__ import annotations
 
 import statistics
+from datetime import date
 from dataclasses import dataclass
 from typing import Iterable
 
 from catalog import DAY_ORDER, Catalog, Offering, Section, clock
-from rules import DEGREE, GSA_DAYS, GSR_OPTIONS, gsr_courses
+from rules import COHORT_SECTIONS, DEGREE, GSA_DAYS, GSR_OPTIONS, gsr_courses
 
 PASSING_MINUTES = 15
+MIN_REPORTS = 3  # hide bid statistics until at least this many real reports exist
 EARLY = 9 * 60
 LATE = 18 * 60
 LONG_GAP = 180
@@ -64,63 +66,113 @@ def conflicts(sections: list[Section]) -> list[dict]:
 
 def best_section(offering: Offering, chosen: list[Section], prefs: dict | None = None,
                  program: str = "MBA") -> Section | None:
-    """The first section open to `program` that clashes with nothing chosen, preferring ones that respect prefs."""
-    mine = [s for s in offering.sections if program in s.programs] or offering.sections
-    ranked = sorted(mine, key=lambda s: (not respects_prefs(s, prefs or {}), s.section))
+    """The first open section of `offering` for `program` that clashes with nothing chosen.
+
+    Never falls back to another program's section (an MBA student can't take an
+    EMBA-only section), and never offers a section that has already ended.
+    """
+    mine = [s for s in offering.sections_for(program)] if program else list(offering.sections)
+    ranked = sorted(mine, key=lambda s: (not respects_prefs(s, prefs or {}), s.closed, s.section))
     for sec in ranked:
         if not any(clash(sec, other) for other in chosen if other.offering_key != offering.key):
             return sec
     return None
 
 
+def clean_prefs(prefs: dict | None) -> dict:
+    """Tolerate malformed preferences instead of crashing (types are also validated at the API)."""
+    prefs = prefs if isinstance(prefs, dict) else {}
+    out: dict = {}
+    nb = prefs.get("no_before")
+    if isinstance(nb, (int, float)) and not isinstance(nb, bool) and 0 < nb < 24 * 60:
+        out["no_before"] = int(nb)
+    if prefs.get("fridays_free") is True:
+        out["fridays_free"] = True
+    avoid = prefs.get("avoid_days")
+    if isinstance(avoid, list):
+        out["avoid_days"] = [d for d in avoid if isinstance(d, str) and d in DAY_ORDER]
+    return out
+
+
+def prefs_text(prefs: dict | None) -> str:
+    """Preferences in words for the model ("no classes before 10:00 AM"), never raw minutes."""
+    p = clean_prefs(prefs)
+    bits = []
+    if p.get("no_before"):
+        bits.append(f"no classes starting before {clock(p['no_before'])}")
+    if p.get("fridays_free"):
+        bits.append("keep Fridays free")
+    if p.get("avoid_days"):
+        bits.append("avoid " + ", ".join(p["avoid_days"]))
+    return "; ".join(bits) or "no schedule preferences"
+
+
 def respects_prefs(sec: Section, prefs: dict) -> bool:
     m = sec.meeting
     if not m:
         return True  # TBA times are never excluded, only flagged
-    no_before = prefs.get("no_before")  # minutes after midnight
-    if isinstance(no_before, (int, float)) and m.start < no_before:
+    p = clean_prefs(prefs)
+    if p.get("no_before") and m.start < p["no_before"]:
         return False
-    if prefs.get("fridays_free") and "F" in m.days:
+    if p.get("fridays_free") and "F" in m.days:
         return False
-    avoid = set(prefs.get("avoid_days") or [])
-    return not (avoid & set(m.days))
+    return not (set(p.get("avoid_days", [])) & set(m.days))
 
 
 # ---------------------------------------------------------------- week review
 
-def week_review(sections: list[Section]) -> dict:
-    """A plain-language critique of one term's timetable."""
+def _window_review(sections: list[Section], label: str) -> tuple[list[dict], list[str]]:
     notes: list[dict] = []
     by_day: dict[str, list[Section]] = {d: [] for d in DAY_ORDER}
-    tba = [s for s in sections if not s.meeting]
     for s in sections:
         if s.meeting:
             for d in s.meeting.days:
                 by_day[d].append(s)
-
+    prefix = f"{label}: " if label else ""
     for d, rows in by_day.items():
         rows.sort(key=lambda s: s.meeting.start)  # type: ignore[union-attr]
         for s in rows:
             if s.meeting.start < EARLY:  # type: ignore[union-attr]
-                notes.append({"kind": "warn", "text": f"{d}: {s.number} starts at {clock(s.meeting.start)}."})  # type: ignore[union-attr]
+                notes.append({"kind": "warn", "text": f"{prefix}{d}: {s.number} starts at {clock(s.meeting.start)}."})  # type: ignore[union-attr]
             if s.meeting.end > LATE:  # type: ignore[union-attr]
-                notes.append({"kind": "info", "text": f"{d}: {s.number} runs until {clock(s.meeting.end)}."})  # type: ignore[union-attr]
+                notes.append({"kind": "info", "text": f"{prefix}{d}: {s.number} runs until {clock(s.meeting.end)}."})  # type: ignore[union-attr]
         for x, y in zip(rows, rows[1:]):
             gap = y.meeting.start - x.meeting.end  # type: ignore[union-attr]
             if 0 <= gap <= PASSING_MINUTES:
-                notes.append({"kind": "info", "text": f"{d}: {x.number} → {y.number} back-to-back ({gap} min)."})
+                notes.append({"kind": "info", "text": f"{prefix}{d}: {x.number} → {y.number} back-to-back ({gap} min)."})
             elif gap >= LONG_GAP:
-                notes.append({"kind": "info", "text": f"{d}: {gap // 60}h gap between {x.number} and {y.number}."})
-
-    busy = [d for d, rows in by_day.items() if rows]
-    if "F" not in busy and busy:
-        notes.append({"kind": "good", "text": "Fridays are free — handy for recruiting trips."})
-    if tba:
-        notes.append({"kind": "warn", "text": "No published time yet: " + ", ".join(sorted({s.number for s in tba})) + "."})
+                notes.append({"kind": "info", "text": f"{prefix}{d}: {gap // 60}h gap between {x.number} and {y.number}."})
     heavy = max(by_day.items(), key=lambda kv: len(kv[1]), default=(None, []))
     if heavy[0] and len(heavy[1]) >= 3:
-        notes.append({"kind": "warn", "text": f"{heavy[0]} has {len(heavy[1])} classes."})
-    return {"days_on_campus": busy, "notes": notes}
+        notes.append({"kind": "warn", "text": f"{prefix}{heavy[0]} has {len(heavy[1])} classes."})
+    return notes, [d for d, rows in by_day.items() if rows]
+
+
+def week_review(sections: list[Section]) -> dict:
+    """A plain-language critique of one term's timetable.
+
+    Session-1 and session-2 courses never share a week, so each half-term is
+    reviewed on its own (full-term courses count in both halves).
+    """
+    tba = [s for s in sections if not s.meeting]
+    halves = any(s.session.endswith(("-1", "-2")) for s in sections)
+    notes: list[dict] = []
+    busy: set[str] = set()
+    if halves:
+        for suffix, label in (("-1", "Session 1"), ("-2", "Session 2")):
+            window = [s for s in sections if s.session.endswith(suffix) or not s.session.endswith(("-1", "-2"))]
+            n, b = _window_review(window, label)
+            notes += n
+            busy |= set(b)
+    else:
+        notes, b = _window_review(sections, "")
+        busy = set(b)
+    days = [d for d in DAY_ORDER if d in busy]
+    if "F" not in busy and busy:
+        notes.append({"kind": "good", "text": "Fridays are free, which helps with recruiting trips."})
+    if tba:
+        notes.append({"kind": "warn", "text": "No published time yet: " + ", ".join(sorted({s.number for s in tba})) + "."})
+    return {"days_on_campus": days, "notes": notes}
 
 
 # ---------------------------------------------------------------- requirements
@@ -138,47 +190,116 @@ def units_by_term(rows: Iterable[PlanRow]) -> dict[str, float]:
     return out
 
 
+def mba_rules_apply(profile: dict) -> bool:
+    return (profile.get("program") or "MBA") == "MBA"
+
+
+def core_load(profile: dict, term: str, catalog: Catalog) -> dict:
+    """First-year MBA core for one term: units always, sections when the cohort mapping is known.
+
+    The core is assigned by cohort and never bid on, so it isn't in the plan, but it
+    still counts toward the term's units and takes up time in the week.
+    """
+    if not mba_rules_apply(profile) or (profile.get("year") or "") != "1":
+        return {"units": 0.0, "sections": [], "courses": [], "times_known": True}
+    numbers: dict[str, float] = {}
+    for o in catalog.offerings.values():
+        s = o.lead
+        if s.term == term and s.is_core and s.visible:
+            numbers.setdefault(s.number, s.units)
+    cohort = profile.get("cohort") or ""
+    sections = []
+    for number in numbers:
+        sec_id = COHORT_SECTIONS.get(number, {}).get(cohort)
+        if not sec_id:
+            continue
+        for o in catalog.offering_for_number(number, term):
+            sections += [x for x in o.sections if x.section == sec_id and x.is_core]
+    return {
+        "units": round(sum(numbers.values()), 1),
+        "courses": sorted(numbers),
+        "sections": sections,
+        "times_known": len(sections) >= len(numbers) > 0,
+    }
+
+
+def min_units_apply(profile: dict, term: str) -> bool:
+    """The 16-unit minimum covers the first three terms only (year 1 fall/spring, year 2 fall)."""
+    if not mba_rules_apply(profile):
+        return False
+    year = profile.get("year") or ""
+    return year == "1" or (year == "2" and term == "202603")
+
+
+def effective_gsa_used(profile: dict, global_choices: list[dict]) -> int:
+    """GSA days used: the profile number, or more if options marked done imply it."""
+    days = {o["key"]: o.get("gsa_days") or 0 for o in GSR_OPTIONS}
+    implied = sum(days.get(c.get("option_key"), 0) for c in global_choices if c.get("status") == "done")
+    return min(GSA_DAYS, max(int(profile.get("gsa_days_used", 0) or 0), implied))
+
+
 def requirement_progress(profile: dict, rows: list[PlanRow], catalog: Catalog, global_choices: list[dict]) -> dict:
     year = profile.get("year") or ""
-    completed_numbers = {c.strip().upper() for c in profile.get("completed", [])}
-    core_units_done = DEGREE["core_units"] if year == "2" else 0.0
-    planned_core = sum(r.section.units for r in rows if r.section.is_core)
-    if year == "1":
-        core_units_done = min(DEGREE["core_units"], planned_core)
+    program = profile.get("program") or "MBA"
+    completed_numbers = {" ".join(c.split()).upper() for c in profile.get("completed", [])}
+    done_status = ("completed", "enrolled")
 
-    elective_rows = [r for r in rows if not r.section.is_core]
+    core_units_done = DEGREE["core_units"] if year == "2" else 0.0
+    if year == "1":  # core is assigned by cohort across year 1
+        core_units_done = DEGREE["core_units"]
+
+    elective_rows = [r for r in rows if not r.section.core_for(program)]
     elective_units = sum(r.section.units for r in elective_rows)
     term_units = units_by_term(rows)
+    for term in ("202603", "202701"):
+        core = core_load(profile, term, catalog)
+        if core["units"]:
+            term_units[term] = term_units.get(term, 0.0) + core["units"]
 
-    ldr_met = any(r.section.counts_for_ldr for r in rows) or any(
-        any(s.counts_for_ldr for o in catalog.offering_for_number(n) for s in o.sections) for n in completed_numbers
-    )
+    def ldr_course(number: str) -> bool:
+        return any(s.counts_for_ldr for o in catalog.offering_for_number(number) for s in o.sections)
+
+    ldr_met = any(r.section.counts_for_ldr and r.status in done_status for r in rows) or any(ldr_course(n) for n in completed_numbers)
+    ldr_planned = any(r.section.counts_for_ldr for r in rows)
     gsr_keys = gsr_courses(catalog)
     gsr_offering_keys = {k for keys in gsr_keys.values() for k in keys}
-    gsr_from_plan = [r.section.number + " " + r.section.title for r in rows if r.section.offering_key in gsr_offering_keys]
-    gsr_done = [g for g in global_choices if g.get("status") == "done"]
+    gsr_rows = [r for r in rows if r.section.offering_key in gsr_offering_keys or r.section.counts_for_gsr]
+    gsr_from_plan = [r.section.number + " " + r.section.title for r in gsr_rows]
+    gsr_met = any(g.get("status") == "done" for g in global_choices) or any(r.status in done_status for r in gsr_rows)
 
     term_checks = []
     for term, units in sorted(term_units.items()):
         status = "ok"
-        if units < DEGREE["min_units_first_three_terms"]:
+        if min_units_apply(profile, term) and units < DEGREE["min_units_first_three_terms"]:
             status = "low"
-        elif units > DEGREE["approval_above_units"]:
+        elif mba_rules_apply(profile) and units > DEGREE["approval_above_units"]:
             status = "needs_approval"
-        term_checks.append({"term": term, "units": units, "status": status})
+        core_units = core_load(profile, term, catalog)["units"]
+        term_checks.append({"term": term, "units": units, "core_units": core_units, "status": status,
+                            "min_applies": min_units_apply(profile, term)})
 
+    notes = [
+        "Each of your first three terms needs at least 16 graded units; a heavy term doesn't make up for a light one.",
+        "More than 24 units in a term needs approval.",
+    ]
+    if year == "1" and mba_rules_apply(profile):
+        notes.insert(0, "Your cohort's core courses are counted automatically in each term's units.")
+    if not mba_rules_apply(profile):
+        notes = [f"Degree requirements for {program} aren't modelled in Plan with Dan yet. "
+                 "Check them with your program office; the MBA rules below are shown for reference only."]
     return {
+        "modelled": mba_rules_apply(profile),
+        "program": program,
         "total_target": DEGREE["total_units"],
         "core": {"target": DEGREE["core_units"], "counted": core_units_done},
         "electives": {"target": DEGREE["elective_units"], "planned": elective_units},
         "planned_total": core_units_done + elective_units,
         "terms": term_checks,
-        "ldr": {"met": ldr_met},
-        "gsr": {"met": bool(gsr_done), "in_plan": gsr_from_plan, "choices": global_choices},
-        "notes": [
-            "Each of your first three terms needs at least 16 graded units; a heavy term doesn't make up for a light one.",
-            "More than 24 units in a term needs approval.",
-        ],
+        "ldr": {"met": ldr_met, "planned": ldr_planned and not ldr_met},
+        "gsr": {"met": gsr_met, "planned": bool(gsr_from_plan) and not gsr_met, "in_plan": gsr_from_plan,
+                "choices": global_choices},
+        "gsa_used": effective_gsa_used(profile, global_choices),
+        "notes": notes,
     }
 
 
@@ -189,18 +310,23 @@ def gsa_check(option_key: str, gsa_days_used: int) -> dict:
     left = max(0, GSA_DAYS - gsa_days_used)
     if opt.get("requires_full_gsa") and gsa_days_used > 0:
         return {"ok": False, "days_left": left, "reason": "An IE needs all 10 GSA days unused, and you've used some."}
+    if opt.get("apply_by") and opt["apply_by"] < date.today().isoformat():
+        return {"ok": False, "days_left": left, "reason": f"The application window closed on {opt['apply_by']}."}
     need = opt["gsa_days"] or 0
     if need > left:
         return {"ok": True, "days_left": left, "reason": f"Allowed, but it uses ~{need} days and you have {left}; the rest is out of pocket."}
-    return {"ok": True, "days_left": left - need, "reason": f"Fits your budget: ~{need} days, leaving {left - need}."}
+    return {"ok": True, "days_left": left - need,
+            "reason": f"Fits your GSA days: ~{need} used, {left - need} left. Cash costs (like airfare) are separate."}
 
 
 # ---------------------------------------------------------------- alternates
 
 def alternates(target: Offering, chosen: list[Section], catalog: Catalog, n: int = 3, prefs: dict | None = None,
-               program: str = "MBA") -> list[dict]:
-    """Backups for `target`: same term, overlapping topics, and they fit the plan."""
-    pool = [o for o in catalog.eligible(target.lead.term, program=program) if o.key != target.key]
+               program: str = "MBA", exclude_numbers: set[str] | None = None) -> list[dict]:
+    """Backups for `target`: same term, overlapping topics, they fit the plan, not taken or planned."""
+    skip = {x.upper() for x in (exclude_numbers or set())}
+    pool = [o for o in catalog.eligible(target.lead.term, program=program)
+            if o.key != target.key and o.lead.number.upper() not in skip]
     chosen_keys = {s.offering_key for s in chosen}
     my_topics = set(target.lead.topics)
     query = f"{target.lead.title} {' '.join(target.lead.topics)}"
@@ -222,7 +348,7 @@ def alternates(target: Offering, chosen: list[Section], catalog: Catalog, n: int
             "title": off.lead.title,
             "time": sec.time_label,
             "shared_topics": sorted(overlap),
-            "seats": off.lead.limit,
+            "seats": sec.limit,
         })
         if len(out) >= n:
             break
@@ -239,6 +365,12 @@ def bid_stats(reports: list[dict]) -> dict:
     sample_count = len(reports) - len(real)
     if real:  # once students report real outcomes, SAMPLE rows stop counting
         reports = real
+    if not all(r.get("source") == "sample" for r in reports) and len(reports) < MIN_REPORTS:
+        # Too few real reports: exact numbers would reveal individual classmates' bids.
+        return {"reports": len(reports), "sample_only": False, "sample_reports_ignored": sample_count,
+                "too_few": True, "won": None, "lost": None, "lowest_winning_bid": None,
+                "median_winning_bid": None, "highest_losing_bid": None, "median_reported_clearing": None,
+                "terms": sorted({r["term_code"] for r in reports if r.get("term_code")})}
     won = sorted(r["points_bid"] for r in reports if r["got_seat"])
     lost = sorted(r["points_bid"] for r in reports if not r["got_seat"])
     clearing = [r["clearing_points"] for r in reports if r.get("clearing_points") is not None]
@@ -272,7 +404,7 @@ def suggest_bids(items: list[dict], budget: int) -> list[dict]:
         seats = it.get("seats")
         if isinstance(seats, int) and seats > 0:
             w *= 1.4 if seats <= 30 else 1.15 if seats <= 50 else 0.85
-        med = it.get("median_winning_bid")
+        med = None if it.get("sample_only") else it.get("median_winning_bid")  # SAMPLE data never moves real points
         if isinstance(med, (int, float)) and med > 0:
             w *= 1 + min(med / max(budget, 1), 1.0)
         weights.append(w)

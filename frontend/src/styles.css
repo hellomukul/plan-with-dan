@@ -91,9 +91,11 @@ kbd { font-family: var(--mono); font-size: 11px; padding: 1px 6px; border-radius
 .page-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
 .page-head p { margin: 0; color: var(--muted); max-width: 640px; }
 .bottom-nav { display: none; }
+.show-mobile { display: none; }
 
 @media (max-width: 900px) {
   .hide-mobile { display: none !important; }
+  .show-mobile { display: block !important; }
   .shell { grid-template-columns: 1fr; }
   .sidebar { display: none; }
   .main { padding: 16px 14px 92px; }
@@ -101,6 +103,9 @@ kbd { font-family: var(--mono); font-size: 11px; padding: 1px 6px; border-radius
   .bottom-nav button { background: none; border: 0; color: var(--faint); font: inherit; font-size: 11px; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 4px 8px; border-radius: 8px; cursor: pointer; }
   .bottom-nav button.active { color: var(--text); }
   .bottom-nav button.active .icon { color: var(--pink); }
+  .overlay.more-overlay { align-items: flex-end; justify-content: stretch; z-index: 35; }
+  .more-sheet { width: 100%; background: var(--bg-2); border-top: 1px solid var(--line); border-radius: 16px 16px 0 0; padding: 12px 12px calc(76px + env(safe-area-inset-bottom)); display: grid; gap: 2px; }
+
 }
 
 /* ------------------------------------------------------------ grid helpers */
@@ -335,12 +340,12 @@ input[type='range'] { accent-color: var(--pink); padding: 0; }
 @media (max-width: 1000px) { .desk { grid-template-columns: minmax(0, 1fr); } }
 .desk > *, .main, .shell > * { min-width: 0; }
 .decisions { border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); overflow: hidden; }
-.decision { display: flex; gap: 12px; align-items: center; padding: 12px 14px; border-top: 1px solid var(--line); }
+.decision { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; padding: 12px 14px; border-top: 1px solid var(--line); }
 .decision:first-child { border-top: 0; }
 .decision .sev { width: 3px; align-self: stretch; border-radius: 2px; background: var(--faint); flex: none; }
 .decision .sev.high { background: var(--red); }
 .decision .sev.medium { background: var(--amber); }
-.decision .body { flex: 1; min-width: 0; }
+.decision .body { flex: 1 1 240px; min-width: 0; }
 .decision .title { font-weight: 500; font-size: 14px; }
 .decision .detail { font-size: 12.5px; color: var(--muted); }
 .decision .due { font-family: var(--mono); font-size: 11.5px; color: var(--faint); white-space: nowrap; }

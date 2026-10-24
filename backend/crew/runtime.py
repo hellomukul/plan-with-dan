@@ -24,7 +24,7 @@ from sqlmodel import Session
 
 from config import MAX_MODEL_REQUESTS, MODEL_NAME, build_model
 from db import UsageLog, log_audit
-from pricing import cost_usd, prices_for
+from pricing import WEB_SEARCH_USD_PER_CALL as WEB_SEARCH_USD, cost_usd, prices_for
 from safety import BudgetExceeded, SpendGuard
 
 
@@ -114,13 +114,22 @@ class Run:
 
     # ---------------------------------------------------------- the one way to run an agent
 
-    async def call(self, agent: Agent, prompt: str, *, name: str, deps: Any = None, requests: int | None = None):
-        """Run `agent` under the budget. Returns the result, or raises BudgetExceeded."""
+    async def call(self, agent: Agent, prompt: str, *, name: str, deps: Any = None, requests: int | None = None,
+                   web_searches: int = 0):
+        """Run `agent` under the budget. Returns the result, or raises BudgetExceeded.
+
+        `web_searches` reserves money for that many searches first, since they are billed
+        per call and don't count toward the token cap.
+        """
         self.guard.check(name)
-        remaining = max(0.0, min(
+        reserve = web_searches * WEB_SEARCH_USD
+        remaining = min(
             self.guard.run_budget - self.guard.spent_run,
             self.guard.daily_budget - self.guard.spent_before - self.guard.spent_run,
-        ))
+        ) - reserve
+        if web_searches and remaining <= 0:
+            raise BudgetExceeded(f"{name} needs about ${reserve:.2f} for web searches, which is more than your budget left today.")
+        remaining = max(0.0, remaining)
         # Worst case every token is billed at the output rate: a hard ceiling.
         token_cap = max(2_000, int(remaining / (prices_for(self.model_name)["output"] / 1_000_000)))
         limits = UsageLimits(request_limit=requests or MAX_MODEL_REQUESTS, total_tokens_limit=token_cap)

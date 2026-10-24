@@ -20,51 +20,81 @@ import re
 from dataclasses import dataclass
 
 from catalog import Catalog, Offering, Section, _tokens, clock
-from planning import PlanRow, best_section, bid_stats, respects_prefs
+from planning import PlanRow, best_section, bid_stats, clean_prefs, mba_rules_apply, min_units_apply, respects_prefs
 
 TIERS = [(0.62, "Strong fit"), (0.40, "Good fit"), (0.0, "Worth a look")]
 GOAL_FILLER = set(
     "summer internship intern job jobs role roles career careers lead leading leader company companies work want "
-    "become someday get into first next year years run running build building my own big new long short term goal".split()
+    "become someday get into first next year years run running build building my own big new long short term goal "
+    "goals between hand offer offers deepen deep system systems area areas field fields already some more better "
+    "good great help make making then also like really still maybe eventually post after before around based "
+    "skill skills organization organizations team teams move moving switch switching transition pivot deck "
+    "learn learning understand get going plan planning".split()
 )
-
-
+# Phrases that only count when they appear as phrases ("the private sector" is not private equity).
 COMPOUNDS = [
     "private equity", "venture capital", "real estate", "product management", "supply chain", "machine learning",
     "artificial intelligence", "social impact", "impact investing", "investment banking", "health care",
     "public policy", "data science", "consumer goods", "asset management", "hedge fund", "growth equity",
+    "social enterprise", "social entrepreneurship", "mission-driven", "climate finance", "sustainable investing",
+    "management consulting", "strategy consulting", "corporate finance", "business development",
 ]
+# Short forms students type in goals, mapped to what to look for in course text.
+ABBREVIATIONS = {
+    "pe": ("private equity", [r"private equity"]),
+    "vc": ("venture capital", [r"venture capital"]),
+    "pm": ("product management", [r"product manag"]),
+    "ib": ("investment banking", [r"investment bank"]),
+    "ai": ("AI", [r"\bai\b", r"artificial intelligence"]),
+    "ml": ("machine learning", [r"machine learning"]),
+    "esg": ("ESG", [r"\besg\b", r"sustainab"]),
+}
 
 
 def _goal_terms(text: str) -> list[tuple[str, list[str]]]:
-    """(display term, stems that must all appear) for the meaningful parts of the goals."""
+    """(display term, regex patterns; any one matching counts) for the meaningful parts of a goal."""
     low = (text or "").lower()
     terms: list[tuple[str, list[str]]] = []
     for phrase in COMPOUNDS:
-        if phrase in low:
-            terms.append((phrase, [t for w in phrase.split() for t in _tokens(w)]))
-            low = low.replace(phrase, " ")
+        if phrase in low or phrase.replace("-", " ") in low:
+            terms.append((phrase, [re.escape(phrase).replace("\\-", "[- ]")]))
+            low = low.replace(phrase, " ").replace(phrase.replace("-", " "), " ")
+    for token in re.findall(r"[a-z]+", low):
+        if token in ABBREVIATIONS:
+            label, pats = ABBREVIATIONS[token]
+            if label not in [t for t, _ in terms]:
+                terms.append((label, pats))
     for stem, word in _goal_words(low).items():
-        terms.append((word, [stem]))
+        terms.append((word, [r"\b" + re.escape(stem)]))
     return terms
 
 
 def _goal_words(text: str) -> dict[str, str]:
     """stem -> original word, for the meaningful words in the student's goals."""
     out: dict[str, str] = {}
-    for word in re.findall(r"[A-Za-z][A-Za-z&-]+", text or ""):
-        w = word.lower()
-        if w in GOAL_FILLER or len(w) < 3:
+    for word in re.findall(r"[a-z]+", (text or "").lower()):
+        if word in GOAL_FILLER or word in ABBREVIATIONS or len(word) < 3:
             continue
-        stems = _tokens(w)
+        stems = _tokens(word)
         if stems:
-            out.setdefault(stems[0], w)
+            out.setdefault(stems[0], word)
     return out
+
+
+def _matches(patterns: list[str], text: str) -> bool:
+    return any(re.search(pat, text) for pat in patterns)
+
+
+def _is_trip_section(sec: Section) -> bool:
+    t = sec.title.upper()
+    return t.startswith("IE:") or t.startswith("GNW") or "GLOBAL SOCIAL ENTREPRENEURSHIP" in t
 
 
 def _is_trip(off: Offering) -> bool:
     t = off.lead.title.upper()
     return t.startswith("IE:") or t.startswith("GNW") or "GLOBAL SOCIAL ENTREPRENEURSHIP" in t
+
+
 SENT = re.compile(r"(?<=[.!?])\s+")
 
 
@@ -77,6 +107,9 @@ class FitContext:
     bid_reports: dict[str, list[dict]]  # course number -> reports
     ldr_met: bool
     gsr_met: bool
+    gsa_used: int = 0
+    core_units: float = 0.0
+    core_sections: list = None  # type: ignore[assignment]
 
 
 def _short_goal(text: str, limit: int = 34) -> str:
@@ -128,11 +161,14 @@ def _demand(off: Offering, reports: list[dict]) -> dict:
 def best_fits(ctx: FitContext, term: str = "202701", top: int = 3) -> dict:
     p = ctx.profile or {}
     program = p.get("program") or "MBA"
-    prefs = p.get("prefs") or {}
-    completed = {c.strip().upper() for c in p.get("completed", [])}
+    prefs = clean_prefs(p.get("prefs"))
+    completed = {" ".join(c.split()).upper() for c in p.get("completed", [])}
     planned_keys = {r.section.offering_key for r in ctx.plan}
-    chosen = [r.section for r in ctx.plan if r.section.term == term]
-    term_units = sum(s.units for s in chosen)
+    chosen = [r.section for r in ctx.plan if r.section.term == term] + list(ctx.core_sections or [])
+    term_units = sum(r.section.units for r in ctx.plan if r.section.term == term) + ctx.core_units
+    min_applies = min_units_apply(p, term)
+    mba = mba_rules_apply(p)
+    planned_trip = any(_is_trip_section(r.section) for r in ctx.plan)
     interests = set(p.get("interests", []))
     dismissed = set(ctx.dismissed)
     dismissed_topics: dict[str, int] = {}
@@ -144,11 +180,13 @@ def best_fits(ctx: FitContext, term: str = "202701", top: int = 3) -> dict:
     goal_text = " ".join([p.get("goal_short", ""), p.get("goal_long", ""), p.get("background", "")])
     # Short-term goal (internship / recruiting) counts double; drop terms already covered by a compound.
     goal_terms: list[tuple[str, list[str], int]] = []
+    seen_labels: set[str] = set()
     for text, weight in ((p.get("goal_short", ""), 2), (p.get("goal_long", ""), 1)):
-        for label, stems in _goal_terms(text):
-            if any(set(stems) <= set(s2) for _, s2, _ in goal_terms):
+        for label, pats in _goal_terms(text):
+            if label in seen_labels or any(label in other for other in seen_labels if " " in other):
                 continue
-            goal_terms.append((label, stems, weight))
+            seen_labels.add(label)
+            goal_terms.append((label, pats, weight))
     query = " ".join([goal_text, " ".join(interests) * 2])
     qtokens = set(_tokens(query))
 
@@ -169,8 +207,8 @@ def best_fits(ctx: FitContext, term: str = "202701", top: int = 3) -> dict:
             pref_misses += 1  # e.g. only an 8:30 or Friday section exists: not a "best fit" for this student
             continue
         lead = off.lead
-        course_tokens = set(_tokens(f"{lead.title} {lead.description} {' '.join(lead.topics)}"))
-        hits = [(label, w) for label, stems, w in goal_terms if stems and all(st in course_tokens for st in stems)]
+        course_text = f"{lead.title} {lead.description}".lower()  # real course words only, never topic labels
+        hits = [(label, w) for label, pats, w in goal_terms if _matches(pats, course_text)]
         hits.sort(key=lambda h: -h[1])
         matched = [t for t, _ in hits][:3]
         goal = 0.55 * (bm / max_bm25) + 0.45 * min(1.0, sum(w for _, w in hits) / 4)
@@ -180,13 +218,13 @@ def best_fits(ctx: FitContext, term: str = "202701", top: int = 3) -> dict:
             req_bonus += 0.08
         if not ctx.gsr_met and lead.counts_for_gsr:
             req_bonus += 0.06
-        if term_units < 16:
+        if min_applies and term_units < 16:
             req_bonus += 0.04
         sched = 0.08 if respects_prefs(sec, prefs) and sec.meeting else 0.0
         penalty = 0.12 * sum(dismissed_topics.get(t, 0) for t in lead.topics)
         no_desc = 0.1 if not lead.description else 0.0
-        title_tokens = set(_tokens(lead.title))
-        in_title = sum(w for _, stems, w in goal_terms if stems and all(st in title_tokens for st in stems))
+        title_low = lead.title.lower()
+        in_title = sum(w for _, pats, w in goal_terms if _matches(pats, title_low))
         score = 0.55 * goal + 0.08 * min(in_title, 3) + 0.06 * len(topic_hits) + req_bonus + sched - penalty - no_desc
         score = max(0.0, min(1.0, score))
 
@@ -199,7 +237,7 @@ def best_fits(ctx: FitContext, term: str = "202701", top: int = 3) -> dict:
             chips.append("Counts: Leadership")
         elif not ctx.gsr_met and lead.counts_for_gsr:
             chips.append("Counts: Global Studies")
-        elif term_units < 16:
+        elif min_applies and term_units < 16:
             chips.append(f"+{lead.units:g} toward 16 units")
         elif sec.meeting and prefs.get("fridays_free") and "F" not in sec.meeting.days:
             chips.append("Keeps Fridays free")
@@ -214,7 +252,8 @@ def best_fits(ctx: FitContext, term: str = "202701", top: int = 3) -> dict:
             "enrollment": lead.enrollment, "tier": tier, "score": round(score, 3), "chips": chips,
             "why": {
                 "evidence": _evidence(lead.description, qtokens),
-                "counter": _counter(sec),
+                "counter": (f"Would take Spring to {term_units + lead.units:g} units; over 24 needs approval"
+                            if mba and term_units + lead.units > 24 else _counter(sec)),
                 "factors": {"goal": round(goal, 2), "interests": len(topic_hits),
                             "requirements": round(req_bonus, 2), "schedule": round(sched, 2)},
             },
@@ -222,7 +261,14 @@ def best_fits(ctx: FitContext, term: str = "202701", top: int = 3) -> dict:
         })
 
     fits.sort(key=lambda f: (-f["score"], f["number"]))
-    trips = [f for f in fits if f["trip"]]
+    def trip_allowed(f: dict) -> bool:
+        if planned_trip:  # one Global Studies trip at a time
+            return False
+        if f["number"] == "MGT 416":  # IE needs all 10 GSA days unused
+            return ctx.gsa_used == 0
+        return True
+
+    trips = [f for f in fits if f["trip"] and trip_allowed(f)]
     regular = [f for f in fits if not f["trip"]]
     goal_row = regular[top:top + 6]
     ldr_row = [f for f in regular if f["ldr"]][:6] if not ctx.ldr_met else []
@@ -237,6 +283,8 @@ def best_fits(ctx: FitContext, term: str = "202701", top: int = 3) -> dict:
         ] if r["items"]],
         "swap_count": len(swaps),
         "pref_misses": pref_misses,
+        "term_units": term_units,
+        "over_cap": bool(mba and term_units >= 24),
         "eligible": len(pool),
         "how": "Ranked in code from your goals and interests (text match), requirement gaps, and schedule fit. "
                "Clashing, planned or already-taken courses, and sections outside your schedule preferences, are hidden. Demand comes from seat limits and "

@@ -21,11 +21,12 @@ from zoneinfo import ZoneInfo
 from icalendar import Calendar, Event, vRecur
 
 from catalog import DAY_ICS, DAY_ORDER, Section
-from rules import CALENDAR, NO_CLASS_DATES
+from rules import CALENDAR, CALENDAR_ENDS, MAKEUP_DAYS, NO_CLASS_DATES
 
 ET = ZoneInfo("America/New_York")
 PY_WEEKDAY = {"M": 0, "T": 1, "W": 2, "Th": 3, "F": 4}
 NO_CLASS = {date.fromisoformat(d) for d in NO_CLASS_DATES}
+MAKEUP = {date.fromisoformat(d): code for d, code in MAKEUP_DAYS.items()}  # e.g. Fri Jan 29 runs Monday
 
 
 def first_meeting(sec: Section) -> date | None:
@@ -52,7 +53,10 @@ def meeting_dates(sec: Section) -> list[date]:
     wanted = {PY_WEEKDAY[d] for d in sec.meeting.days}
     out, day = [], start
     while day <= sec.ends:
-        if day.weekday() in wanted and day not in NO_CLASS:
+        if day in MAKEUP:  # this date follows another weekday's schedule
+            if MAKEUP[day] in sec.meeting.days:
+                out.append(day)
+        elif day.weekday() in wanted and day not in NO_CLASS:
             out.append(day)
         day += timedelta(days=1)
     return out
@@ -75,9 +79,14 @@ def class_event(sec: Section, owner: str) -> Event | None:
     until = datetime.combine(sec.ends, time(23, 59, 59), ET).astimezone(timezone.utc)
     ev.add("rrule", vRecur(freq="WEEKLY", byday=[DAY_ICS[d] for d in m.days], until=until))
     wanted = {PY_WEEKDAY[d] for d in m.days}
-    skips = sorted(d for d in NO_CLASS if start_day <= d <= sec.ends and d.weekday() in wanted)
+    in_range = lambda d: start_day <= d <= sec.ends  # noqa: E731
+    skips = {d for d in NO_CLASS if in_range(d) and d.weekday() in wanted}
+    skips |= {d for d, code in MAKEUP.items() if in_range(d) and d.weekday() in wanted and code not in m.days}
+    extra = sorted(d for d, code in MAKEUP.items() if in_range(d) and code in m.days and d.weekday() not in wanted)
     if skips:
-        ev.add("exdate", [_at(d, m.start) for d in skips])
+        ev.add("exdate", [_at(d, m.start) for d in sorted(skips)])
+    if extra:
+        ev.add("rdate", [_at(d, m.start) for d in extra])
     return ev
 
 
@@ -88,8 +97,9 @@ def deadline_event(day: str, label: str, kind: str) -> Event:
     ev.add("dtstamp", datetime.now(timezone.utc))
     ev.add("summary", f"SOM · {label}")
     d = date.fromisoformat(day)
+    last = date.fromisoformat(CALENDAR_ENDS.get(day, day))
     ev.add("dtstart", d)
-    ev.add("dtend", d + timedelta(days=1))
+    ev.add("dtend", last + timedelta(days=1))  # all-day DTEND is exclusive
     ev.add("categories", [kind])
     ev.add("transp", "TRANSPARENT")
     return ev

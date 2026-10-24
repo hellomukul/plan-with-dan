@@ -95,9 +95,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     toast(text, 'good', actionId ? {
       label: 'Undo',
       run: async () => {
-        await api.undo(actionId)
-        await refreshPlan()
-        toast('Undone')
+        try {
+          const r = await api.undo(actionId)
+          await refreshPlan()
+          toast(r.ok ? 'Undone' : r.detail || 'Nothing to undo', r.ok ? undefined : 'bad')
+        } catch (e) {
+          toast((e as Error).message, 'bad')
+        }
       },
     } : undefined)
   }, [toast, refreshPlan])

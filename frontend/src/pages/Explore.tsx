@@ -65,7 +65,8 @@ function score(s: Section, words: string[]): number {
 }
 
 export default function Explore() {
-  const { sections, topics, plan, plannedIds, addCourse, user, go } = useApp()
+  const { sections, topics, plan, plannedIds, addCourse, user, go, profile } = useApp()
+  const program = profile?.program || 'MBA'
   const [q, setQ] = useState('')
   const [term, setTerm] = useState<TermFilter>(PLANNING_TERM as TermFilter)
   const [sessions, setSessions] = useState<Set<SessionFilter>>(new Set())
@@ -105,7 +106,7 @@ export default function Explore() {
     for (const rows of groups.values()) {
       const c = rows[0]
       if (term !== 'all' && c.term !== term) continue
-      if (mbaOnly && !c.programs.includes('MBA')) continue
+      if (mbaOnly && !c.programs.includes(program)) continue
       if (!showCore && c.core) continue
       if (sessions.size && !sessions.has(sessionPart(c))) continue
       if (pickedTopics.size && !c.topics.some((t) => pickedTopics.has(t))) continue
@@ -126,7 +127,7 @@ export default function Explore() {
       return byNumber(a.lead, b.lead)
     })
     return out
-  }, [groups, term, mbaOnly, showCore, sessions, pickedTopics, quick, words, sort, planned, plannedIds])
+  }, [groups, term, mbaOnly, program, showCore, sessions, pickedTopics, quick, words, sort, planned, plannedIds])
 
   const toggle = <T,>(set: Set<T>, value: T, apply: (s: Set<T>) => void) => {
     const next = new Set(set)
@@ -230,7 +231,7 @@ export default function Explore() {
             <div className="ex-filter-row">
               <span className="section-label">Include</span>
               <div className="row" style={{ gap: 18 }}>
-                <label className="toggle small"><input type="checkbox" checked={mbaOnly} onChange={(e) => { setMbaOnly(e.target.checked); setLimit(PAGE) }} /> MBA courses only</label>
+                <label className="toggle small"><input type="checkbox" checked={mbaOnly} onChange={(e) => { setMbaOnly(e.target.checked); setLimit(PAGE) }} /> {program} courses only</label>
                 <label className="toggle small"><input type="checkbox" checked={showCore} onChange={(e) => { setShowCore(e.target.checked); setLimit(PAGE) }} /> Core courses</label>
               </div>
             </div>

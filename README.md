@@ -54,7 +54,16 @@ uvicorn backend.main:app --port 8000
 ```bash
 python -m pytest -q
 ```
-There are 35 tests covering injection blocking, invented-course removal, spend caps, clash logic, auth enumeration, CSRF, the calendar feed, the desk scan, best-fit filtering, undo, account export/delete and the CSP header.
+There are 49 tests covering:
+- safety: injection blocking, invented-course removal and spend caps
+- accounts and web security: login enumeration, CSRF and the CSP header
+- planning rules: clash logic, spring core units, the 16-unit window, non-MBA programs, Global Studies data, the make-up day, and planned-vs-done requirements
+- the calendar feed and the desk scan
+- best-fit filtering
+- undo, including no duplicates
+- bid-report privacy and duplicates
+- profile validation
+- account export and delete
 
 **Frontend development (optional, needs Node 20+)**
 ```bash
@@ -106,7 +115,8 @@ Find my courses: Retriever (code, BM25 on goals) ─▶ Curator agent ─▶ Val
 | Invented courses or facts | The recommender only accepts keys from the shortlist it was given, and removes any "evidence" quote that isn't really in the course description. The chat output is checked for course numbers that aren't in the catalog. |
 | Wrong actions | Agents can only *suggest* plan changes. The student clicks to add. |
 | Loops and overspending | Request limits per agent, a per-tool loop guard, a token cap derived from the remaining budget, $0.05 per turn and $0.50 per student per day (configurable), plus rate limits on login, chat and recommend. |
-| Account security | Argon2id hashes, HttpOnly SameSite session cookies (only the token hash is stored), no account enumeration (login or signup), a CSRF origin check, a strict Content-Security-Policy, and no secrets in the repo. |
+| Account security | Argon2id hashes, HttpOnly SameSite session cookies (only the token hash is stored), a CSRF origin check, a strict Content-Security-Policy, and no secrets in the repo. Login gives the same answer and timing whether or not an email exists. **Signup can't fully hide that** without email verification (an existing email isn't signed in), so we keep its timing equal and rate limit it. Expired sessions are purged at startup. |
+| Bid data | One report per student, course and term (a new report replaces the old one). Stats stay hidden until 3 real reports exist, so no single classmate's bid shows. SAMPLE rows never change a point split. |
 | Privacy | Blocked prompts are never stored (only the reason and length are logged). Students can export all their data or delete their account. A Privacy page explains the data flow to Portkey and OpenAI. |
 | Mistaken actions | Every plan change is logged with one-click undo; desk cards can be snoozed or dismissed and restored. |
 

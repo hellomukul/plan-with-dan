@@ -45,6 +45,8 @@ function fullClock(min: number): string {
 }
 const courseNumber = (title: string) => title.split(' ').slice(0, 2).join(' ')
 
+const isoDay = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+
 export default function Calendar() {
   const { toast, go } = useApp()
   const [events, setEvents] = useState<CalendarEvents | null>(null)
@@ -75,6 +77,12 @@ export default function Calendar() {
     for (const d of events.deadlines) {
       const st = KIND_STYLE[d.kind] ?? KIND_STYLE.deadline
       push(d.date, { kind: st.cls, label: d.title, detail: st.name, sort: -1 })
+      // Multi-day entries (recess, finals, global weeks) show on every day they cover.
+      const day = parseIso(d.date)
+      const last = d.end ?? d.date
+      for (day.setDate(day.getDate() + 1); isoDay(day) <= last; day.setDate(day.getDate() + 1)) {
+        push(isoDay(day), { kind: st.cls, label: `${d.title.split(' (')[0]} (cont.)`, detail: st.name, sort: -1 })
+      }
     }
     for (const c of events.classes) {
       push(c.date, {

@@ -19,7 +19,10 @@ from planning import (
     best_section,
     bid_stats,
     conflicts,
+    core_load,
+    effective_gsa_used,
     gsa_check,
+    prefs_text,
     requirement_progress,
     suggest_bids,
     week_review,
@@ -39,13 +42,27 @@ def _log(ctx: RunContext[StudentContext], tool: str, **args) -> bool:
 LOOP_MSG = "This tool was already used several times this turn. Answer with what you have."
 
 
-def _resolve(ctx: StudentContext, key_or_number: str):
+def _program(ctx: StudentContext) -> str:
+    return ctx.profile.get("program") or "MBA"
+
+
+def _resolve(ctx: StudentContext, key_or_number: str, term: str | None = None):
+    """Offerings for a key, course number or exact title, limited to ones this student can still take.
+
+    Only offerings with a section open to the student's program that hasn't ended count,
+    and the planning term comes first, so "MGT 879" never resolves to a past EMBA section.
+    """
     cat = ctx.catalog
-    off = cat.offering(key_or_number.strip())
-    if off:
-        return [off]
-    number = key_or_number.strip().upper().split("|")[0]
-    return cat.offering_for_number(number)
+    program = _program(ctx)
+    raw = " ".join(key_or_number.split())
+    off = cat.offering(raw)
+    offs = [off] if off else cat.offering_for_number(raw.upper().split("|")[0])
+    if not offs:  # the model sometimes passes a title instead of a number
+        want = raw.lower()
+        offs = [o for o in cat.offerings.values() if o.lead.title.lower() == want] or \
+               [o for o in cat.offerings.values() if len(want) > 6 and want in o.lead.title.lower()]
+    offs = [o for o in offs if o.sections_for(program, ctx.today) and (not term or o.lead.term == term)]
+    return sorted(offs, key=lambda o: (o.lead.term != DEFAULT_TERM, o.lead.term))
 
 
 # ------------------------------------------------------------------ catalog
@@ -78,12 +95,12 @@ def course_details(ctx: RunContext[StudentContext], key_or_number: str) -> str:
         return LOOP_MSG
     offs = _resolve(ctx.deps, key_or_number)
     if not offs:
-        return f"{key_or_number} is not in the SOM catalog."
+        return f"{key_or_number} isn't a current or upcoming {_program(ctx.deps)} course in the SOM catalog."
     lines = []
-    for o in offs[:3]:
+    for o in offs:
         s = o.lead
         lines.append(card_text(o, 900))
-        for sec in o.sections:
+        for sec in o.sections_for(_program(ctx.deps), ctx.deps.today):
             lines.append(
                 f"  section {sec.section} (id {sec.id}): {sec.time_label}, room {sec.room or 'TBA'}, "
                 f"{SESSION_NAMES.get(sec.session, sec.session)}, faculty {', '.join(sec.faculty) or 'TBA'}"
@@ -109,9 +126,14 @@ def my_profile_and_plan(ctx: RunContext[StudentContext]) -> str:
         f"program={p.get('program','MBA')} year={p.get('year') or '?'} cohort={p.get('cohort') or '?'} "
         f"background={p.get('background') or '?'}\ninterests={', '.join(p.get('interests', [])) or '?'}\n"
         f"short-term goal={p.get('goal_short') or '?'}\nlong-term goal={p.get('goal_long') or '?'}\n"
-        f"completed={', '.join(p.get('completed', [])) or 'none listed'}\nprefs={p.get('prefs', {})}\n"
-        f"GSA days used={p.get('gsa_days_used', 0)} of {GSA_DAYS}"
+        f"completed={', '.join(p.get('completed', [])) or 'none listed'}\n"
+        f"schedule preferences={prefs_text(p.get('prefs'))}\n"
+        f"GSA days used={effective_gsa_used(p, d.global_choices)} of {GSA_DAYS}"
     )
+    core = core_load(p, DEFAULT_TERM, d.catalog)
+    if core["units"]:
+        plan_lines.append(f"- Cohort core in {TERM_NAMES.get(DEFAULT_TERM)} (assigned, not in the plan): "
+                          f"{', '.join(core['courses'])} = {core['units']:g} units")
     return fence(profile, "student_profile") + "\nPLAN:\n" + "\n".join(plan_lines)
 
 
@@ -129,12 +151,12 @@ def check_fit(ctx: RunContext[StudentContext], key_or_number: str) -> str:
         return f"{key_or_number} is not in the catalog."
     out = []
     for o in offs[:2]:
-        chosen = d.sections(o.lead.term)
-        sec = best_section(o, chosen, d.profile.get("prefs"), d.profile.get("program") or "MBA")
+        chosen = d.sections(o.lead.term) + core_load(d.profile, o.lead.term, d.catalog)["sections"]
+        sec = best_section(o, chosen, d.profile.get("prefs"), _program(d))
         if sec:
             out.append(f"{o.lead.number} fits: section {sec.section} (id {sec.id}) {sec.time_label}.")
         else:
-            clashes = conflicts(chosen + [o.sections[0]])
+            clashes = conflicts(chosen + o.sections_for(_program(d), d.today)[:1])
             mine = [c for c in clashes if c["a_id"] in {x.id for x in o.sections} or c["b_id"] in {x.id for x in o.sections}]
             out.append(f"{o.lead.number} does NOT fit: " + "; ".join(f"{c['a']} vs {c['b']} on {c['day']} {c['window']}" for c in mine))
     return "\n".join(out)
@@ -152,8 +174,10 @@ def find_alternates(ctx: RunContext[StudentContext], key_or_number: str) -> str:
     if not offs:
         return f"{key_or_number} is not in the catalog."
     o = offs[0]
-    alts = alternates(o, ctx.deps.sections(o.lead.term), ctx.deps.catalog, n=3, prefs=ctx.deps.profile.get("prefs"),
-                      program=ctx.deps.profile.get("program") or "MBA")
+    d = ctx.deps
+    skip = {" ".join(c.split()).upper() for c in d.profile.get("completed", [])} | {r.section.number for r in d.plan}
+    alts = alternates(o, d.sections(o.lead.term) + core_load(d.profile, o.lead.term, d.catalog)["sections"], d.catalog,
+                      n=3, prefs=d.profile.get("prefs"), program=_program(d), exclude_numbers=skip)
     if not alts:
         return "No clash-free backups with similar topics."
     return "\n".join(f"- [{a['key']}] {a['number']} {a['title']} · {a['time']} · shared: {', '.join(a['shared_topics']) or 'similar title'}" for a in alts)
@@ -171,9 +195,18 @@ def suggest_add(ctx: RunContext[StudentContext], key_or_number: str, reason: str
     d = ctx.deps
     offs = _resolve(d, key_or_number)
     if not offs:
-        return f"{key_or_number} is not in the catalog; not suggested."
+        return f"{key_or_number} isn't a current or upcoming course open to this student; not suggested."
     o = offs[0]
-    sec = best_section(o, d.sections(o.lead.term), d.profile.get("prefs"), d.profile.get("program") or "MBA") or o.sections[0]
+    completed = {" ".join(c.split()).upper() for c in d.profile.get("completed", [])}
+    if o.lead.number.upper() in completed:
+        return f"The student already completed {o.lead.number}; not suggested."
+    if any(r.section.offering_key == o.key for r in d.plan):
+        return f"{o.lead.number} is already in the student's plan; not suggested."
+    chosen = d.sections(o.lead.term) + core_load(d.profile, o.lead.term, d.catalog)["sections"]
+    sec = best_section(o, chosen, d.profile.get("prefs"), _program(d))
+    if not sec:
+        return (f"{o.lead.number} clashes with the student's plan (or their schedule preferences) in every section; "
+                "not suggested. Offer find_alternates instead.")
     if any(p["course_id"] == sec.id for p in d.proposals):
         return "Already suggested."
     d.proposals.append({
@@ -188,13 +221,16 @@ def suggest_add(ctx: RunContext[StudentContext], key_or_number: str, reason: str
 def plan_review(ctx: RunContext[StudentContext], term: Literal["202603", "202701"] = "202701") -> str:
     """Check one term of the plan: clashes, units, and a critique of the weekly schedule."""
     _log(ctx, "plan_review", term=term)
-    secs = ctx.deps.sections(term)
-    if not secs:
+    d = ctx.deps
+    secs = [s for s in d.sections(term)]
+    core = core_load(d.profile, term, d.catalog)
+    if not secs and not core["units"]:
         return f"No courses planned for {TERM_NAMES.get(term)}."
-    clash_list = conflicts(secs)
-    review = week_review(secs)
-    units = sum(s.units for s in secs)
-    lines = [f"{TERM_NAMES.get(term)}: {len(secs)} courses, {units:g} units."]
+    clash_list = conflicts(secs + core["sections"])
+    review = week_review(secs + core["sections"])
+    units = sum(s.units for s in secs) + core["units"]
+    lines = [f"{TERM_NAMES.get(term)}: {len(secs)} electives + cohort core ({core['units']:g} units), {units:g} units in total."
+             if core["units"] else f"{TERM_NAMES.get(term)}: {len(secs)} courses, {units:g} units."]
     lines += [f"CLASH: {c['a']} vs {c['b']} on {c['day']} {c['window']}" for c in clash_list] or ["No clashes."]
     lines += [f"{n['kind']}: {n['text']}" for n in review["notes"]]
     return "\n".join(lines)
@@ -205,12 +241,16 @@ def requirements_status(ctx: RunContext[StudentContext]) -> str:
     _log(ctx, "requirements_status")
     d = ctx.deps
     r = requirement_progress(d.profile, d.plan, d.catalog, d.global_choices)
-    terms = "; ".join(f"{t['term']}: {t['units']:g}u ({t['status']})" for t in r["terms"]) or "no terms planned"
+    terms = "; ".join(f"{t['term']}: {t['units']:g}u incl. {t['core_units']:g} core ({t['status']})"
+                      for t in r["terms"]) or "no terms planned"
+    if not r["modelled"]:
+        return " ".join(r["notes"])
     return (
         f"Target {r['total_target']} units. Core counted {r['core']['counted']:g}/{r['core']['target']:g}. "
         f"Electives planned {r['electives']['planned']:g}/{r['electives']['target']:g}.\n"
-        f"Per term: {terms}.\nLDR met: {r['ldr']['met']} ({LDR['how_flagged']})\n"
-        f"GSR met: {r['gsr']['met']}; GSR courses in plan: {', '.join(r['gsr']['in_plan']) or 'none'}; "
+        f"Per term: {terms}.\nLDR met: {r['ldr']['met']} (planned but not done: {r['ldr']['planned']}) "
+        f"({LDR['how_flagged']})\n"
+        f"GSR met: {r['gsr']['met']} (planned but not done: {r['gsr']['planned']}); GSR courses in plan: {', '.join(r['gsr']['in_plan']) or 'none'}; "
         f"choices: {r['gsr']['choices'] or 'none'}\nRules: " + " ".join(r["notes"])
     )
 
@@ -219,12 +259,12 @@ def global_options(ctx: RunContext[StudentContext]) -> str:
     """Every way to meet the Global Studies Requirement, its GSA-day cost and matching Spring 2027 courses."""
     _log(ctx, "global_options")
     d = ctx.deps
-    used = int(d.profile.get("gsa_days_used", 0) or 0)
+    used = effective_gsa_used(d.profile, d.global_choices)
     matches = gsr_courses(d.catalog, DEFAULT_TERM)
     lines = [f"GSA budget: {GSA_DAYS - used} of {GSA_DAYS} funded days left."]
     for opt in GSR_OPTIONS:
         check = gsa_check(opt["key"], used)
-        courses = [d.catalog.offering(k).lead for k in matches.get(opt["key"], [])][:6]
+        courses = [d.catalog.offering(k).lead for k in matches.get(opt["key"], [])]
         names = ", ".join(f"{c.number} {c.title}" for c in courses) or "not a catalog course"
         lines.append(
             f"- {opt['name']} ({opt['units'] or '–'} units, ~{opt['gsa_days']} GSA days). {opt['timing']} "
@@ -255,6 +295,9 @@ def bid_history(ctx: RunContext[StudentContext], course_number: str) -> str:
     stats = bid_stats(ctx.deps.bid_reports(num))
     offs = ctx.deps.catalog.offering_for_number(num, DEFAULT_TERM)
     seats = offs[0].lead.limit if offs else None
+    if stats.get("too_few"):
+        return (f"{num}: fewer than 3 student reports, so stats are hidden to protect privacy. "
+                f"Seats: {seats or 'unknown'}. SOM does not publish clearing prices.")
     if not stats.get("reports"):
         return f"{num}: no bid reports yet. Seats: {seats or 'unknown'}. SOM does not publish clearing prices."
     label = "SAMPLE data (illustrative, not real)" if stats["sample_only"] else "student-reported"
@@ -274,12 +317,13 @@ def suggest_bid_split(ctx: RunContext[StudentContext], budget: int, must_haves: 
     items, seen = [], set()
     for r in d.plan:
         s = r.section
-        if s.term != DEFAULT_TERM or s.enrollment.lower() != "bid" or s.number in seen:
+        if s.term != DEFAULT_TERM or s.enrollment.lower() != "bid" or s.offering_key in seen or r.status == "completed":
             continue
-        seen.add(s.number)
+        seen.add(s.offering_key)
         stats = bid_stats(d.bid_reports(s.number))
         items.append({"number": s.number, "title": s.title, "priority": 1 if s.number in must else 2,
-                      "seats": s.limit, "median_winning_bid": stats.get("median_winning_bid")})
+                      "seats": s.limit, "median_winning_bid": stats.get("median_winning_bid"),
+                      "sample_only": stats.get("sample_only", False)})
     if not items:
         return "No bid courses in the Spring 2027 plan yet."
     split = suggest_bids(items, int(budget))
@@ -289,7 +333,7 @@ def suggest_bid_split(ctx: RunContext[StudentContext], budget: int, must_haves: 
 
 CATALOG_TOOLS = [search_catalog, course_details, check_fit, find_alternates, suggest_add, my_profile_and_plan]
 PLANNER_TOOLS = [my_profile_and_plan, plan_review, requirements_status, global_options, upcoming_dates,
-                 check_fit, find_alternates, course_details]
+                 check_fit, find_alternates, course_details, search_catalog, suggest_add]
 BID_TOOLS = [my_profile_and_plan, bid_history, suggest_bid_split, course_details]
 CAREER_TOOLS = [my_profile_and_plan, search_catalog, course_details, suggest_add, check_fit]
 NEWS_TOOLS = [search_catalog]

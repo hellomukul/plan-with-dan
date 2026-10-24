@@ -35,6 +35,7 @@ function Decision({ card, onAct, onState }: { card: DeskCard; onAct: (c: DeskCar
       <div className="body">
         <div className="title">{card.title}</div>
         <div className="detail">{card.detail}</div>
+        {card.due && <div className="faint small mono show-mobile" style={{ marginTop: 4 }}>{dueLabel(card)}</div>}
         {open && <div className="faint small" style={{ marginTop: 4 }}>Why you're seeing this: {card.why || 'computed from your plan'}. Source: <span className="mono">{card.source}</span></div>}
       </div>
       <span className="due hide-mobile">{dueLabel(card)}</span>
@@ -158,9 +159,13 @@ export default function Home() {
     })
   }
   const undo = async (a: ActionEntry) => {
-    await api.undo(a.id)
-    await refreshPlan()
-    toast('Undone')
+    try {
+      const r = await api.undo(a.id)
+      await refreshPlan()
+      toast(r.ok ? 'Undone' : r.detail || 'Nothing to undo', r.ok ? undefined : 'bad')
+    } catch (e) {
+      toast((e as Error).message, 'bad')
+    }
   }
 
   const today = cal?.today ?? new Date().toISOString().slice(0, 10)
@@ -168,7 +173,14 @@ export default function Home() {
   const spring = plan?.terms[PLANNING_TERM]
   const prog = plan?.progress
   const clashes = Object.values(plan?.terms ?? {}).reduce((n, t) => n + t.conflicts.length, 0)
-  const gsaLeft = 10 - (profile?.gsa_days_used ?? 0)
+  const gsaLeft = 10 - (plan?.progress.gsa_used ?? profile?.gsa_days_used ?? 0)
+  const springTerm = prog?.terms.find((t) => t.term === PLANNING_TERM)
+  const minApplies = springTerm?.min_applies ?? profile?.year === '1'
+  const springUnits = spring?.units ?? 0
+  const unitGoal = minApplies ? 16 : 24
+  const status = (met?: boolean, planned?: boolean) => met ? ['Done', 'var(--green)'] : planned ? ['Planned, not done', 'var(--text)'] : ['Not yet', 'var(--amber)']
+  const ldrStatus = status(prog?.ldr.met, prog?.ldr.planned)
+  const gsrStatus = status(prog?.gsr.met, prog?.gsr.planned)
   const nearest = (cal?.deadlines ?? []).find((d) => d.date >= today && d.kind === 'deadline')
 
   return (
@@ -228,6 +240,8 @@ export default function Home() {
               {fits.top.map((f, i) => <FitCard key={f.key} fit={f} primary={i === 0} onOpen={setOpen} onDismiss={dismiss} />)}
             </div>
           )}
+          {fits?.over_cap && <p className="small" style={{ marginTop: 8, color: 'var(--amber)' }}>Spring is already at {fits.term_units} units, so anything you add needs approval. Swap rather than add.</p>}
+          {fits && (fits.pref_misses ?? 0) > 0 && <p className="faint small" style={{ marginTop: 8 }}>{fits.pref_misses} good matches are hidden because every section breaks your schedule preferences. <button className="link-btn small" onClick={() => go('profile')}>Change preferences</button></p>}
           {fits && fits.swap_count > 0 && <p className="faint small" style={{ marginTop: 8 }}>{fits.swap_count} more courses would fit if you swapped something in your plan.</p>}
 
           {fits?.rows.map((row) => (
@@ -261,15 +275,17 @@ export default function Home() {
           <div className="card">
             <div className="section-label"><span>Your plan</span><button className="link-btn small" onClick={() => go('plan')}>Open</button></div>
             <div className="meter">
-              <span>Spring units</span><span className="mono">{spring?.units ?? 0} / 16</span>
-              <Bar pct={((spring?.units ?? 0) / 16) * 100} tone={(spring?.units ?? 0) >= 16 ? 'lime' : ''} />
+              <span>Spring units{spring?.core_units ? ` (incl. ${spring.core_units} core)` : ''}</span>
+              <span className="mono">{springUnits} / {unitGoal}{minApplies ? ' min' : ' max'}</span>
+              <Bar pct={(springUnits / unitGoal) * 100} tone={springUnits > 24 ? 'amber' : minApplies && springUnits >= 16 ? 'lime' : ''} />
               <span>Electives</span><span className="mono">{prog?.electives.planned ?? 0} / 41.5</span>
               <Bar pct={((prog?.electives.planned ?? 0) / 41.5) * 100} />
               <span>Global Studies days left</span><span className="mono">{gsaLeft} / 10</span>
               <Bar pct={gsaLeft * 10} tone="gray" />
             </div>
-            <div className="row between small"><span>Leadership</span><span style={{ color: prog?.ldr.met ? 'var(--green)' : 'var(--amber)' }}>{prog?.ldr.met ? 'Done' : 'Not yet'}</span></div>
-            <div className="row between small" style={{ marginTop: 6 }}><span>Global Studies</span><span style={{ color: prog?.gsr.met ? 'var(--green)' : prog?.gsr.in_plan.length ? 'var(--text)' : 'var(--amber)' }}>{prog?.gsr.met ? 'Done' : prog?.gsr.in_plan.length ? 'Planned' : 'Not yet'}</span></div>
+            {prog?.modelled === false && <p className="faint small">{prog.notes[0]}</p>}
+            <div className="row between small"><span>Leadership</span><span style={{ color: ldrStatus[1] }}>{ldrStatus[0]}</span></div>
+            <div className="row between small" style={{ marginTop: 6 }}><span>Global Studies</span><span style={{ color: gsrStatus[1] }}>{gsrStatus[0]}</span></div>
             <div className="row between small" style={{ marginTop: 6 }}><span>Clashes</span><span style={{ color: clashes ? 'var(--red)' : 'var(--green)' }}>{clashes ? `${clashes} to fix` : 'None'}</span></div>
           </div>
 

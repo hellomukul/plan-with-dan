@@ -32,7 +32,8 @@ from crew.runtime import Run
 from db import ChatMessage
 from safety import REFUSAL, BudgetExceeded, SpendGuard, check_output, fence, screen_input
 
-HISTORY_TURNS = 6
+HISTORY_TURNS = 8
+HISTORY_CHARS = 1500  # long enough to keep a course list Dan gave earlier
 
 
 def _history(db: Session, user_id: int | None, mode: str) -> str:
@@ -43,14 +44,29 @@ def _history(db: Session, user_id: int | None, mode: str) -> str:
         .order_by(ChatMessage.id.desc()).limit(HISTORY_TURNS)
     ).all()
     # Blocked messages (and Dan's refusals of them) never go back into a prompt.
-    lines = [f"{m.role}: {m.content[:400]}" for m in reversed(rows) if '"blocked": true' not in (m.meta or "")]
+    lines = [f"{m.role}: {m.content[:HISTORY_CHARS]}" for m in reversed(rows) if '"blocked": true' not in (m.meta or "")]
     return fence("\n".join(lines), "recent_chat") if lines else ""
 
 
-def _save(db: Session, user_id: int | None, mode: str, role: str, content: str, meta: dict | None = None) -> None:
-    if user_id:
-        db.add(ChatMessage(user_id=user_id, mode=mode, role=role, content=content, meta=json.dumps(meta or {})))
-        db.commit()
+def _save(db: Session, user_id: int | None, mode: str, role: str, content: str,
+          meta: dict | None = None) -> ChatMessage | None:
+    if not user_id:
+        return None
+    msg = ChatMessage(user_id=user_id, mode=mode, role=role, content=content, meta=json.dumps(meta or {}))
+    db.add(msg)
+    db.commit()
+    db.refresh(msg)
+    return msg
+
+
+def _mark_blocked(db: Session, msg: ChatMessage | None) -> None:
+    """The provider refused this message: never store its text or replay it into later prompts."""
+    if msg is None:
+        return
+    msg.content = "(message blocked by the AI provider's filter; text not stored)"
+    msg.meta = json.dumps({"blocked": True, "by": "provider"})
+    db.add(msg)
+    db.commit()
 
 
 async def run_turn(db: Session, user_id: int | None, message: str, mode: str = "dan",
@@ -62,6 +78,11 @@ async def run_turn(db: Session, user_id: int | None, message: str, mode: str = "
     result = {"answer": "", "agent": None, "proposals": [], "blocked": False, "safety": []}
 
     screen = screen_input(message)
+    if not screen.allowed and screen.benign:
+        result.update(answer=f"I couldn't send that: {screen.reasons[0]}. "
+                             "Try a shorter question about your courses, plan, bids or AI news.",
+                      safety=screen.reasons)
+        return _finish(run, result)
     if not screen.allowed:
         run.audit("input_blocked", reasons=screen.reasons, length=len(message))  # no message text is stored
         result.update(answer=REFUSAL.format(why="; ".join(screen.reasons)), blocked=True, safety=screen.reasons)
@@ -74,7 +95,7 @@ async def run_turn(db: Session, user_id: int | None, message: str, mode: str = "
                             "Everything else (search, planner, calendar, bids) still works.")
         return _finish(run, result)
 
-    _save(db, user_id, mode, "user", screen.text)
+    user_msg = _save(db, user_id, mode, "user", screen.text)
     ctx = load_context(run)
     history = _history(db, user_id, mode)
     today = date.today().isoformat()
@@ -99,7 +120,8 @@ async def run_turn(db: Session, user_id: int | None, message: str, mode: str = "
             f"Today is {today}. Student: {ctx.profile.get('program', 'MBA')} year {ctx.profile.get('year') or '?'}.\n"
             f"{history}\nTask:\n{fence(task, 'student_request')}"
         )
-        answer = await run.call(agent, prompt, name=label, deps=ctx, requests=3 if chosen == "news_desk" else None)
+        answer = await run.call(agent, prompt, name=label, deps=ctx, requests=3 if chosen == "news_desk" else None,
+                              web_searches=2 if chosen == "news_desk" else 0)
         result.update(answer=str(answer.output), agent=label, proposals=ctx.proposals)
         if chosen == "news_desk" and "http" not in result["answer"]:
             run.audit("news_without_sources")
@@ -113,6 +135,8 @@ async def run_turn(db: Session, user_id: int | None, message: str, mode: str = "
         if "content management policy" in str(exc) or "content_filter" in str(exc):
             # Second line of defence: the provider's own safety filter refused the prompt.
             run.audit("provider_content_filter", detail=str(exc)[:200])
+            _mark_blocked(db, user_msg)
+            result["blocked"] = True
             result.update(answer="That request tripped the AI provider's safety filter, so I didn't run it. "
                                  "Try rephrasing it as a planning question.", safety=["provider_filter"])
         else:
@@ -130,8 +154,10 @@ def _wrap_up(run: Run, result: dict, known: set[str], user_id: int | None, mode:
         run.audit("output_checked", issues=issues)
         result["safety"] = result.get("safety", []) + issues
     result["answer"] = safe
-    _save(run.db, user_id, mode, "assistant", safe,
-          {"agent": result.get("agent"), "cost_usd": run.totals()["cost_usd"], "run_id": run.run_id})
+    meta = {"agent": result.get("agent"), "cost_usd": run.totals()["cost_usd"], "run_id": run.run_id}
+    if result.get("blocked"):
+        meta["blocked"] = True  # keep the refusal out of later prompts too
+    _save(run.db, user_id, mode, "assistant", safe, meta)
     return _finish(run, result)
 
 

@@ -48,14 +48,16 @@ class Screen:
     allowed: bool
     reasons: list[str] = field(default_factory=list)
     text: str = ""
+    benign: bool = False  # refused for a harmless reason (empty, too long), not an attack
 
 
 def screen_input(text: str) -> Screen:
     clean = (text or "").replace("\x00", "").strip()
     if not clean:
-        return Screen(False, ["empty message"], "")
+        return Screen(False, ["empty message"], "", benign=True)
     if len(clean) > MAX_MESSAGE_CHARS:
-        return Screen(False, [f"message is longer than {MAX_MESSAGE_CHARS} characters"], clean[:MAX_MESSAGE_CHARS])
+        return Screen(False, [f"message is longer than {MAX_MESSAGE_CHARS} characters"], clean[:MAX_MESSAGE_CHARS],
+                      benign=True)
     reasons = [why for rx, why in _COMPILED if rx.search(clean)]
     return Screen(not reasons, reasons, clean)
 

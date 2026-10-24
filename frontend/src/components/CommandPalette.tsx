@@ -7,7 +7,9 @@ import { NAV } from '../nav'
 interface Item { id: string; group: string; label: string; hint?: string; run: () => void; icon?: React.ReactNode }
 
 export default function CommandPalette({ open, onClose, onOpenCourse }: { open: boolean; onClose: () => void; onOpenCourse: (key: string) => void }) {
-  const { go, sections } = useApp()
+  const { go, sections, profile } = useApp()
+  const program = profile?.program || 'MBA'
+  const list = useRef<HTMLDivElement>(null)
   const [q, setQ] = useState('')
   const [active, setActive] = useState(0)
   const input = useRef<HTMLInputElement>(null)
@@ -16,9 +18,9 @@ export default function CommandPalette({ open, onClose, onOpenCourse }: { open: 
 
   const offerings = useMemo(() => {
     const seen = new Map<string, (typeof sections)[number]>()
-    for (const s of sections) if (!seen.has(s.key) && s.programs.includes('MBA')) seen.set(s.key, s)
+    for (const s of sections) if (!seen.has(s.key) && s.programs.includes(program)) seen.set(s.key, s)
     return [...seen.values()]
-  }, [sections])
+  }, [sections, program])
 
   const items: Item[] = useMemo(() => {
     const needle = q.trim().toLowerCase()
@@ -37,6 +39,9 @@ export default function CommandPalette({ open, onClose, onOpenCourse }: { open: 
   }, [q, offerings, go, onOpenCourse])
 
   useEffect(() => { setActive(0) }, [q])
+  useEffect(() => {
+    list.current?.querySelector('.cmdk-item.active')?.scrollIntoView({ block: 'nearest' })
+  }, [active])
 
   if (!open) return null
   const choose = (i: Item) => { onClose(); i.run() }
@@ -56,7 +61,7 @@ export default function CommandPalette({ open, onClose, onOpenCourse }: { open: 
           <input ref={input} value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={onKey}
             placeholder="Search courses, pages, or ask Dan…" aria-label="Search" />
         </div>
-        <div className="cmdk-list">
+        <div className="cmdk-list" ref={list}>
           {items.length === 0 && <div className="empty small">No matches</div>}
           {items.map((it, i) => {
             const header = it.group !== lastGroup ? <div className="cmdk-group" key={`g-${it.group}`}>{it.group}</div> : null

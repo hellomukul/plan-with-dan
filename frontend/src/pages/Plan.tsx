@@ -30,10 +30,10 @@ const NOTE_ICON = {
 
 const units = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1))
 
-function termStatus(status: 'ok' | 'low' | 'needs_approval'): { text: string; tone: string; cls: string } {
+function termStatus(status: 'ok' | 'low' | 'needs_approval', minApplies = true): { text: string; tone: string; cls: string } {
   if (status === 'low') return { text: 'Below the 16-unit minimum', tone: 'amber', cls: 'pa-warn' }
   if (status === 'needs_approval') return { text: 'Over 24 units, needs approval', tone: 'red', cls: 'pa-bad' }
-  return { text: 'In range (16–24)', tone: 'green', cls: 'pa-ok' }
+  return { text: minApplies ? 'In range (16–24)' : 'Under the 24-unit cap', tone: 'green', cls: 'pa-ok' }
 }
 
 /** What every plan change returns: the action id lets the toast offer Undo. */
@@ -158,7 +158,7 @@ function PlanBody({ plan, term, setTerm, view, setView, busy, run, onOpen, go, c
             <span className="value">{units(springUnits)} <span className="muted small" style={{ fontFamily: 'var(--font)' }}>units</span></span>
           </div>
           {spring
-            ? <span className={`badge ${termStatus(spring.status).tone}`}>{termStatus(spring.status).text}</span>
+            ? <span className={`badge ${termStatus(spring.status, spring.min_applies).tone}`}>{termStatus(spring.status, spring.min_applies).text}</span>
             : <span className="badge gray">Nothing planned yet</span>}
         </div>
       </div>
@@ -176,12 +176,14 @@ function PlanBody({ plan, term, setTerm, view, setView, busy, run, onOpen, go, c
           <div className="pl-kv">
             <div>
               <span>Leadership</span>
-              {p.ldr.met ? <span className="pa-inline-icon pa-ok"><Check className="icon sm" />Met</span> : <span className="pa-warn">Not yet, add a Leadership course</span>}
+              {p.ldr.met ? <span className="pa-inline-icon pa-ok"><Check className="icon sm" />Met</span>
+                : p.ldr.planned ? <span>Planned, not done yet</span>
+                  : <span className="pa-warn">Not yet, add a Leadership course</span>}
             </div>
             <div>
               <span>Global Studies</span>
               {p.gsr.met ? <span className="pa-inline-icon pa-ok"><Check className="icon sm" />Met</span>
-                : p.gsr.in_plan.length ? <span>On track <span className="faint mono">({p.gsr.in_plan.length} in plan)</span></span>
+                : p.gsr.planned ? <span>Planned, not done yet <span className="faint mono">({p.gsr.in_plan.length} in plan)</span></span>
                   : <span className="pa-warn">Not yet</span>}
             </div>
             {!p.gsr.met && (
@@ -196,11 +198,11 @@ function PlanBody({ plan, term, setTerm, view, setView, busy, run, onOpen, go, c
             <div className="section-label"><span>Units by term</span></div>
             <div className="pl-terms">
               {p.terms.map((t) => {
-                const st = termStatus(t.status)
+                const st = termStatus(t.status, t.min_applies)
                 return (
                   <div key={t.term}>
                     <span style={{ minWidth: 92 }}>{termName(t.term)}</span>
-                    <span className="mono muted">{units(t.units)} units</span>
+                    <span className="mono muted">{units(t.units)} units{t.core_units ? <span className="faint"> (incl. {units(t.core_units)} core)</span> : null}</span>
                     <span className={`small ${st.cls}`}>{st.text}</span>
                   </div>
                 )
@@ -253,6 +255,9 @@ function PlanBody({ plan, term, setTerm, view, setView, busy, run, onOpen, go, c
                 <span>Your week · {termName(term)}</span>
                 <span className="mono">{units(info?.units ?? 0)} units</span>
               </div>
+              {(info?.core_units ?? 0) > 0 && (
+                <p className="faint small">Includes {units(info!.core_units)} units of your cohort's core, which SOM schedules for you{info!.core_times_known ? ' (clash checks include it)' : '. Set your cohort in your profile so clash checks can include it'}.</p>
+              )}
               {view === 'all' && hasHalves && (
                 <p className="faint small">Half-term courses (S1 and S2) never clash with each other. Switch to Session 1 or 2 to see each half on its own.</p>
               )}
@@ -448,7 +453,7 @@ function PlanRow({ item, busy, run, onOpen }: { item: PlanItem; busy: boolean; r
         )}
         <div className="row pl-row-actions">
           {item.google_link && (
-            <a className="btn sm ghost" href={item.google_link} target="_blank" rel="noreferrer" title="Add to Google Calendar">
+            <a className="btn sm ghost" href={item.google_link} target="_blank" rel="noreferrer" title="Adds a weekly event; it doesn't skip breaks or the Jan 29 make-up day. Use the Calendar page's feed for exact dates.">
               <CalendarPlus className="icon sm" />Google Calendar
             </a>
           )}

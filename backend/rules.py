@@ -7,6 +7,12 @@ follow the Bulletin and say so.
 
 from __future__ import annotations
 
+from datetime import date
+
+
+def _today_iso() -> str:
+    return date.today().isoformat()
+
 SOURCES = {
     "requirements": "https://catalog.yale.edu/management/full-time-mba/mba-degree-requirements/",
     "curriculum": "https://catalog.yale.edu/management/full-time-mba/mba-curriculum/",
@@ -66,6 +72,7 @@ GSR_OPTIONS = [
         "cost": "SOM covers double-occupancy lodging and about half of meals; you pay airfare.",
         "match": {"title_prefix": "IE:"},
         "requires_full_gsa": True,
+        "airfare": True,
     },
     {
         "key": "gnw",
@@ -74,7 +81,8 @@ GSR_OPTIONS = [
         "gsa_days": 5,
         "timing": "About a week, twice a year: Mar 8–12, 2027 and Oct 18–22, 2027.",
         "enrol": "Course auction. The subvention can cover up to two GNWs.",
-        "cost": "50% of lodging and meals at State Department per-diem rates is reimbursed.",
+        "cost": "50% of lodging and meals at State Department per-diem rates is reimbursed. Airfare isn't listed as covered; confirm with the Global Studies office.",
+        "airfare": True,
         "match": {"title_prefix": "GNW"},
     },
     {
@@ -85,26 +93,29 @@ GSR_OPTIONS = [
         "timing": "Online, synchronous, with a team from other Global Network schools.",
         "enrol": "Auction, then the instructor selects. A place is not guaranteed.",
         "cost": "No travel cost.",
-        "match": {"title_contains": "global network"},
+        "match": {"title_prefix": "GNAM:", "title_contains": "global network"},
     },
     {
         "key": "gse_india",
         "name": "Global Social Entrepreneurship: India (MGT 529)",
-        "units": 2,
+        "units": 6,
         "gsa_days": 10,
-        "timing": "Fall-2 to Spring-1, mostly second-years. Two weeks of fieldwork in India in January.",
-        "enrol": "Separate application (2026 window was Jun 1–12).",
+        "timing": "Fall-2 to Spring-1 (2 + 4 units), mostly second-years. Two weeks of fieldwork in India in January.",
+        "enrol": "Separate application (the 2026 window was Jun 1–12, so this year's cohort is already set).",
         "cost": "SOM covers lodging and about half of meals; you pay airfare.",
+        "airfare": True,
+        "apply_by": "2026-06-12",
         "match": {"number": "MGT 529"},
     },
     {
         "key": "gse_spring",
         "name": "Spring Global Social Entrepreneurship (MGT 865)",
-        "units": None,
+        "units": 6,
         "gsa_days": 5,
-        "timing": "Spring-1 to Spring-2, mostly first-years. One week of fieldwork in March.",
+        "timing": "Spring-1 to Spring-2, mostly first-years. One week of fieldwork in March (Brazil in Spring 2027).",
         "enrol": "Application. Process and deadline are on the internal site.",
         "cost": "SOM covers lodging and about half of meals; you pay airfare.",
+        "airfare": True,
         "match": {"number": "MGT 865"},
     },
     {
@@ -114,7 +125,8 @@ GSR_OPTIONS = [
         "gsa_days": 10,
         "timing": "One term (fall or spring) of the second year.",
         "enrol": "Apply through Academic Affairs & Student Life. Partners: LSE, LBS, HEC Paris, IESE, NUS, Tsinghua SEM; petition for other Global Network schools.",
-        "cost": "50% of lodging and meals at per-diem rates is reimbursed.",
+        "cost": "50% of lodging and meals at per-diem rates is reimbursed. Airfare isn't listed as covered; confirm with the Global Studies office.",
+        "airfare": True,
         "match": None,
     },
 ]
@@ -167,6 +179,18 @@ CALENDAR = [
     ("2027-05-24", "Commencement", "milestone"),
 ]
 
+# Calendar entries that span several days: start date -> last day.
+CALENDAR_ENDS = {
+    "2026-11-23": "2026-11-27",
+    "2026-12-16": "2026-12-22",
+    "2027-03-03": "2027-03-05",
+    "2027-03-08": "2027-03-19",
+    "2027-05-05": "2027-05-11",
+}
+
+# Make-up days: a weekday that runs another day's schedule (date -> day code it follows).
+MAKEUP_DAYS = {"2027-01-29": "M"}
+
 # Days with no classes, used to add EXDATEs to calendar feeds.
 NO_CLASS_DATES = [
     "2026-11-23", "2026-11-24", "2026-11-25", "2026-11-26", "2026-11-27",
@@ -176,17 +200,21 @@ NO_CLASS_DATES = [
 ]
 
 
-def gsr_courses(catalog, term: str | None = None) -> dict[str, list[str]]:
-    """Offering keys in the catalog for each Global Studies option."""
+def gsr_courses(catalog, term: str | None = None, include_past: bool = False) -> dict[str, list[str]]:
+    """Offering keys in the catalog for each Global Studies option (current and upcoming only)."""
     out: dict[str, list[str]] = {o["key"]: [] for o in GSR_OPTIONS}
     for off in catalog.offerings.values():
         s = off.lead
         if term and s.term != term:
             continue
+        if not include_past and not off.sections_for(None):  # hidden or already over
+            continue
         for opt in GSR_OPTIONS:
             m = opt["match"]
             if not m:
                 continue
+            if opt.get("apply_by") and not include_past and opt["apply_by"] < _today_iso():
+                continue  # application closed: not something a student can still sign up for
             hit = (
                 ("title_prefix" in m and s.title.upper().startswith(m["title_prefix"].upper()))
                 or ("title_contains" in m and m["title_contains"] in s.title.lower())

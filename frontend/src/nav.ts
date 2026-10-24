@@ -13,7 +13,7 @@ export const NAV: NavItem[] = [
   { route: 'chat', label: 'Ask Dan', icon: MessageCircle, mobile: 'Ask', keys: 'G A' },
   { route: 'explore', label: 'Catalog', icon: Search, keys: 'G C', section: 'Plan' },
   { route: 'plan', label: 'My plan', icon: Compass, mobile: 'Plan', keys: 'G P', section: 'Plan' },
-  { route: 'calendar', label: 'Calendar', icon: CalendarDays, mobile: 'Calendar', keys: 'G K', section: 'Plan' },
+  { route: 'calendar', label: 'Calendar', icon: CalendarDays, keys: 'G K', section: 'Plan' },
   { route: 'global', label: 'Global studies', icon: Globe, keys: 'G G', section: 'Plan' },
   { route: 'bids', label: 'Bid coach', icon: Target, keys: 'G B', section: 'Plan' },
   { route: 'usage', label: 'Cost and safety', icon: ChartNoAxesColumn, keys: 'G S', section: 'Trust' },

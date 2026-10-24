@@ -15,7 +15,6 @@ const OPTION_ICON: Record<string, LucideIcon> = {
   ie: Plane, gnw: Globe, snoc: Monitor, gse_india: Compass, gse_spring: Sprout, exchange: GraduationCap,
 }
 /** Options where SOM covers lodging/meals but the student books their own flights (docs/research.md §2). */
-const PAY_AIRFARE = new Set(['ie', 'gse_india', 'gse_spring'])
 const STATUSES: { value: GlobalChoice['status'] | ''; label: string }[] = [
   { value: '', label: 'Not tracking' },
   { value: 'considering', label: 'Considering' },
@@ -28,7 +27,7 @@ type FitKey = 'travel' | 'fullTerm' | 'tight'
 const FIT_QUESTIONS: { key: FitKey; label: string }[] = [
   { key: 'travel', label: 'I want to travel' },
   { key: 'fullTerm', label: 'I want a full term abroad' },
-  { key: 'tight', label: 'My budget is tight' },
+  { key: 'tight', label: 'Keep my costs low' },
 ]
 
 /** Pure client logic: which options to spotlight for the toggles, with a one-line why. Uses only facts from rules.py. */
@@ -296,8 +295,9 @@ export default function Global() {
                   <div className="row" style={{ gap: 6 }}>
                     <span className="badge gray">{opt.units != null ? `${opt.units} units` : 'Units vary'}</span>
                     <span className="badge gray">{opt.gsa_days ? `~${opt.gsa_days} GSA days` : '0 GSA days'}</span>
-                    {PAY_AIRFARE.has(opt.key) && <span className="badge amber"><Plane className="icon sm" />You pay airfare</span>}
+                    {opt.airfare && <span className="badge amber"><Plane className="icon sm" />You pay airfare</span>}
                     {opt.requires_full_gsa && <span className="badge amber">Needs all 10 days</span>}
+                    {opt.apply_by && opt.apply_by < new Date().toISOString().slice(0, 10) && <span className="badge gray">Applications closed {opt.apply_by}</span>}
                   </div>
                 </div>
               </div>
@@ -305,7 +305,7 @@ export default function Global() {
 
               <div className={`pb-check ${fitsTone}`}>
                 <CheckIcon className="icon sm" aria-hidden="true" />
-                <span><span className="pb-sr">{fitsTone === 'ok' ? 'Fits your budget: ' : fitsTone === 'warn' ? 'Partly fits: ' : 'Does not fit: '}</span>{bc.reason}</span>
+                <span><span className="pb-sr">{fitsTone === 'ok' ? '' : fitsTone === 'warn' ? 'Partly fits: ' : 'Not available: '}</span>{bc.reason}</span>
               </div>
 
               <div className="pb-opt-body">

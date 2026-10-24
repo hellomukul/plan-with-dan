@@ -41,22 +41,26 @@ export default function Bids() {
 
 /* ------------------------------------------------------------------ A. split my points */
 function SplitSection() {
-  const { plan, go, toast, celebrate } = useApp()
+  const { plan, profile, go, toast, celebrate } = useApp()
   const celebrated = useRef(false)
   const [budget, setBudget] = useState('500')
+  const budgetTouched = useRef(false)
+  // 2015 YDN figures: 300 points for first-years, 500 for second-years. A starting point, not a rule.
+  useEffect(() => { if (!budgetTouched.current && profile?.year === '1') setBudget('300') }, [profile?.year])
   const [prio, setPrio] = useState<Record<string, number>>({})
-  const [result, setResult] = useState<{ split: BidSplit[]; note: string } | null>(null)
+  const [result, setResult] = useState<{ split: BidSplit[]; note: string; warnings?: string[] } | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
   const courses = useMemo(() => {
     const seen = new Set<string>()
-    const out: { number: string; title: string; term: string; seats: number | null }[] = []
+    const out: { key: string; number: string; title: string; term: string; seats: number | null }[] = []
     for (const it of plan?.items ?? []) {
       const s = it.section
-      if (s.enrollment.toLowerCase() !== 'bid' || it.status === 'completed' || seen.has(s.number)) continue
-      seen.add(s.number)
-      out.push({ number: s.number, title: s.title, term: s.term_name, seats: s.limit })
+      // Only the spring auction is ahead; one row per course offering (two sections are one bid).
+      if (s.enrollment.toLowerCase() !== 'bid' || it.status === 'completed' || s.term !== '202701' || seen.has(s.key)) continue
+      seen.add(s.key)
+      out.push({ key: s.key, number: s.number, title: s.title, term: s.term_name, seats: s.limit })
     }
     return out
   }, [plan])
@@ -70,7 +74,7 @@ function SplitSection() {
     setError('')
     setBusy(true)
     try {
-      const priorities = Object.fromEntries(courses.map((c) => [c.number, prio[c.number] ?? 2]))
+      const priorities = Object.fromEntries(courses.map((c) => [c.key, prio[c.key] ?? 2]))
       setResult(await api.suggestBids(budgetNum, priorities))
       // The one designed delight moment: Dan cheers the first finished bid plan of this visit.
       if (!celebrated.current) {
@@ -111,7 +115,7 @@ function SplitSection() {
                 step={1}
                 inputMode="numeric"
                 value={budget}
-                onChange={(e) => setBudget(e.target.value)}
+                onChange={(e) => { budgetTouched.current = true; setBudget(e.target.value) }}
                 aria-invalid={!budgetOk}
                 aria-describedby="budget-help"
               />
@@ -124,9 +128,9 @@ function SplitSection() {
 
           <div className="pb-prios">
             {courses.map((c) => {
-              const current = prio[c.number] ?? 2
+              const current = prio[c.key] ?? 2
               return (
-                <div key={c.number} className="pb-prio">
+                <div key={c.key} className="pb-prio">
                   <div style={{ minWidth: 0, flex: '1 1 200px' }}>
                     <span className="course-num">{c.number}</span> <b>{c.title}</b>
                     <div className="small muted">{c.term}{c.seats ? ` · ${c.seats} seats` : ''}</div>
@@ -139,7 +143,7 @@ function SplitSection() {
                         role="radio"
                         aria-checked={current === p.value}
                         className={current === p.value ? 'on' : ''}
-                        onClick={() => setPrio((m) => ({ ...m, [c.number]: p.value }))}
+                        onClick={() => setPrio((m) => ({ ...m, [c.key]: p.value }))}
                       >{p.label}</button>
                     ))}
                   </div>
@@ -159,6 +163,7 @@ function SplitSection() {
 
       {result && (
         <div className="mt-lg stack" aria-live="polite">
+          {(result.warnings ?? []).map((w) => <div key={w} className="pb-check warn small" role="alert">{w}</div>)}
           {anySample && <SampleBanner>SAMPLE data feeds some "median winning bid" numbers below: illustrative only, not real SOM results.</SampleBanner>}
           <div className="table-wrap">
             <table className="table">
@@ -176,7 +181,7 @@ function SplitSection() {
                 {result.split.map((r) => {
                   const p = PRIORITIES.find((x) => x.value === r.priority)
                   return (
-                    <tr key={r.number}>
+                    <tr key={r.key ?? r.number}>
                       <td>
                         <span className="course-num">{r.number}</span>
                         <div className="small">{r.title}</div>
@@ -302,10 +307,16 @@ function HistorySection({ courses, error, onRetry }: { courses: BidCourse[] | nu
                       </td>
                       <td className="pb-right pb-num">{c.seats ?? '–'}</td>
                       <td className="pb-right pb-num">{c.reports}</td>
-                      <td className="pb-right pb-num"><span className="pb-won">{c.won ?? 0}</span> / <span className="pb-lost">{c.lost ?? 0}</span></td>
-                      <td className="pb-right pb-num">{pts(c.lowest_winning_bid)}</td>
-                      <td className="pb-right pb-num" style={{ color: 'var(--text)', fontWeight: 500 }}>{pts(c.median_winning_bid)}</td>
-                      <td className="pb-right pb-num">{pts(c.highest_losing_bid)}</td>
+                      {c.too_few ? (
+                        <td colSpan={4} className="small faint">Hidden until 3 students report, so no one's bid can be singled out.</td>
+                      ) : (
+                        <>
+                          <td className="pb-right pb-num"><span className="pb-won">{c.won ?? 0}</span> / <span className="pb-lost">{c.lost ?? 0}</span></td>
+                          <td className="pb-right pb-num">{pts(c.lowest_winning_bid)}</td>
+                          <td className="pb-right pb-num" style={{ color: 'var(--text)', fontWeight: 500 }}>{pts(c.median_winning_bid)}</td>
+                          <td className="pb-right pb-num">{pts(c.highest_losing_bid)}</td>
+                        </>
+                      )}
                       <td className="small muted">{(c.terms ?? []).map((t) => TERM_NAMES[t] ?? t).join(', ') || '–'}</td>
                     </tr>
                   ))}

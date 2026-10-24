@@ -8,6 +8,7 @@ then open http://localhost:8000
 from __future__ import annotations
 
 import json
+import os
 import secrets
 import sys
 from contextlib import asynccontextmanager
@@ -33,17 +34,18 @@ from crew.desk import apply_states, brief as desk_brief, scan as desk_scan, set_
 from crew.recommender import recommend  # noqa: E402
 from fit import FitContext, best_fits  # noqa: E402
 from db import (  # noqa: E402
-    USER_TABLES, ActionLog, AuditEvent, BidReport, ChatMessage, FitDismissal, GlobalChoice, PlanItem, Profile,
-    RecommendationRun, UsageLog, User, get_db, init_db, utcnow,
+    USER_TABLES, ActionLog, AuditEvent, BidReport, ChatMessage, DeskBrief, DeskState, FitDismissal, GlobalChoice,
+    PlanItem, Profile, RecommendationRun, UsageLog, User, get_db, init_db, log_audit, utcnow,
 )
 from ics import build_calendar, google_template_link, meeting_dates  # noqa: E402
 from planning import (  # noqa: E402
-    PlanRow, bid_stats, conflicts, gsa_check, requirement_progress, suggest_bids, units_by_term, week_review,
+    PlanRow, bid_stats, conflicts, core_load, effective_gsa_used, gsa_check, requirement_progress, suggest_bids,
+    units_by_term, week_review,
 )
 from rules import (  # noqa: E402
-    CALENDAR, CORE_COURSES, DEGREE, GLOBAL_WEEKS, GSA_DAYS, GSR_OPTIONS, LDR, SOURCES, gsr_courses,
+    CALENDAR, CALENDAR_ENDS, CORE_COURSES, DEGREE, GLOBAL_WEEKS, GSA_DAYS, GSR_OPTIONS, LDR, SOURCES, gsr_courses,
 )
-from safety import spent_today  # noqa: E402
+from safety import screen_input, spent_today  # noqa: E402
 from seed import seed_sample_bids  # noqa: E402
 
 @asynccontextmanager
@@ -51,6 +53,7 @@ async def lifespan(_app: FastAPI):
     init_db()
     get_catalog()
     seed_sample_bids()
+    auth.purge_expired_sessions()
     yield
 
 
@@ -64,7 +67,8 @@ async def _rate_limited(_request: Request, _exc: RateLimitExceeded):
 
 
 # The Vite dev server (npm run dev) proxies /api from another port; production is same-origin.
-DEV_ORIGINS = {"http://127.0.0.1:5173", "http://localhost:5173"}
+DEV_ORIGINS = {"http://127.0.0.1:5173", "http://localhost:5173"}  # only honoured when the app itself runs on localhost
+TRUST_PROXY = os.getenv("TRUST_PROXY", "").lower() in ("1", "true", "yes")  # set on Render, which adds X-Forwarded-Host
 CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
        "font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; "
        "frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'")
@@ -75,8 +79,9 @@ async def guard_requests(request: Request, call_next):
     """CSRF defence for cookie auth: unsafe API calls must come from our own origin."""
     if request.method not in ("GET", "HEAD", "OPTIONS") and request.url.path.startswith("/api/"):
         origin = request.headers.get("origin")
-        host = request.headers.get("x-forwarded-host") or request.headers.get("host", "")
-        if origin and origin.split("://", 1)[-1] != host and origin not in DEV_ORIGINS:
+        host = (request.headers.get("x-forwarded-host") if TRUST_PROXY else None) or request.headers.get("host", "")
+        local = host.split(":")[0] in ("localhost", "127.0.0.1")
+        if origin and origin.split("://", 1)[-1] != host and not (local and origin in DEV_ORIGINS):
             return JSONResponse({"detail": "Cross-site request blocked."}, status_code=403)
     response = await call_next(request)
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
@@ -118,8 +123,14 @@ def catalog_all():
 
 # ------------------------------------------------------------------ profile
 
+class PrefsIn(BaseModel):
+    no_before: Optional[int] = Field(None, ge=0, le=24 * 60)
+    fridays_free: bool = False
+    avoid_days: list[Literal["M", "T", "W", "Th", "F"]] = Field(default_factory=list, max_length=5)
+
+
 class ProfileIn(BaseModel):
-    program: str = "MBA"
+    program: Literal["MBA", "EMBA", "MAM", "MMS"] = "MBA"
     year: str = ""
     cohort: str = ""
     class_year: str = ""
@@ -128,7 +139,7 @@ class ProfileIn(BaseModel):
     goal_short: str = Field("", max_length=400)
     goal_long: str = Field("", max_length=400)
     completed: list[str] = Field(default_factory=list, max_length=60)
-    prefs: dict = Field(default_factory=dict)
+    prefs: PrefsIn = Field(default_factory=PrefsIn)
     gsa_days_used: int = Field(0, ge=0, le=10)
     onboarded: bool = True
 
@@ -141,13 +152,17 @@ def get_profile(user: User = Depends(current_user), db: Session = Depends(get_db
 
 @app.put("/api/profile")
 def put_profile(body: ProfileIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    for label, text in (("background", body.background), ("short-term goal", body.goal_short), ("long-term goal", body.goal_long)):
+        screen = screen_input(text) if text.strip() else None
+        if screen is not None and not screen.allowed:
+            log_audit(db, "profile_text_blocked", user_id=user.id, field=label, reasons=screen.reasons)
+            raise HTTPException(422, f"Your {label} reads like an instruction to the AI. Describe it in plain words instead.")
     p = db.get(Profile, user.id) or Profile(user_id=user.id)
-    p.program, p.year, p.cohort, p.class_year = body.program[:20], body.year[:2], body.cohort[:10], body.class_year[:6]
+    p.program, p.year, p.cohort, p.class_year = body.program, body.year[:2], body.cohort[:10], body.class_year[:6]
     p.background, p.goal_short, p.goal_long = body.background, body.goal_short, body.goal_long
     p.interests = json.dumps([i[:40] for i in body.interests])
-    p.completed = json.dumps([c.strip().upper()[:12] for c in body.completed])
-    allowed = {"no_before", "fridays_free", "avoid_days", "max_units", "workload"}
-    p.prefs = json.dumps({k: v for k, v in body.prefs.items() if k in allowed})
+    p.completed = json.dumps([" ".join(c.split()).upper()[:12] for c in body.completed if c.strip()])
+    p.prefs = json.dumps(body.prefs.model_dump(exclude_defaults=True))
     p.gsa_days_used, p.onboarded, p.updated_at = body.gsa_days_used, body.onboarded, utcnow()
     db.add(p)
     db.commit()
@@ -164,7 +179,8 @@ class PlanIn(BaseModel):
 
 class PlanPatch(BaseModel):
     status: Optional[Literal["planned", "bidding", "enrolled", "completed"]] = None
-    bid_points: Optional[int] = Field(None, ge=0, le=100000)
+    bid_points: Optional[int] = Field(None, ge=0, le=5000)
+    clear_bid: bool = False
     course_id: Optional[str] = None  # switch section
 
 
@@ -184,6 +200,8 @@ def _globals(db: Session, user_id: int) -> list[dict]:
 def get_plan(user: User = Depends(current_user), db: Session = Depends(get_db)):
     cat = get_catalog()
     items, rows = _plan_rows(db, user.id)
+    profile = (db.get(Profile, user.id) or Profile(user_id=user.id)).as_dict()
+    program = profile.get("program") or "MBA"
     out_items = []
     for i in items:
         sec = cat.by_id.get(i.course_id)
@@ -192,24 +210,38 @@ def get_plan(user: User = Depends(current_user), db: Session = Depends(get_db)):
         out_items.append({
             "id": i.id, "status": i.status, "bid_points": i.bid_points, "added_by": i.added_by,
             "section": sec.to_api(),
-            "other_sections": [s.to_api() for s in cat.offerings[sec.offering_key].sections if s.id != sec.id],
+            "other_sections": [s.to_api() for s in cat.offerings[sec.offering_key].sections_for(program)
+                               if s.id != sec.id],
             "google_link": google_template_link(sec),
         })
     by_term: dict[str, dict] = {}
-    for term in sorted({r.section.term for r in rows}):
+    terms = {r.section.term for r in rows} | ({"202701"} if profile.get("year") == "1" else set())
+    for term in sorted(terms):
         secs = [r.section for r in rows if r.section.term == term]
+        core = core_load(profile, term, cat)
         by_term[term] = {
             "name": TERM_NAMES.get(term, term),
-            "units": sum(s.units for s in secs),
-            "conflicts": conflicts(secs),
-            "review": week_review(secs),
+            "units": sum(s.units for s in secs) + core["units"],
+            "elective_units": sum(s.units for s in secs),
+            "core_units": core["units"],
+            "core_times_known": core["times_known"],
+            "conflicts": conflicts(secs + core["sections"]),
+            "review": week_review(secs + core["sections"]),
         }
-    profile = (db.get(Profile, user.id) or Profile(user_id=user.id)).as_dict()
     return {
         "items": out_items,
         "terms": by_term,
         "progress": requirement_progress(profile, rows, cat, _globals(db, user.id)),
     }
+
+
+def _check_section_allowed(db: Session, user_id: int, sec, status: str = "planned") -> None:
+    """Students can only plan sections open to their program that haven't already ended."""
+    program = (db.get(Profile, user_id) or Profile(user_id=user_id)).program or "MBA"
+    if not sec.open_to(program):
+        raise HTTPException(400, f"Section {sec.section} of {sec.number} is only open to {', '.join(sec.programs)} students.")
+    if sec.ended() and status != "completed":
+        raise HTTPException(400, f"{sec.number} section {sec.section} has already ended. Mark it completed instead.")
 
 
 def _log_action(db: Session, user_id: int, action: str, summary: str, payload: dict, by: str = "student") -> int:
@@ -226,10 +258,13 @@ def add_plan(body: PlanIn, user: User = Depends(current_user), db: Session = Dep
     sec = cat.by_id.get(body.course_id)
     if not sec:
         raise HTTPException(404, "That course isn't in the catalog.")
+    _check_section_allowed(db, user.id, sec, body.status)
     existing = db.exec(select(PlanItem).where(PlanItem.user_id == user.id)).all()
     for item in existing:
         other = cat.by_id.get(item.course_id)
         if other and other.offering_key == sec.offering_key:
+            if other.id == sec.id:
+                return {"ok": True, "id": item.id, "unchanged": True}
             old_id = item.course_id
             item.course_id = sec.id  # same course, different section: switch
             db.add(item)
@@ -255,15 +290,20 @@ def patch_plan(item_id: int, body: PlanPatch, user: User = Depends(current_user)
     if not item or item.user_id != user.id:
         raise HTTPException(404, "Not in your plan.")
     cat = get_catalog()
+    if body.status is None and body.bid_points is None and not body.course_id and not body.clear_bid:
+        raise HTTPException(400, "Nothing to change.")
     before = {"status": item.status, "bid_points": item.bid_points, "course_id": item.course_id}
     if body.status:
         item.status = body.status
     if body.bid_points is not None:
         item.bid_points = body.bid_points
+    if body.clear_bid:
+        item.bid_points = None
     if body.course_id:
         new, old = cat.by_id.get(body.course_id), cat.by_id.get(item.course_id)
         if not new or not old or new.offering_key != old.offering_key:
             raise HTTPException(400, "You can only switch to another section of the same course.")
+        _check_section_allowed(db, user.id, new, item.status)
         item.course_id = new.id
     db.add(item)
     db.commit()
@@ -304,10 +344,20 @@ def undo_action(action_id: int, user: User = Depends(current_user), db: Session 
     data = json.loads(a.payload or "{}")
     if a.action == "add":
         item = db.get(PlanItem, data.get("item_id"))
-        if item and item.user_id == user.id:
-            db.delete(item)
+        if not item or item.user_id != user.id:
+            return {"ok": False, "detail": "That course is no longer in your plan, so there's nothing to undo."}
+        db.delete(item)
     elif a.action == "remove":
-        db.add(PlanItem(user_id=user.id, course_id=data["course_id"], status=data.get("status", "planned"),
+        cat = get_catalog()
+        sec = cat.by_id.get(data.get("course_id", ""))
+        current = db.exec(select(PlanItem).where(PlanItem.user_id == user.id)).all()
+        if not sec:
+            raise HTTPException(404, "That course is no longer in the catalog.")
+        if any((cat.by_id.get(i.course_id) or sec).offering_key == sec.offering_key for i in current if i.course_id in cat.by_id):
+            return {"ok": False, "detail": f"{sec.number} is already back in your plan."}
+        if len(current) >= 60:
+            raise HTTPException(400, "Your plan is full (60 courses).")
+        db.add(PlanItem(user_id=user.id, course_id=sec.id, status=data.get("status", "planned"),
                         bid_points=data.get("bid_points"), added_by=data.get("added_by", "student")))
     elif a.action in ("switch", "update"):
         item = db.get(PlanItem, data.get("item_id"))
@@ -349,7 +399,7 @@ def requirements(user: User = Depends(current_user), db: Session = Depends(get_d
     cat = get_catalog()
     _, rows = _plan_rows(db, user.id)
     profile = (db.get(Profile, user.id) or Profile(user_id=user.id)).as_dict()
-    used = profile.get("gsa_days_used", 0)
+    used = effective_gsa_used(profile, _globals(db, user.id))
     matches = gsr_courses(cat)
     options = []
     for opt in GSR_OPTIONS:
@@ -357,12 +407,13 @@ def requirements(user: User = Depends(current_user), db: Session = Depends(get_d
         for key in matches.get(opt["key"], []):
             off = cat.offering(key)
             courses.append({"key": key, "number": off.lead.number, "title": off.lead.title,
-                            "term_name": TERM_NAMES.get(off.lead.term), "section_ids": [s.id for s in off.sections],
+                            "term_name": TERM_NAMES.get(off.lead.term),
+                            "section_ids": [s.id for s in off.sections_for(profile.get("program") or "MBA")],
                             "seats": off.lead.limit, "time": off.lead.time_label})
         options.append({**{k: v for k, v in opt.items() if k != "match"}, "courses": courses,
                         "budget_check": gsa_check(opt["key"], used)})
     ldr_courses = sorted({(o.lead.number, o.lead.title, TERM_NAMES.get(o.lead.term, "")) for o in cat.offerings.values()
-                          if o.lead.counts_for_ldr and "MBA" in o.lead.programs})
+                          if o.lead.counts_for_ldr and o.sections_for(profile.get("program") or "MBA")})
     return {
         "degree": DEGREE,
         "core": [{"title": t, "units": u} for t, u in CORE_COURSES],
@@ -417,8 +468,9 @@ def calendar_events(user: User = Depends(current_user), db: Session = Depends(ge
             continue
         for d in meeting_dates(s):
             classes.append({"date": d.isoformat(), "start_min": s.meeting.start, "end_min": s.meeting.end,
+                            "status": r.status,
                             "title": f"{s.number} {s.title}", "room": s.room, "course_id": s.id})
-    deadlines = [{"date": d, "title": label, "kind": kind} for d, label, kind in CALENDAR]
+    deadlines = [{"date": d, "end": CALENDAR_ENDS.get(d, d), "title": label, "kind": kind} for d, label, kind in CALENDAR]
     return {"classes": classes, "deadlines": deadlines, "today": date.today().isoformat()}
 
 
@@ -470,10 +522,10 @@ def plan_download(user: User = Depends(current_user), db: Session = Depends(get_
 
 class BidIn(BaseModel):
     course_number: str = Field(max_length=12)
-    term_code: str = Field("", max_length=8)
-    points_bid: int = Field(ge=0, le=100000)
+    term_code: Literal["202603", "202701"]
+    points_bid: int = Field(ge=0, le=2000)
     got_seat: bool
-    clearing_points: Optional[int] = Field(None, ge=0, le=100000)
+    clearing_points: Optional[int] = Field(None, ge=0, le=2000)
 
 
 @app.get("/api/bids")
@@ -503,13 +555,18 @@ def bids(course: str = "", user: User = Depends(current_user), db: Session = Dep
 @app.post("/api/bids")
 @limiter.limit("20/minute")
 def report_bid(request: Request, body: BidIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
-    number = body.course_number.strip().upper()
-    offs = get_catalog().offering_for_number(number)
+    number = " ".join(body.course_number.split()).upper()
+    offs = get_catalog().offering_for_number(number, body.term_code)
     if not offs:
-        raise HTTPException(404, f"{number} isn't in the SOM catalog.")
-    db.add(BidReport(user_id=user.id, course_number=number, course_title=offs[0].lead.title, term_code=body.term_code,
-                     points_bid=body.points_bid, got_seat=body.got_seat, clearing_points=body.clearing_points,
-                     source="student"))
+        raise HTTPException(404, f"{number} isn't in the SOM catalog for that term.")
+    # One report per student, course and term: a new report replaces the old one (no stuffing the stats).
+    row = db.exec(select(BidReport).where(BidReport.user_id == user.id, BidReport.course_number == number,
+                                          BidReport.term_code == body.term_code)).first()
+    row = row or BidReport(user_id=user.id, course_number=number, term_code=body.term_code, points_bid=0,
+                           got_seat=False, source="student")
+    row.course_title, row.points_bid, row.got_seat = offs[0].lead.title, body.points_bid, body.got_seat
+    row.clearing_points = body.clearing_points
+    db.add(row)
     db.commit()
     return {"ok": True}
 
@@ -522,19 +579,25 @@ class SuggestIn(BaseModel):
 @app.post("/api/bids/suggest")
 def bid_suggest(body: SuggestIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
     _, rows = _plan_rows(db, user.id)
-    seen, items = set(), []
+    seen, items, bid_secs = set(), [], []
     for r in rows:
         s = r.section
-        if s.enrollment.lower() != "bid" or s.number in seen or r.status == "completed":
+        if (s.enrollment.lower() != "bid" or s.offering_key in seen or r.status == "completed"
+                or s.term != "202701" or s.ended()):
             continue
-        seen.add(s.number)
+        seen.add(s.offering_key)
+        bid_secs.append(s)
         reports = [x.model_dump() for x in db.exec(select(BidReport).where(BidReport.course_number == s.number)).all()]
         stats = bid_stats(reports)
-        items.append({"number": s.number, "title": s.title, "term_name": TERM_NAMES.get(s.term),
-                      "priority": max(1, min(3, body.priorities.get(s.number, 2))), "seats": s.limit,
+        items.append({"number": s.number, "key": s.offering_key, "title": s.title, "term_name": TERM_NAMES.get(s.term),
+                      "priority": max(1, min(3, body.priorities.get(s.offering_key, body.priorities.get(s.number, 2)))),
+                      "seats": s.limit,
                       "median_winning_bid": stats.get("median_winning_bid"), "sample_only": stats.get("sample_only", False)})
-    return {"split": suggest_bids(items, body.budget),
-            "note": "Heuristic only: weights your priority, seat limits and any reported winning bids. SOM doesn't publish clearing prices."}
+    clash_warnings = [f"{c['a']} and {c['b']} clash ({c['day']} {c['window']}); you can only keep one, so don't spend on both."
+                      for c in conflicts(bid_secs)]
+    return {"split": suggest_bids(items, body.budget), "warnings": clash_warnings,
+            "note": "Heuristic only: weights your priority, seat limits and real reported winning bids "
+                    "(SAMPLE data is ignored). SOM doesn't publish clearing prices."}
 
 
 # ------------------------------------------------------------------ AI: chat + recommend
@@ -696,8 +759,11 @@ def bestfits(term: Literal["202603", "202701"] = "202701", user: User = Depends(
     for r in db.exec(select(BidReport)).all():
         reports.setdefault(r.course_number, []).append(r.model_dump())
     dismissed = [d.course_key for d in db.exec(select(FitDismissal).where(FitDismissal.user_id == user.id)).all()]
+    core = core_load(profile, term, cat)
     ctx = FitContext(catalog=cat, profile=profile, plan=rows, dismissed=dismissed, bid_reports=reports,
-                     ldr_met=prog["ldr"]["met"], gsr_met=prog["gsr"]["met"] or bool(prog["gsr"]["in_plan"]))
+                     ldr_met=prog["ldr"]["met"] or prog["ldr"]["planned"] or not prog["modelled"],
+                     gsr_met=prog["gsr"]["met"] or prog["gsr"]["planned"] or not prog["modelled"],
+                     gsa_used=prog["gsa_used"], core_units=core["units"], core_sections=core["sections"])
     return best_fits(ctx, term)
 
 
@@ -733,7 +799,8 @@ def _rows_for(db: Session, model, user_id: int) -> list[dict]:
 @app.get("/api/account/export")
 def export_account(user: User = Depends(current_user), db: Session = Depends(get_db)):
     data = {"user": {"email": user.email, "name": user.name, "created_at": user.created_at.isoformat()}}
-    for model in (Profile, PlanItem, GlobalChoice, ChatMessage, RecommendationRun, FitDismissal, ActionLog, AuditEvent):
+    for model in (Profile, PlanItem, GlobalChoice, ChatMessage, RecommendationRun, FitDismissal, ActionLog, AuditEvent,
+                  DeskState, DeskBrief):
         data[model.__name__] = _rows_for(db, model, user.id)
     data["BidReport"] = _rows_for(db, BidReport, user.id)
     data["UsageLog"] = _rows_for(db, UsageLog, user.id)

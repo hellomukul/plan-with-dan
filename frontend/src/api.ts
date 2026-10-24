@@ -72,15 +72,18 @@ export interface Progress {
   core: { target: number; counted: number }
   electives: { target: number; planned: number }
   planned_total: number
-  terms: { term: string; units: number; status: 'ok' | 'low' | 'needs_approval' }[]
-  ldr: { met: boolean }
-  gsr: { met: boolean; in_plan: string[]; choices: GlobalChoice[] }
+  terms: { term: string; units: number; core_units: number; status: 'ok' | 'low' | 'needs_approval'; min_applies: boolean }[]
+  ldr: { met: boolean; planned: boolean }
+  gsr: { met: boolean; planned: boolean; in_plan: string[]; choices: GlobalChoice[] }
+  gsa_used: number
+  modelled: boolean
+  program: string
   notes: string[]
 }
 
 export interface PlanResponse {
   items: PlanItem[]
-  terms: Record<string, { name: string; units: number; conflicts: Clash[]; review: { days_on_campus: string[]; notes: Note[] } }>
+  terms: Record<string, { name: string; units: number; elective_units: number; core_units: number; core_times_known: boolean; conflicts: Clash[]; review: { days_on_campus: string[]; notes: Note[] } }>
   progress: Progress
 }
 
@@ -95,6 +98,8 @@ export interface GsrOption {
   enrol: string
   cost: string
   requires_full_gsa?: boolean
+  airfare?: boolean
+  apply_by?: string
   courses: { key: string; number: string; title: string; term_name: string; section_ids: string[]; seats: number | null; time: string }[]
   budget_check: { ok: boolean; days_left?: number; reason: string }
 }
@@ -177,7 +182,7 @@ export interface RecResult {
   picks: RecPick[]
   dropped: { key?: string; dropped_because: string }[]
   shortlist_size: number
-  schedule?: { units_added: number; units_term_total: number; notes: Note[]; days_on_campus: string[]; has_ldr: boolean; has_gsr: boolean }
+  schedule?: { units_added: number; units_term_total: number; core_units?: number; notes: Note[]; days_on_campus: string[]; has_ldr: boolean; has_gsr: boolean }
   critique?: { verdict: string; watch_outs: string[] }
   trace: TraceStep[]
   usage: Usage
@@ -189,6 +194,7 @@ export interface BidCourse {
   seats: number | null
   reports: number
   sample_only?: boolean
+  too_few?: boolean
   won?: number
   lost?: number
   lowest_winning_bid?: number | null
@@ -198,12 +204,12 @@ export interface BidCourse {
   terms?: string[]
 }
 
-export interface BidSplit { number: string; title: string; term_name: string; priority: number; seats: number | null; median_winning_bid: number | null; sample_only: boolean; suggested_points: number; share: number }
+export interface BidSplit { number: string; key?: string; title: string; term_name: string; priority: number; seats: number | null; median_winning_bid: number | null; sample_only: boolean; suggested_points: number; share: number }
 
 export interface CalendarLinks { feed_url: string; webcal_url: string; google_subscribe: string; outlook_subscribe: string; is_local: boolean }
 export interface CalendarEvents {
-  classes: { date: string; start_min: number; end_min: number; title: string; room: string; course_id: string }[]
-  deadlines: { date: string; title: string; kind: string }[]
+  classes: { date: string; start_min: number; end_min: number; title: string; room: string; course_id: string; status?: string }[]
+  deadlines: { date: string; end?: string; title: string; kind: string }[]
   today: string
 }
 
@@ -261,7 +267,7 @@ export interface Fit {
   demand: { level: 'High' | 'Medium' | 'Low' | 'Unknown'; seats: number | null; reports: number; sample: boolean }
 }
 
-export interface BestFits { term: string; top: Fit[]; rows: { id: string; title: string; items: Fit[] }[]; swap_count: number; eligible: number; how: string }
+export interface BestFits { term: string; top: Fit[]; rows: { id: string; title: string; items: Fit[] }[]; swap_count: number; pref_misses?: number; term_units?: number; over_cap?: boolean; eligible: number; how: string }
 
 export interface ActionEntry { id: number; action: string; summary: string; by: string; undone: boolean; at: string }
 
@@ -310,7 +316,7 @@ export const api = {
     request<{ ok: boolean; action_id?: number }>('PATCH', `/api/plan/${id}`, patch),
   removeFromPlan: (id: number) => request<{ ok: boolean; action_id?: number }>('DELETE', `/api/plan/${id}`),
   actions: () => request<{ actions: ActionEntry[] }>('GET', '/api/actions'),
-  undo: (actionId: number) => request<{ ok: boolean }>('POST', `/api/actions/${actionId}/undo`, {}),
+  undo: (actionId: number) => request<{ ok: boolean; detail?: string }>('POST', `/api/actions/${actionId}/undo`, {}),
 
   desk: () => request<DeskResponse>('GET', '/api/desk'),
   deskCard: (id: string, status: 'done' | 'snoozed' | 'dismissed' | 'active') => request<{ ok: boolean }>('POST', `/api/desk/${id}`, { status }),
@@ -329,7 +335,7 @@ export const api = {
 
   bids: (course = '') => request<{ courses: BidCourse[]; mine: { id: number; course_number: string; term_code: string; points_bid: number; got_seat: boolean; clearing_points: number | null; source: string }[] }>('GET', `/api/bids${course ? `?course=${encodeURIComponent(course)}` : ''}`),
   reportBid: (b: { course_number: string; term_code: string; points_bid: number; got_seat: boolean; clearing_points: number | null }) => request<{ ok: boolean }>('POST', '/api/bids', b),
-  suggestBids: (budget: number, priorities: Record<string, number>) => request<{ split: BidSplit[]; note: string }>('POST', '/api/bids/suggest', { budget, priorities }),
+  suggestBids: (budget: number, priorities: Record<string, number>) => request<{ split: BidSplit[]; note: string; warnings?: string[] }>('POST', '/api/bids/suggest', { budget, priorities }),
 
   chatHistory: (mode: 'dan' | 'news') => request<{ messages: ChatMsg[] }>('GET', `/api/chat/history?mode=${mode}`),
   clearChat: (mode: 'dan' | 'news') => request<{ ok: boolean }>('DELETE', `/api/chat/history?mode=${mode}`),

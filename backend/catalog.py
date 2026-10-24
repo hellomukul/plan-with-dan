@@ -236,8 +236,27 @@ class Section:
         return offering_key(self.number, self.title, self.term)
 
     @property
+    def any_core(self) -> bool:
+        """A required core course for some program (MBA, EMBA, ...): assigned, never bid on."""
+        return "core" in {t.strip().lower() for t in self.course_type.split(",")}
+
+    @property
     def is_core(self) -> bool:
-        return "core" in {t.strip().lower() for t in self.course_type.split(",")} and "MBA" in self.programs
+        return self.any_core and "MBA" in self.programs
+
+    def core_for(self, program: str) -> bool:
+        return self.any_core and program in self.programs
+
+    def ended(self, today: date | None = None) -> bool:
+        return bool(self.ends and self.ends < (today or date.today()))
+
+    @property
+    def closed(self) -> bool:
+        """Not open for enrollment (e.g. the second half of a two-term course)."""
+        return self.enrollment.strip().lower() == "no"
+
+    def open_to(self, program: str) -> bool:
+        return program in self.programs
 
     @property
     def counts_for_ldr(self) -> bool:  # inferred from the public feed's MGLD attribute
@@ -345,6 +364,11 @@ class Offering:
     def lead(self) -> Section:
         return self.sections[0]
 
+    def sections_for(self, program: str | None = None, today: date | None = None) -> list[Section]:
+        """Visible sections open to `program` that haven't ended."""
+        return [s for s in self.sections
+                if s.visible and (not program or s.open_to(program)) and not s.ended(today)]
+
     def summary(self) -> dict:
         s = self.lead
         return {
@@ -401,17 +425,23 @@ class Catalog:
         want = _clean(number).upper()
         return [o for o in self.offerings.values() if o.lead.number.upper() == want and (not term or o.lead.term == term)]
 
-    def eligible(self, term: str | None = None, program: str = "MBA", include_core: bool = False) -> list[Offering]:
+    def eligible(self, term: str | None = None, program: str | None = "MBA", include_core: bool = False,
+                 today: date | None = None, include_closed: bool = False) -> list[Offering]:
+        """Offerings with at least one visible, not-yet-ended section open to `program`.
+
+        Checks every section, not just the first one, so an EMBA section of a course
+        that also has an MBA section is still found for EMBA students.
+        """
         out = []
         for o in self.offerings.values():
-            s = o.lead
-            if term and s.term != term:
+            if term and o.lead.term != term:
                 continue
-            if program and program not in s.programs:
+            mine = o.sections_for(program, today)
+            if not mine:
                 continue
-            if not s.visible:
+            if not include_core and any(s.any_core for s in mine):
                 continue
-            if s.is_core and not include_core:
+            if not include_closed and all(s.closed for s in mine):
                 continue
             out.append(o)
         return out

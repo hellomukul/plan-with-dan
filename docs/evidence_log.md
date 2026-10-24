@@ -66,3 +66,20 @@ Same demo student (first-year, interested in healthcare, PE and AI; Fridays free
 - **Study trips crowded the top fits.** IE trips with no published time took all three best-fit slots. Fix: trips appear only in the Global Studies row.
 - **Blocked prompt previews.** Old safety-log entries still held the first 120 characters of blocked prompts. Fix: they're no longer stored, and existing previews were purged on startup.
 - **Mobile layout blowout.** A grid column on the desk grew to 1,500px on a 375px phone. Fix: grid columns can no longer stretch to fit their content.
+
+## Oct 24 (night): persona-test fixes
+
+All P0 and P1 bugs from `docs/persona_testing.md` were fixed. Tests went from 35 to **49**, all passing offline. Checked in the browser on the local build, desktop and 375px phone:
+
+- **Demo first-year's spring units.** Now 26, which is 13 electives plus **13 core units**. Before the fix the app showed 13. The desk now shows a red "Spring 2027 is at 26 units" card (over 24 needs approval). Best fits warns "anything you add needs approval".
+- **Global Studies listings:**
+  - IE 11 courses.
+  - GNW 0 (the Oct 19–23 weeks are over; before the fix, 27 hidden past sections were listed).
+  - SNOC 5 (before the fix, 0).
+  - GSE India marked "Applications closed 2026-06-12".
+- **Make-up day.** The Jan 29 make-up day shows the Monday courses (MGT 698, MGT 846). The ICS feed adds an RDATE for Monday classes and an EXDATE for Friday classes on that date.
+- **Multi-day events.** November recess has `end: 2026-11-27`. The calendar shows every day it covers, and the ICS feed uses an all-day DTEND of Nov 28.
+- **Bid coach.** A first-year's default budget is now 300 points (500 for second-years). Rows are keyed by course offering, and clashing bid courses get a warning.
+- **Shortcuts.** "G G" now opens Global studies, and ⌘K scrolls to the highlighted row.
+- **Phone navigation.** A "More" tab now reaches Catalog, Calendar, Global studies, Bid coach, Cost and safety, Profile, Privacy and Sign out.
+- **Signup honesty.** README and report now say signup can't fully hide an existing email without email verification. Its timing is now equal: both paths hash the password.

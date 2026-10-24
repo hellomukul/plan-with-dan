@@ -1,0 +1,31 @@
+# Secrets: never commit these.
+.env
+.env.*
+!.env.example
+
+# Student data (local SQLite database)
+data/app.db
+data/app.db-*
+*.db
+*.sqlite
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Node (frontend/dist is committed on purpose so graders don't need Node)
+node_modules/
+*.local
+.vite/
+
+# OS / editors
+.DS_Store
+.vscode/
+.idea/
+
+# Logs and scratch
+*.log
+output/

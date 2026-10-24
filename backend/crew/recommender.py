@@ -112,7 +112,7 @@ async def recommend(db, user_id: int, term: str = "202701", queue: asyncio.Queue
         listing = "\n".join(f"{i + 1}. {card_text(o, 300)}" for i, o in enumerate(shortlist))
         prompt = (
             f"Term: {TERM_NAMES.get(term, term)}.\nSTUDENT QUIZ:\n{fence(quiz, 'student_quiz')}\n\n"
-            f"SHORTLIST (pick only from these keys):\n{fence(listing, 'som_catalog', limit=20000)}"
+            f"SHORTLIST (pick only from these keys):\n{fence(listing, 'som_catalog', limit=len(listing) + 100)}"
         )
         try:
             curated = await run.call(curator, prompt, name="Curator", requests=3)
@@ -132,10 +132,11 @@ async def recommend(db, user_id: int, term: str = "202701", queue: asyncio.Queue
     # 4. assemble a clash-free plan on top of what the student already has this term
     chosen = ctx.sections(term)
     prefs = p.get("prefs") or {}
+    program = p.get("program") or "MBA"
     assembled = []
     for pk in sorted(kept, key=lambda x: x.get("priority", 2)):
         off = by_key[pk["key"]]
-        sec = best_section(off, chosen, prefs)
+        sec = best_section(off, chosen, prefs, program)
         row = {
             **pk,
             "number": off.lead.number, "title": off.lead.title, "session": off.lead.session,
@@ -157,7 +158,7 @@ async def recommend(db, user_id: int, term: str = "202701", queue: asyncio.Queue
     for row in assembled:
         target = by_key[row["key"]]
         others = [s for s in chosen if s.offering_key != row["key"]]
-        row["alternates"] = alternates(target, others, ctx.catalog, n=2, prefs=prefs)
+        row["alternates"] = alternates(target, others, ctx.catalog, n=2, prefs=prefs, program=program)
     run.emit("assemble", agent="Scheduler (code)", fitted=sum(r["fits"] for r in assembled),
              not_fitting=[r["number"] for r in assembled if not r["fits"]])
 
@@ -201,10 +202,11 @@ async def recommend(db, user_id: int, term: str = "202701", queue: asyncio.Queue
         except Exception as exc:  # the plan is still useful without a critique
             run.audit("agent_error", agent="Critic", detail=str(exc)[:200])
 
+    final = _finish(run, out)
     db.add(RecommendationRun(user_id=user_id, run_id=run.run_id, term_code=term,
-                             request=json.dumps(p, default=str), result=json.dumps(out, default=str)[:60000]))
+                             request=json.dumps(p, default=str), result=json.dumps(final, default=str)))
     db.commit()
-    return _finish(run, out)
+    return final
 
 
 def _finish(run: Run, out: dict) -> dict:

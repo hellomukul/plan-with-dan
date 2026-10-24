@@ -130,7 +130,7 @@ def check_fit(ctx: RunContext[StudentContext], key_or_number: str) -> str:
     out = []
     for o in offs[:2]:
         chosen = d.sections(o.lead.term)
-        sec = best_section(o, chosen, d.profile.get("prefs"))
+        sec = best_section(o, chosen, d.profile.get("prefs"), d.profile.get("program") or "MBA")
         if sec:
             out.append(f"{o.lead.number} fits: section {sec.section} (id {sec.id}) {sec.time_label}.")
         else:
@@ -152,7 +152,8 @@ def find_alternates(ctx: RunContext[StudentContext], key_or_number: str) -> str:
     if not offs:
         return f"{key_or_number} is not in the catalog."
     o = offs[0]
-    alts = alternates(o, ctx.deps.sections(o.lead.term), ctx.deps.catalog, n=3, prefs=ctx.deps.profile.get("prefs"))
+    alts = alternates(o, ctx.deps.sections(o.lead.term), ctx.deps.catalog, n=3, prefs=ctx.deps.profile.get("prefs"),
+                      program=ctx.deps.profile.get("program") or "MBA")
     if not alts:
         return "No clash-free backups with similar topics."
     return "\n".join(f"- [{a['key']}] {a['number']} {a['title']} · {a['time']} · shared: {', '.join(a['shared_topics']) or 'similar title'}" for a in alts)
@@ -172,7 +173,7 @@ def suggest_add(ctx: RunContext[StudentContext], key_or_number: str, reason: str
     if not offs:
         return f"{key_or_number} is not in the catalog; not suggested."
     o = offs[0]
-    sec = best_section(o, d.sections(o.lead.term), d.profile.get("prefs")) or o.sections[0]
+    sec = best_section(o, d.sections(o.lead.term), d.profile.get("prefs"), d.profile.get("program") or "MBA") or o.sections[0]
     if any(p["course_id"] == sec.id for p in d.proposals):
         return "Already suggested."
     d.proposals.append({

@@ -29,3 +29,28 @@ The test profile is a first-year in the Silver cohort with a healthcare consulti
 3. **Over-budget news turn.** The first news turn spent $0.116 against the $0.05 per-turn cap, because the cap is checked between calls and web search fees accrue inside one call.
    - Fix: low search context, a two-search instruction, a 3-request limit, and an `over_run_budget` audit event.
 4. **Clash honesty in recommendations.** The Curator picked two courses that clashed with the student's saved plan. The code scheduler flagged them (`fits=false`, with the clashing sections) and offered same-slot backups, so the student never sees a false "fits".
+
+## Oct 24: experiment "did the shortlist hurt quality?" (`scripts/experiment_shortlist.py`, 3 runs each)
+
+Same demo student (first-year, interested in healthcare, PE and AI; Fridays free; nothing before 9am). Raw data: `docs/experiment_shortlist.json`.
+
+| Setting | Courses shown to the Curator | Input tokens | Output tokens | Cost per run | Picks | Quotes verified | Picks that fit | Picks dropped by Validator |
+|---|---|---|---|---|---|---|---|---|
+| Code shortlist (production) | 28 | 6,819 | 905 | **$0.00103** | 5 | 5/5 | 4 | 1 (an invalid key, caught) |
+| Full eligible catalog | 76 | 13,679 | 3,655 | **$0.00309** | 5 | 5/5 | 3 | 0 |
+
+- **Result:** the shortlist cut cost by **67%** with no loss in quality: the same number of picks, every quote verified, and one more pick that fits the timetable. 3 of the 5 picks were identical in both settings.
+- **Bug found while running this:** the shortlist text had a 20,000-character truncation cap, which silently cut the full-catalog prompt. It's now removed, since the shortlist size is already limited in code.
+- **Caveat:** repeated identical prompts returned in under 1 second, which suggests the Portkey gateway served some responses from cache. Token usage is still reported per call.
+
+## Oct 24: more incidents caught in UI testing (all fixed)
+
+- **Out-of-list recommendation.** On 7 recommender runs, the Curator returned MGT 674, which was not in the 28-course shortlist it was shown. This was likely a gateway-cached answer from the earlier full-catalog run. The Validator dropped it every time (`recommendation_dropped` in the safety log).
+- **Wrong program section.** The Scheduler gave an MBA student MGT 879 §E1, which is EMBA-only. Fix: section choice is now filtered by the student's program (`best_section(..., program)`).
+- **Backup broke a preference.** A backup at 8:30 AM was suggested to a student who chose "not before 9". Fix: backups must strictly respect preferences.
+- **Uncited news.** One capped news answer had no source links. Fix: a strict citation rule in the News Desk prompt, plus a code check that appends a warning and logs `news_without_sources`. The next answer had 2 dated links (CNBC, Microsoft).
+- **Saved recommendation crashed the page.** The stored result had no trace, which crashed the trace view. Fix: the full result is saved, and the UI guards against missing traces.
+- **Onboarding lost fast clicks.** Rapid interest clicks used stale state. Fix: functional state updates.
+
+## Report length
+`submission/report.html` prints to 14 letter pages (Chrome, no headers).

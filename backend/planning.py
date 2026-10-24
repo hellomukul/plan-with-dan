@@ -62,9 +62,11 @@ def conflicts(sections: list[Section]) -> list[dict]:
     return out
 
 
-def best_section(offering: Offering, chosen: list[Section], prefs: dict | None = None) -> Section | None:
-    """The first section of `offering` that clashes with nothing chosen and respects prefs."""
-    ranked = sorted(offering.sections, key=lambda s: (not respects_prefs(s, prefs or {}), s.section))
+def best_section(offering: Offering, chosen: list[Section], prefs: dict | None = None,
+                 program: str = "MBA") -> Section | None:
+    """The first section open to `program` that clashes with nothing chosen, preferring ones that respect prefs."""
+    mine = [s for s in offering.sections if program in s.programs] or offering.sections
+    ranked = sorted(mine, key=lambda s: (not respects_prefs(s, prefs or {}), s.section))
     for sec in ranked:
         if not any(clash(sec, other) for other in chosen if other.offering_key != offering.key):
             return sec
@@ -195,9 +197,10 @@ def gsa_check(option_key: str, gsa_days_used: int) -> dict:
 
 # ---------------------------------------------------------------- alternates
 
-def alternates(target: Offering, chosen: list[Section], catalog: Catalog, n: int = 3, prefs: dict | None = None) -> list[dict]:
+def alternates(target: Offering, chosen: list[Section], catalog: Catalog, n: int = 3, prefs: dict | None = None,
+               program: str = "MBA") -> list[dict]:
     """Backups for `target`: same term, overlapping topics, and they fit the plan."""
-    pool = [o for o in catalog.eligible(target.lead.term) if o.key != target.key]
+    pool = [o for o in catalog.eligible(target.lead.term, program=program) if o.key != target.key]
     chosen_keys = {s.offering_key for s in chosen}
     my_topics = set(target.lead.topics)
     query = f"{target.lead.title} {' '.join(target.lead.topics)}"
@@ -209,7 +212,7 @@ def alternates(target: Offering, chosen: list[Section], catalog: Catalog, n: int
         overlap = my_topics & set(off.lead.topics)
         if not overlap and score < 2:
             continue
-        sec = best_section(off, [s for s in chosen if s.offering_key != target.key], prefs)
+        sec = best_section(off, [s for s in chosen if s.offering_key != target.key], prefs, program)
         if not sec or (prefs and not respects_prefs(sec, prefs)):
             continue
         out.append({

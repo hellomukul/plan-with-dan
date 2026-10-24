@@ -1,0 +1,155 @@
+{
+  "runs": {
+    "shortlist_28": [
+      {
+        "shortlist": 28,
+        "input_tokens": 6819,
+        "cached_tokens": 1137,
+        "output_tokens": 905,
+        "cost_usd": 0.001032,
+        "picks": [
+          "MGT 995",
+          "MGT 879",
+          "MGT 644",
+          "MGT 812",
+          "MGT 860"
+        ],
+        "dropped": 1,
+        "quotes_verified": 5,
+        "fits": 4,
+        "seconds": 0.7
+      },
+      {
+        "shortlist": 28,
+        "input_tokens": 6819,
+        "cached_tokens": 1137,
+        "output_tokens": 905,
+        "cost_usd": 0.001032,
+        "picks": [
+          "MGT 995",
+          "MGT 879",
+          "MGT 644",
+          "MGT 812",
+          "MGT 860"
+        ],
+        "dropped": 1,
+        "quotes_verified": 5,
+        "fits": 4,
+        "seconds": 0.7
+      },
+      {
+        "shortlist": 28,
+        "input_tokens": 6819,
+        "cached_tokens": 1137,
+        "output_tokens": 905,
+        "cost_usd": 0.001032,
+        "picks": [
+          "MGT 995",
+          "MGT 879",
+          "MGT 644",
+          "MGT 812",
+          "MGT 860"
+        ],
+        "dropped": 1,
+        "quotes_verified": 5,
+        "fits": 4,
+        "seconds": 0.3
+      }
+    ],
+    "full_catalog": [
+      {
+        "shortlist": 76,
+        "input_tokens": 13679,
+        "cached_tokens": 1137,
+        "output_tokens": 3655,
+        "cost_usd": 0.003093,
+        "picks": [
+          "MGT 812",
+          "MGT 674",
+          "MGT 995",
+          "MGT 860",
+          "MGT 935"
+        ],
+        "dropped": 0,
+        "quotes_verified": 5,
+        "fits": 3,
+        "seconds": 32.9
+      },
+      {
+        "shortlist": 76,
+        "input_tokens": 13679,
+        "cached_tokens": 1137,
+        "output_tokens": 3655,
+        "cost_usd": 0.003093,
+        "picks": [
+          "MGT 812",
+          "MGT 674",
+          "MGT 995",
+          "MGT 860",
+          "MGT 935"
+        ],
+        "dropped": 0,
+        "quotes_verified": 5,
+        "fits": 3,
+        "seconds": 0.3
+      },
+      {
+        "shortlist": 76,
+        "input_tokens": 13679,
+        "cached_tokens": 1137,
+        "output_tokens": 3655,
+        "cost_usd": 0.003093,
+        "picks": [
+          "MGT 812",
+          "MGT 674",
+          "MGT 995",
+          "MGT 860",
+          "MGT 935"
+        ],
+        "dropped": 0,
+        "quotes_verified": 5,
+        "fits": 3,
+        "seconds": 0.2
+      }
+    ]
+  },
+  "summary": {
+    "shortlist_28": {
+      "shortlist": 28,
+      "input_tokens": 6819,
+      "output_tokens": 905,
+      "cost_usd": 0.001032,
+      "dropped": 1,
+      "quotes_verified": 5,
+      "fits": 4,
+      "seconds": 0.566667,
+      "avg_picks": 5
+    },
+    "full_catalog": {
+      "shortlist": 76,
+      "input_tokens": 13679,
+      "output_tokens": 3655,
+      "cost_usd": 0.003093,
+      "dropped": 0,
+      "quotes_verified": 5,
+      "fits": 3,
+      "seconds": 11.133333,
+      "avg_picks": 5
+    },
+    "pick_overlap": {
+      "shortlist_only": [
+        "MGT 644",
+        "MGT 879"
+      ],
+      "full_only": [
+        "MGT 674",
+        "MGT 935"
+      ],
+      "both": [
+        "MGT 812",
+        "MGT 860",
+        "MGT 995"
+      ]
+    }
+  }
+}

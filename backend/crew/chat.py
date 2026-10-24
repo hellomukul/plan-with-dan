@@ -101,6 +101,9 @@ async def run_turn(db: Session, user_id: int | None, message: str, mode: str = "
         )
         answer = await run.call(agent, prompt, name=label, deps=ctx, requests=3 if chosen == "news_desk" else None)
         result.update(answer=str(answer.output), agent=label, proposals=ctx.proposals)
+        if chosen == "news_desk" and "http" not in result["answer"]:
+            run.audit("news_without_sources")
+            result["answer"] += "\n\n> ⚠️ I couldn't attach source links this time — treat this as unverified and check a news site."
         if run.guard.spent_run > run.guard.run_budget:
             run.audit("over_run_budget", spent=round(run.guard.spent_run, 4), budget=run.guard.run_budget)
     except BudgetExceeded as exc:

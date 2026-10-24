@@ -36,7 +36,8 @@ function describe(s: TraceStep): { cls: string; text: ReactNode } | null {
   }
 }
 
-export default function AgentTrace({ steps, compact = false }: { steps: TraceStep[]; compact?: boolean }) {
+export default function AgentTrace({ steps, compact = false }: { steps?: TraceStep[]; compact?: boolean }) {
+  if (!steps?.length) return <span className="faint small">No trace saved for this run.</span>
   const shown = steps.filter((s) => !(compact && s.kind === 'agent_start'))
   return (
     <div className="trace">

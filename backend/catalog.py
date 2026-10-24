@@ -202,6 +202,48 @@ def programs_for(category: str, course_type: str) -> list[str]:
     return sorted(found)
 
 
+MMS_TRACKS = ("AM", "GBS", "SR", "TM")
+
+
+def mms_tracks_for(category: str, course_type: str) -> list[str]:
+    """MMS tracks a section is designated for, e.g. 'elective,MMS AM,MMS TM' -> ['AM', 'TM']."""
+    found = set()
+    for raw in [*course_type.split(","), category.replace("MMG", "MMS")]:
+        t = raw.strip().upper()
+        if t.startswith("MMS "):
+            found.add(t[4:].strip())
+    return sorted(found & set(MMS_TRACKS))
+
+
+def audiences_for(programs: list[str], tracks: list[str], category: str, any_core: bool) -> list[str]:
+    """Program codes (see programs.py) whose students can plan this section.
+
+    - MBA and joint-degree MBA students: MBA sections.
+    - MBA for Executives: EMBA sections only (other SOM courses need faculty permission, space-available).
+    - MAM and MMS students: their own designated courses plus SOM electives (not the MBA core, and not
+      International Experience, which is funded from the MBA Global Studies Account).
+    - PhD students: doctoral courses plus MBA electives by Request to Enroll.
+    """
+    mba_elective = "MBA" in programs and not any_core
+    cat = category.upper()
+    shared = mba_elective and cat != "GSR"
+    aud: set[str] = set()
+    if "MBA" in programs:
+        aud |= {"MBA", "MBA-JOINT"}
+    if "EMBA" in programs:
+        aud.add("EMBA")
+    if "MAM" in programs or shared:
+        aud.add("MAM")
+    for t in MMS_TRACKS:
+        if t in tracks or shared:
+            aud.add(f"MMS-{t}")
+    if tracks or "MMS" in programs or shared:
+        aud.add("MMS")
+    if "PhD" in programs or (shared and cat not in ("GNW", "GNAM")):
+        aud.add("PhD")
+    return sorted(aud)
+
+
 @dataclass
 class Section:
     id: str
@@ -230,6 +272,8 @@ class Section:
     visible: bool
     topics: list[str] = field(default_factory=list)
     programs: list[str] = field(default_factory=list)
+    tracks: list[str] = field(default_factory=list)  # MMS tracks this section is designated for
+    audiences: list[str] = field(default_factory=list)  # program codes that can plan it
 
     @property
     def offering_key(self) -> str:
@@ -245,7 +289,8 @@ class Section:
         return self.any_core and "MBA" in self.programs
 
     def core_for(self, program: str) -> bool:
-        return self.any_core and program in self.programs
+        owner = "EMBA" if program == "EMBA" else "MBA" if program in ("MBA", "MBA-JOINT") else program
+        return self.any_core and owner in self.programs
 
     def ended(self, today: date | None = None) -> bool:
         return bool(self.ends and self.ends < (today or date.today()))
@@ -256,7 +301,7 @@ class Section:
         return self.enrollment.strip().lower() == "no"
 
     def open_to(self, program: str) -> bool:
-        return program in self.programs
+        return program in self.audiences
 
     @property
     def counts_for_ldr(self) -> bool:  # inferred from the public feed's MGLD attribute
@@ -304,6 +349,8 @@ class Section:
             "new": self.new_course,
             "topics": self.topics,
             "programs": self.programs,
+            "tracks": self.tracks,
+            "audiences": self.audiences,
         }
 
 
@@ -352,6 +399,8 @@ def _row_to_section(row: dict, aliases: dict[str, str]) -> Section:
     )
     section.topics = infer_topics(title, description)
     section.programs = programs_for(section.category, section.course_type)
+    section.tracks = mms_tracks_for(section.category, section.course_type)
+    section.audiences = audiences_for(section.programs, section.tracks, section.category, section.any_core)
     return section
 
 

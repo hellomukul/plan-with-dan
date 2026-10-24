@@ -54,9 +54,9 @@ code { background: #eef2f7; padding: 1px 5px; border-radius: 5px; font-size: 9.5
 
 <div class="kpis">
   <div class="kpi"><b>453</b><span>real SOM course sections (Fall 2026 + Spring 2027)</span></div>
-  <div class="kpi"><b>9</b><span>AI agents + a code "desk scan", 12 deterministic tools + web search</span></div>
+  <div class="kpi"><b>11</b><span>AI agents + a code "desk scan", 13 deterministic tools + web search</span></div>
   <div class="kpi"><b>$0.0016</b><span>average chat turn, 72% of input from prompt cache</span></div>
-  <div class="kpi"><b>49</b><span>automated tests incl. injection, hallucination, overspend, privacy</span></div>
+  <div class="kpi"><b>58</b><span>automated tests incl. injection, hallucination, overspend, privacy</span></div>
 </div>
 
 <!-- 2. MOTIVATION -->
@@ -157,15 +157,17 @@ code { background: #eef2f7; padding: 1px 5px; border-radius: 5px; font-size: 9.5
 <tr><td><b>Planner</b></td><td>Timetable, clashes, units, core/LDR/Global Studies, deadlines</td><td><code>plan_review</code>, <code>requirements_status</code>, <code>global_options</code>, <code>upcoming_dates</code>, <code>check_fit</code>, …</td><td>Markdown</td></tr>
 <tr><td><b>Bid Coach</b></td><td>Auction strategy, honest about missing data</td><td><code>bid_history</code>, <code>suggest_bid_split</code>, <code>course_details</code></td><td>Markdown</td></tr>
 <tr><td><b>Career Coach</b></td><td>Goal → skills → courses, each tied to course content</td><td><code>search_catalog</code>, <code>course_details</code>, <code>suggest_add</code>, <code>check_fit</code></td><td>Markdown + add buttons</td></tr>
+<tr><td><b>SOM Guide</b></td><td>Rules, processes and offices for the student's own program; says "I don't know" with the official link when the facts base has no answer</td><td><code>yale_facts</code> (sourced Bulletin facts), <code>upcoming_dates</code>, <code>requirements_status</code></td><td>Markdown + source link</td></tr>
 <tr><td><b>AI News Desk</b></td><td>Current AI news with dated sources, then "Learn this at SOM"</td><td>OpenAI web search, <code>search_catalog</code></td><td>Cited markdown</td></tr>
 <tr><td><b>Curator</b></td><td>Picks 4–7 courses from a code-built shortlist for the quiz answers</td><td>none (shortlist is in the prompt)</td><td>Structured <code>Curation</code></td></tr>
 <tr><td><b>Critic</b></td><td>Reviews the final, code-checked plan against the goals</td><td>none</td><td>Structured <code>Critique</code></td></tr>
+<tr><td><b>Memory Keeper</b></td><td>After long chats, folds older turns into a 120-word summary and keeps up to 12 lasting facts the student can see and delete</td><td>none</td><td>Structured <code>MemoryUpdate</code></td></tr>
 <tr><td><b>Chief of Staff</b></td><td>Writes the 2–3 sentence brief on Dan's Desk from the decision cards only (cached once per day)</td><td>none (cards come from the code <code>desk scan</code>)</td><td>Structured <code>Brief</code></td></tr>
 </table>
 <h3>Design choices (and why)</h3>
 <ul>
   <li><b>Dispatcher, not a boss.</b> In class we built a boss that calls several specialists and reads all their reports. Here a cheap dispatcher (~1.3k tokens, $0.0002) sends each turn to <i>one</i> specialist that carries only its own tools. That is fewer tokens per turn and fewer chances for a specialist to wander outside its lane.</li>
-  <li><b>The AI decides; code computes.</b> 12 tools are plain Python: clashes use real session dates, units and requirements follow the 2026–27 Bulletin, and the GSA budget rules are encoded. The model reasons about goals and trade-offs; it never does the math or remembers times.</li>
+  <li><b>The AI decides; code computes.</b> 13 tools are plain Python: clashes use real session dates, units and requirements follow the 2026–27 Bulletin, and the GSA budget rules are encoded. The model reasons about goals and trade-offs; it never does the math or remembers times.</li>
   <li><b>Code before and after the LLM in the recommender.</b> A BM25 retriever narrows ~100 eligible courses to 28 before the Curator runs. Afterwards, a validator, a scheduler and backup finding run in code. Only the Curator and Critic spend tokens.</li>
   <li><b>Chief of staff, but code decides what matters.</b> The desk scan (clashes, the 16-unit minimum, SOM deadlines, Global Studies, Leadership, bid split, missing times, missing goals) is deterministic and every card cites its rule; the agent can't invent a date. Students approve, snooze (3 days) or dismiss each card, and every plan change is logged with <b>undo</b>.</li>
   <li><b>Human in the loop.</b> Agents can only <i>suggest</i> a course (<code>suggest_add</code>); the student clicks "Add".</li>
@@ -262,7 +264,7 @@ code { background: #eef2f7; padding: 1px 5px; border-radius: 5px; font-size: 9.5
 <tr><td>Bid price information</td><td>Not public</td><td>Crowdsourced reports build real history from next term</td><td>Bid coach</td></tr>
 </table>
 <div class="todo"><b>Pilot user test (fill in before submitting).</b> Protocol: <code>docs/user_test.md</code>. Classmate: ____ (year __). Old way: ____ min to 3 non-clashing electives (clash check done? Y/N). With Plan with Dan: ____ min to a clash-free plan; would bid on __/__ picks. Usefulness ___/10. Quote: "__________________". Screenshot of their plan: attached.</div>
-<p><b>Simulated persona testing (not a substitute for the pilot).</b> Six AI tester agents each played a different student (an anxious first-year on a phone, a second-year power user, a budget-minded international student, EMBA/MMS students, a security tester, a career switcher) against the real app for about $0.16 in total. They found 8 serious bugs that every other test had missed, including first-year spring core not being counted toward units, chat proposing another program's section, stale Global Network Week listings and signup timing. All were fixed and covered by 14 new tests (<code>docs/persona_testing.md</code>).</p>
+<p><b>Simulated persona testing (not a substitute for the pilot).</b> Six AI tester agents each played a different student (an anxious first-year on a phone, a second-year power user, a budget-minded international student, EMBA/MMS students, a security tester, a career switcher) against the real app for about $0.16 in total. They found 8 serious bugs that every other test had missed, including first-year spring core not being counted toward units, chat proposing another program's section, stale Global Network Week listings and signup timing. All were fixed and covered by 14 new tests (<code>docs/persona_testing.md</code>). A follow-up audit against the 2026–27 Bulletin extended the rules to every SOM program (MBA for Executives, MAM, all five MMS tracks, joint degrees); MAM students, for example, went from seeing 2 courses to 88 (<code>docs/programs_data_audit.md</code>).</p>
 <p>If one hour per student per term is saved, SOM's ~700 full-time MBAs save ~1,400 hours a year for about $3,000 a year in AI cost at the assumptions above. The bigger win is quality: plans that actually map to each student's goals and never break the rules.</p>
 
 <!-- 8. LIMITS -->
@@ -282,7 +284,7 @@ code { background: #eef2f7; padding: 1px 5px; border-radius: 5px; font-size: 9.5
   <li>The 8-agent crew (dispatcher pattern) and the 5-stage recommender.</li>
   <li>Student accounts with saved profiles, plans, Global Studies choices, chats and bids.</li>
   <li>Deterministic planning tools that fix the base app's half-term clash bug.</li>
-  <li>A calendar feed; the safety layer; per-run token accounting; 49 tests.</li>
+  <li>A calendar feed; the safety layer; per-run token accounting; 58 tests.</li>
   <li>Seat limits and requirement flags merged from SOM's public feed.</li>
   <li>Dan's Desk: a chief-of-staff home with a code desk scan, a cached Chief of Staff brief, honest best fits and an undo log.</li>
   <li>A research-driven redesign ("Quiet Yale"): after the first version felt busy, I studied Linear's calm redesign, NN/g's visual-hierarchy and dashboard research, and Google's People + AI Guidebook on explaining recommendations. Result: one Yale-blue accent, Geist type, no emoji, bars instead of rings, a ⌘K command menu, and fit labels instead of percentages.</li>

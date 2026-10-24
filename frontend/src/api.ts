@@ -35,6 +35,8 @@ export interface Section {
   new: boolean
   topics: string[]
   programs: string[]
+  tracks?: string[]
+  audiences?: string[]  // program codes whose students can plan this section
 }
 
 export interface Prefs { no_before?: number; fridays_free?: boolean; avoid_days?: string[]; max_units?: number; workload?: string }
@@ -72,11 +74,15 @@ export interface Progress {
   core: { target: number; counted: number }
   electives: { target: number; planned: number }
   planned_total: number
-  terms: { term: string; units: number; core_units: number; status: 'ok' | 'low' | 'needs_approval'; min_applies: boolean }[]
+  terms: { term: string; units: number; core_units: number; status: 'ok' | 'low' | 'needs_approval'; min_applies: boolean; min_units?: number | null; max_units?: number | null }[]
   ldr: { met: boolean; planned: boolean }
   gsr: { met: boolean; planned: boolean; in_plan: string[]; choices: GlobalChoice[] }
   gsa_used: number
   modelled: boolean
+  mba_rules?: boolean
+  program_label?: string
+  checks?: { label: string; status: 'done' | 'planned' | 'missing' | 'info' | 'unconfirmed'; detail: string }[]
+  sources?: string[]
   program: string
   notes: string[]
 }
@@ -211,6 +217,7 @@ export interface CalendarEvents {
   classes: { date: string; start_min: number; end_min: number; title: string; room: string; course_id: string; status?: string }[]
   deadlines: { date: string; end?: string; title: string; kind: string }[]
   today: string
+  calendar_note?: string | null
 }
 
 export interface UsageResponse {
@@ -339,6 +346,8 @@ export const api = {
 
   chatHistory: (mode: 'dan' | 'news') => request<{ messages: ChatMsg[] }>('GET', `/api/chat/history?mode=${mode}`),
   clearChat: (mode: 'dan' | 'news') => request<{ ok: boolean }>('DELETE', `/api/chat/history?mode=${mode}`),
+  chatMemory: () => request<{ facts: string[]; summary: string; updated_at: string | null }>('GET', '/api/chat/memory'),
+  forgetMemory: (fact?: string) => request<{ facts: string[] }>('POST', '/api/chat/memory/forget', { fact: fact ?? null }),
   recommend: (term = '202701') => request<RecResult>('POST', '/api/recommend', { term }),
   latestRecommendation: () => request<{ result: RecResult | null }>('GET', '/api/recommend/latest'),
 

@@ -5,7 +5,7 @@ import { api, streamChat, type ChatResult, type TraceStep } from '../api'
 import AgentTrace from '../components/AgentTrace'
 import { CostChip } from '../components/ui'
 import HandsomeDan from '../mascots/HandsomeDan'
-import { Check, MessageCircle, Newspaper, ShieldAlert } from 'lucide-react'
+import { Brain, Check, MessageCircle, Newspaper, Plus, ShieldAlert, X } from 'lucide-react'
 import { usd } from '../lib/format'
 import { useApp } from '../state'
 
@@ -41,7 +41,11 @@ export default function Chat() {
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
   const [live, setLive] = useState<TraceStep[]>([])
+  const [facts, setFacts] = useState<string[]>([])
+  const [showMemory, setShowMemory] = useState(false)
   const bottom = useRef<HTMLDivElement>(null)
+  const loadMemory = () => api.chatMemory().then((r) => setFacts(r.facts)).catch(() => undefined)
+  useEffect(() => { loadMemory() }, [])
 
   useEffect(() => {
     setTurns([])
@@ -66,6 +70,7 @@ export default function Chat() {
     try {
       const result = await streamChat(msg, mode, (s) => setLive((l) => [...l, s]))
       setTurns((t) => [...t, { role: 'assistant', content: result.answer, result }])
+      setTimeout(loadMemory, 4000)  // the memory keeper runs after the reply
     } catch (e) {
       setTurns((t) => [...t, { role: 'assistant', content: `Something went wrong: ${(e as Error).message}` }])
     } finally {
@@ -81,7 +86,12 @@ export default function Chat() {
   const clear = async () => {
     await api.clearChat(mode)
     setTurns([])
-    toast('Chat cleared')
+    toast(facts.length ? 'New chat started. Dan still remembers your saved facts.' : 'New chat started')
+  }
+  const forget = async (fact?: string) => {
+    const r = await api.forgetMemory(fact)
+    setFacts(r.facts)
+    toast(fact ? 'Forgotten' : 'Dan forgot everything it remembered about you')
   }
 
   return (
@@ -98,9 +108,32 @@ export default function Chat() {
             <button className={mode === 'dan' ? 'on' : ''} onClick={() => setMode('dan')}><MessageCircle className="icon sm" />Ask Dan</button>
             <button className={mode === 'news' ? 'on' : ''} onClick={() => setMode('news')}><Newspaper className="icon sm" />AI news</button>
           </div>
-          {turns.length > 0 && <button className="btn sm ghost" onClick={clear}>Clear</button>}
+          {mode === 'dan' && (
+            <button className="btn sm ghost" onClick={() => setShowMemory((v) => !v)} aria-expanded={showMemory}>
+              <Brain className="icon sm" />Memory{facts.length ? ` (${facts.length})` : ''}
+            </button>
+          )}
+          {turns.length > 0 && <button className="btn sm ghost" onClick={clear}><Plus className="icon sm" />New chat</button>}
         </div>
       </div>
+
+      {showMemory && mode === 'dan' && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div className="section-label"><span>What Dan remembers about you</span>
+            {facts.length > 0 && <button className="link-btn small" onClick={() => forget()}>Forget everything</button>}</div>
+          {facts.length === 0
+            ? <p className="faint small" style={{ margin: 0 }}>Nothing yet. As you chat, Dan keeps short notes on your goals and preferences so you don't have to repeat yourself. Your profile and plan are always used too.</p>
+            : <ul className="stack tight" style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                {facts.map((f) => (
+                  <li key={f} className="row between small" style={{ flexWrap: 'nowrap' }}>
+                    <span>{f}</span>
+                    <button className="btn icon ghost" aria-label={`Forget: ${f}`} title="Forget this" onClick={() => forget(f)}><X className="icon sm" /></button>
+                  </li>
+                ))}
+              </ul>}
+          <p className="faint small" style={{ marginBottom: 0 }}>Dan remembers the whole current chat (older turns as a summary). New chat starts fresh but keeps these notes.</p>
+        </div>
+      )}
 
       <div className="chat">
         {turns.length === 0 && !busy && (

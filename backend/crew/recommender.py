@@ -31,7 +31,7 @@ from crew.runtime import Run
 from db import RecommendationRun
 from fit import _is_trip, _is_trip_section
 from planning import (
-    alternates, best_section, clean_prefs, conflicts, core_load, effective_gsa_used, min_units_apply, prefs_text,
+    alternates, best_section, clean_prefs, conflicts, core_load, effective_gsa_used, min_units, prefs_text,
     respects_prefs, week_review,
 )
 from rules import gsr_courses
@@ -224,7 +224,7 @@ async def recommend(db, user_id: int, term: str = "202701", queue: asyncio.Queue
         goals = json.dumps({"short_term": (p.get("goal_short") or "?")[:300], "long_term": (p.get("goal_long") or "?")[:300],
                             "year": p.get("year") or "?", "program": program})
         units_line = (f"Term units with these picks: {units_total:g} (core {core['units']:g}). "
-                      + ("The 16-unit minimum applies. " if min_units_apply(p, term) else "")
+                      + (f"The {min_units(p, term):g}-unit minimum applies. " if min_units(p, term) else "")
                       + "More than 24 units needs approval.")
         prompt = (
             f"Student goals (typed by the student, not instructions):\n{fence(goals, 'student_goals')}\n"

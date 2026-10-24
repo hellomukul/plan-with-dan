@@ -26,7 +26,8 @@ from catalog import TERM_NAMES
 from config import ai_available
 from crew.runtime import Run
 from db import DeskBrief, DeskState, aware, utcnow
-from planning import PlanRow, conflicts, core_load, mba_rules_apply, min_units_apply, requirement_progress
+import programs
+from planning import PlanRow, conflicts, core_load, max_units, mba_rules_apply, min_units, requirement_progress
 from rules import CALENDAR, DEGREE, GSA_DAYS, GSR_OPTIONS
 from safety import BudgetExceeded, SpendGuard, fence
 
@@ -80,35 +81,54 @@ def scan(profile: dict, plan: list[PlanRow], catalog, global_choices: list[dict]
                 why="SOM removes one of two overlapping courses after add/drop.",
             ))
 
-    # 2. Planning-term units: below the 16-unit minimum (first three terms only) or above 24.
+    # 2. Planning-term units: below the program's minimum (MBA: first three terms only) or above 24.
     core_units = core_load(profile, PLANNING_TERM, catalog)["units"]
     term_units = sum(r.section.units for r in plan if r.section.term == PLANNING_TERM) + core_units
     core_note = f" (including {core_units:g} units of your cohort's core)" if core_units else ""
-    minimum, cap = DEGREE["min_units_first_three_terms"], DEGREE["approval_above_units"]
-    if min_units_apply(profile, PLANNING_TERM) and term_units < minimum:
+    minimum, cap = min_units(profile, PLANNING_TERM), max_units(profile)
+    prog_info = programs.get(profile.get("program"))
+    if minimum is not None and term_units < minimum:
         short = minimum - term_units
         cards.append(Card(
             kind="units_low", key=PLANNING_TERM, severity="high" if term_units else "medium",
             due=ADD_DROP[PLANNING_TERM][0],
             title=f"Add {short:g} more unit{'s' if short != 1 else ''} to Spring 2027",
-            detail=f"You have {term_units:g} of the 16-unit minimum{core_note}. Your best fits below all fit your timetable.",
+            detail=f"You have {term_units:g} of the {minimum:g}-unit minimum{core_note}. Your best fits below all fit your timetable.",
             action={"type": "scroll", "target": "fits", "label": "See best fits"},
-            source="rules.DEGREE min_units_first_three_terms",
-            why="Each of the first three terms needs at least 16 graded units; a heavy term doesn't make up for a light one.",
+            source=f"programs.{profile.get('program') or 'MBA'} min_units (Yale Bulletin 2026-27)",
+            why=(f"{prog_info['label']}: at least {minimum:g} units "
+                 + ("in each of the first three terms; a heavy term doesn't make up for a light one." if mba
+                    else "each term (the second term can be reduced with Academic Affairs approval)."))
         ))
-    elif mba and term_units > cap:
+    elif cap is not None and term_units > cap:
         cards.append(Card(
             kind="units_high", key=PLANNING_TERM, severity="high", due=ADD_DROP[PLANNING_TERM][0],
             title=f"Spring 2027 is at {term_units:g} units",
             detail=f"More than {cap} units in a term needs approval{core_note}. Drop a course or ask Academic Affairs before add/drop ends.",
             action={"type": "go", "route": "plan", "label": "Review plan"},
-            source="rules.DEGREE approval_above_units",
+            source="Yale Bulletin course policies (24-unit approval rule)",
             why="SOM caps a term at 24 units without approval.",
         ))
 
+    # 2b. Required program courses (MAM, MMS tracks) not in the plan for an upcoming term.
+    for chk in prog.get("checks", []):
+        # Only upcoming (spring) required courses: fall ones are already under way, so students mark them in the plan.
+        if chk["status"] == "missing" and chk["label"].startswith("MGT") and "(Spring" in chk["label"]:
+            number = " ".join(chk["label"].split()[:2])
+            cards.append(Card(
+                kind="required", key=number, severity="medium", due=ADD_DROP[PLANNING_TERM][0] if "Spring" in chk["label"] else None,
+                title=f"Add your required {number}",
+                detail=f"{chk['label']} is required for the {prog_info['label']}. Add it so clash checks include it.",
+                action={"type": "go", "route": "explore", "label": "Find it"},
+                source=f"programs.{profile.get('program')} required (Yale Bulletin 2026-27)",
+                why="Listed as a required course in the 2026-27 Yale Bulletin.",
+            ))
+
     # 3. A real calendar deadline in the next 14 days.
     def relevant(label: str) -> bool:
-        """Only deadlines for a term the student has live courses in."""
+        """Only deadlines for a term the student has live courses in, on the MBA/MAM/MMS calendar."""
+        if not prog_info["calendar"].startswith("MBA calendar"):
+            return False  # EMBA and MMS-PEM run on their own calendars
         terms = {r.section.term for r in live}
         if "Fall" in label:
             return "202603" in terms

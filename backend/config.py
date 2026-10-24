@@ -30,6 +30,10 @@ MODEL_NAME = os.getenv("MODEL_NAME", "gpt-6-luna")
 PORTKEY_BASE_URL = os.getenv("PORTKEY_BASE_URL", "https://api.portkey.ai/v1").rstrip("/")
 
 DATABASE_URL = os.getenv("DATABASE_URL", "").strip() or f"sqlite:///{DATA_DIR / 'app.db'}"
+# Render (and most free hosts) wipe the local disk on every deploy or restart, so a SQLite
+# file there loses every account. Online, use a managed Postgres (e.g. Neon) via DATABASE_URL.
+ON_HOSTED_PLATFORM = bool(os.getenv("RENDER") or os.getenv("FLY_APP_NAME") or os.getenv("RAILWAY_ENVIRONMENT"))
+STORAGE_IS_EPHEMERAL = ON_HOSTED_PLATFORM and DATABASE_URL.startswith("sqlite")
 
 # Spend guard rails (USD). Per chat turn, and per student per day.
 RUN_BUDGET_USD = float(os.getenv("RUN_BUDGET_USD", "0.05"))
@@ -37,7 +41,7 @@ DAILY_BUDGET_USD = float(os.getenv("DAILY_BUDGET_USD", "0.50"))
 MAX_MODEL_REQUESTS = int(os.getenv("MAX_MODEL_REQUESTS", "12"))
 MAX_MESSAGE_CHARS = 2000
 
-SESSION_DAYS = 14
+SESSION_DAYS = int(os.getenv("SESSION_DAYS", "30"))  # renewed while in use, so active students stay signed in
 SECURE_COOKIES = os.getenv("SECURE_COOKIES", "auto")  # auto = Secure when served over https
 
 

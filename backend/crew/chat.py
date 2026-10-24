@@ -22,30 +22,27 @@ from datetime import date
 from typing import AsyncIterator
 
 from pydantic_ai.exceptions import ModelHTTPError
-from sqlmodel import Session, select
+from sqlmodel import Session
 
 from catalog import get_catalog
 from config import ai_available
 from crew.agents import SPECIALIST_LABELS, dispatcher, specialists
+from crew import memory
 from crew.context import load_context
 from crew.runtime import Run
+from crew.tools import student_card
 from db import ChatMessage
 from safety import REFUSAL, BudgetExceeded, SpendGuard, check_output, fence, screen_input
 
-HISTORY_TURNS = 8
-HISTORY_CHARS = 1500  # long enough to keep a course list Dan gave earlier
+_background: set[asyncio.Task] = set()  # keep references so memory folds aren't garbage-collected mid-run
 
 
-def _history(db: Session, user_id: int | None, mode: str) -> str:
-    if not user_id:
-        return ""
-    rows = db.exec(
-        select(ChatMessage).where(ChatMessage.user_id == user_id, ChatMessage.mode == mode)
-        .order_by(ChatMessage.id.desc()).limit(HISTORY_TURNS)
-    ).all()
-    # Blocked messages (and Dan's refusals of them) never go back into a prompt.
-    lines = [f"{m.role}: {m.content[:HISTORY_CHARS]}" for m in reversed(rows) if '"blocked": true' not in (m.meta or "")]
-    return fence("\n".join(lines), "recent_chat") if lines else ""
+def _schedule_fold(db: Session, user_id: int | None, mode: str) -> None:
+    """After the reply: fold older turns into the running summary if the conversation got long."""
+    if user_id and ai_available() and memory.needs_fold(db, user_id, mode):
+        task = asyncio.create_task(memory.fold(user_id, mode))
+        _background.add(task)
+        task.add_done_callback(_background.discard)
 
 
 def _save(db: Session, user_id: int | None, mode: str, role: str, content: str,
@@ -97,14 +94,16 @@ async def run_turn(db: Session, user_id: int | None, message: str, mode: str = "
 
     user_msg = _save(db, user_id, mode, "user", screen.text)
     ctx = load_context(run)
-    history = _history(db, user_id, mode)
+    # Blocked messages (and Dan's refusals of them) never go back into a prompt.
+    history = memory.context_block(db, user_id, mode, exclude_id=user_msg.id if user_msg else None)
+    card = f"STUDENT:\n{student_card(ctx)}\n" if user_id else ""
     today = date.today().isoformat()
 
     try:
         if mode == "news":
             chosen, task = "news_desk", screen.text
         else:
-            route_prompt = f"Today is {today}.\n{history}\nStudent message:\n{fence(screen.text, 'student_message')}"
+            route_prompt = f"Today is {today}.\n{card}{history}\nStudent message:\n{fence(screen.text, 'student_message')}"
             routed = await run.call(dispatcher, route_prompt, name="Dispatcher", requests=2)
             route = routed.output
             run.emit("route", specialist=route.specialist, task=route.task)
@@ -117,8 +116,9 @@ async def run_turn(db: Session, user_id: int | None, message: str, mode: str = "
         agent = specialists[chosen]
         label = SPECIALIST_LABELS[chosen]
         prompt = (
-            f"Today is {today}. Student: {ctx.profile.get('program', 'MBA')} year {ctx.profile.get('year') or '?'}.\n"
-            f"{history}\nTask:\n{fence(task, 'student_request')}"
+            f"Today is {today}.\n{card}{history}\n"
+            f"Latest message from the student:\n{fence(screen.text, 'student_message')}\n"
+            f"Task (as routed):\n{fence(task, 'student_request')}"
         )
         answer = await run.call(agent, prompt, name=label, deps=ctx, requests=3 if chosen == "news_desk" else None,
                               web_searches=2 if chosen == "news_desk" else 0)
@@ -158,6 +158,8 @@ def _wrap_up(run: Run, result: dict, known: set[str], user_id: int | None, mode:
     if result.get("blocked"):
         meta["blocked"] = True  # keep the refusal out of later prompts too
     _save(run.db, user_id, mode, "assistant", safe, meta)
+    if not result.get("blocked"):
+        _schedule_fold(run.db, user_id, mode)
     return _finish(run, result)
 
 

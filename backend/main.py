@@ -8,6 +8,7 @@ then open http://localhost:8000
 from __future__ import annotations
 
 import json
+import logging
 import os
 import secrets
 import sys
@@ -29,15 +30,17 @@ import auth  # noqa: E402
 from auth import current_user, limiter  # noqa: E402
 from catalog import TERM_NAMES, TOPIC_RULES, get_catalog  # noqa: E402
 from config import DAILY_BUDGET_USD, MODEL_NAME, ROOT, RUN_BUDGET_USD, ai_available  # noqa: E402
+from crew import memory as chat_memory  # noqa: E402
 from crew.chat import run_turn, stream_turn  # noqa: E402
 from crew.desk import apply_states, brief as desk_brief, scan as desk_scan, set_state as set_desk_state  # noqa: E402
 from crew.recommender import recommend  # noqa: E402
 from fit import FitContext, best_fits  # noqa: E402
 from db import (  # noqa: E402
-    USER_TABLES, ActionLog, AuditEvent, BidReport, ChatMessage, DeskBrief, DeskState, FitDismissal, GlobalChoice,
-    PlanItem, Profile, RecommendationRun, UsageLog, User, get_db, init_db, log_audit, utcnow,
+    USER_TABLES, ActionLog, AuditEvent, BidReport, ChatMemory, ChatMessage, DeskBrief, DeskState, FitDismissal, GlobalChoice,
+    PlanItem, Profile, RecommendationRun, UsageLog, User, get_db, init_db, log_audit, storage_info, utcnow,
 )
 from ics import build_calendar, google_template_link, meeting_dates  # noqa: E402
+from programs import CODES as PROGRAM_CODES, PROGRAMS  # noqa: E402
 from planning import (  # noqa: E402
     PlanRow, bid_stats, conflicts, core_load, effective_gsa_used, gsa_check, requirement_progress, suggest_bids,
     units_by_term, week_review,
@@ -51,6 +54,10 @@ from seed import seed_sample_bids  # noqa: E402
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     init_db()
+    if storage_info()["ephemeral"]:
+        logging.getLogger("uvicorn.error").warning(
+            "DATABASE_URL is not set on a hosted platform: accounts are stored on a disk that is wiped on every "
+            "deploy or restart. Set DATABASE_URL to a Postgres URL (e.g. Neon) before inviting anyone.")
     get_catalog()
     seed_sample_bids()
     auth.purge_expired_sessions()
@@ -108,6 +115,7 @@ def health():
         "offerings": len(cat.offerings),
         "terms": TERM_NAMES,
         "budgets": {"per_turn_usd": RUN_BUDGET_USD, "per_day_usd": DAILY_BUDGET_USD},
+        "storage": storage_info(),
     }
 
 
@@ -130,7 +138,7 @@ class PrefsIn(BaseModel):
 
 
 class ProfileIn(BaseModel):
-    program: Literal["MBA", "EMBA", "MAM", "MMS"] = "MBA"
+    program: str = Field("MBA", max_length=12)
     year: str = ""
     cohort: str = ""
     class_year: str = ""
@@ -152,6 +160,8 @@ def get_profile(user: User = Depends(current_user), db: Session = Depends(get_db
 
 @app.put("/api/profile")
 def put_profile(body: ProfileIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    if body.program not in PROGRAM_CODES:
+        raise HTTPException(422, "Pick your program from the list.")
     for label, text in (("background", body.background), ("short-term goal", body.goal_short), ("long-term goal", body.goal_long)):
         screen = screen_input(text) if text.strip() else None
         if screen is not None and not screen.allowed:
@@ -470,8 +480,19 @@ def calendar_events(user: User = Depends(current_user), db: Session = Depends(ge
             classes.append({"date": d.isoformat(), "start_min": s.meeting.start, "end_min": s.meeting.end,
                             "status": r.status,
                             "title": f"{s.number} {s.title}", "room": s.room, "course_id": s.id})
-    deadlines = [{"date": d, "end": CALENDAR_ENDS.get(d, d), "title": label, "kind": kind} for d, label, kind in CALENDAR]
-    return {"classes": classes, "deadlines": deadlines, "today": date.today().isoformat()}
+    shared = _mba_calendar(db, user.id)
+    deadlines = [{"date": d, "end": CALENDAR_ENDS.get(d, d), "title": label, "kind": kind}
+                 for d, label, kind in CALENDAR] if shared else []
+    prog = PROGRAMS.get((db.get(Profile, user.id) or Profile(user_id=user.id)).program or "MBA", PROGRAMS["MBA"])
+    note = None if shared else (f"{prog['label']} runs on its own calendar ({prog['calendar']}), so SOM's MBA/MAM/MMS "
+                                f"dates aren't shown. See {prog['sources'][-1]}")
+    return {"classes": classes, "deadlines": deadlines, "today": date.today().isoformat(), "calendar_note": note}
+
+
+def _mba_calendar(db: Session, user_id: int) -> bool:
+    """MBA, MAM and MMS (except PEM) share one academic calendar; EMBA and MMS-PEM have their own."""
+    program = (db.get(Profile, user_id) or Profile(user_id=user_id)).program or "MBA"
+    return PROGRAMS.get(program, PROGRAMS["MBA"])["calendar"].startswith("MBA calendar")
 
 
 def _feed_urls(request: Request, user: User) -> dict:
@@ -506,14 +527,14 @@ def calendar_feed(token: str, db: Session = Depends(get_db)):
     if not user or len(token) < 20:
         raise HTTPException(404, "Unknown calendar.")
     _, rows = _plan_rows(db, user.id)
-    body = build_calendar([r.section for r in rows], owner=f"u{user.id}")
+    body = build_calendar([r.section for r in rows], owner=f"u{user.id}", include_deadlines=_mba_calendar(db, user.id))
     return Response(body, media_type="text/calendar; charset=utf-8", headers={"Cache-Control": "no-cache"})
 
 
 @app.get("/api/plan.ics")
 def plan_download(user: User = Depends(current_user), db: Session = Depends(get_db)):
     _, rows = _plan_rows(db, user.id)
-    body = build_calendar([r.section for r in rows], owner=f"u{user.id}")
+    body = build_calendar([r.section for r in rows], owner=f"u{user.id}", include_deadlines=_mba_calendar(db, user.id))
     return Response(body, media_type="text/calendar; charset=utf-8",
                     headers={"Content-Disposition": 'attachment; filename="plan-with-dan.ics"'})
 
@@ -630,7 +651,7 @@ async def chat_stream(request: Request, body: ChatIn, user: User = Depends(curre
 @app.get("/api/chat/history")
 def chat_history(mode: Literal["dan", "news"] = "dan", user: User = Depends(current_user), db: Session = Depends(get_db)):
     rows = db.exec(select(ChatMessage).where(ChatMessage.user_id == user.id, ChatMessage.mode == mode)
-                   .order_by(ChatMessage.id.desc()).limit(40)).all()
+                   .order_by(ChatMessage.id.desc()).limit(200)).all()
     return {"messages": [{"role": m.role, "content": m.content, "meta": json.loads(m.meta or "{}"),
                           "at": m.created_at.isoformat()} for m in reversed(rows)]}
 
@@ -640,7 +661,24 @@ def clear_history(mode: Literal["dan", "news"] = "dan", user: User = Depends(cur
     for m in db.exec(select(ChatMessage).where(ChatMessage.user_id == user.id, ChatMessage.mode == mode)).all():
         db.delete(m)
     db.commit()
+    chat_memory.new_conversation(db, user.id, mode)  # lasting facts stay; the conversation summary resets
     return {"ok": True}
+
+
+@app.get("/api/chat/memory")
+def get_chat_memory(user: User = Depends(current_user), db: Session = Depends(get_db)):
+    mem = chat_memory.get_memory(db, user.id, "dan")
+    return {"facts": chat_memory.facts_of(mem), "summary": mem.summary,
+            "updated_at": mem.updated_at.isoformat() if mem.id else None}
+
+
+class ForgetIn(BaseModel):
+    fact: Optional[str] = Field(None, max_length=200)  # omit to forget everything
+
+
+@app.post("/api/chat/memory/forget")
+def forget_chat_memory(body: ForgetIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    return {"facts": chat_memory.forget(db, user.id, body.fact)}
 
 
 class RecommendIn(BaseModel):
@@ -761,8 +799,8 @@ def bestfits(term: Literal["202603", "202701"] = "202701", user: User = Depends(
     dismissed = [d.course_key for d in db.exec(select(FitDismissal).where(FitDismissal.user_id == user.id)).all()]
     core = core_load(profile, term, cat)
     ctx = FitContext(catalog=cat, profile=profile, plan=rows, dismissed=dismissed, bid_reports=reports,
-                     ldr_met=prog["ldr"]["met"] or prog["ldr"]["planned"] or not prog["modelled"],
-                     gsr_met=prog["gsr"]["met"] or prog["gsr"]["planned"] or not prog["modelled"],
+                     ldr_met=prog["ldr"]["met"] or prog["ldr"]["planned"] or not prog["mba_rules"],
+                     gsr_met=prog["gsr"]["met"] or prog["gsr"]["planned"] or not prog["mba_rules"],
                      gsa_used=prog["gsa_used"], core_units=core["units"], core_sections=core["sections"])
     return best_fits(ctx, term)
 
@@ -799,8 +837,8 @@ def _rows_for(db: Session, model, user_id: int) -> list[dict]:
 @app.get("/api/account/export")
 def export_account(user: User = Depends(current_user), db: Session = Depends(get_db)):
     data = {"user": {"email": user.email, "name": user.name, "created_at": user.created_at.isoformat()}}
-    for model in (Profile, PlanItem, GlobalChoice, ChatMessage, RecommendationRun, FitDismissal, ActionLog, AuditEvent,
-                  DeskState, DeskBrief):
+    for model in (Profile, PlanItem, GlobalChoice, ChatMessage, ChatMemory, RecommendationRun, FitDismissal, ActionLog,
+                  AuditEvent, DeskState, DeskBrief):
         data[model.__name__] = _rows_for(db, model, user.id)
     data["BidReport"] = _rows_for(db, BidReport, user.id)
     data["UsageLog"] = _rows_for(db, UsageLog, user.id)

@@ -177,7 +177,7 @@ export default function Home() {
   const springTerm = prog?.terms.find((t) => t.term === PLANNING_TERM)
   const minApplies = springTerm?.min_applies ?? profile?.year === '1'
   const springUnits = spring?.units ?? 0
-  const unitGoal = minApplies ? 16 : 24
+  const unitGoal = (minApplies ? springTerm?.min_units ?? 16 : springTerm?.max_units ?? 24) || 24
   const status = (met?: boolean, planned?: boolean) => met ? ['Done', 'var(--green)'] : planned ? ['Planned, not done', 'var(--text)'] : ['Not yet', 'var(--amber)']
   const ldrStatus = status(prog?.ldr.met, prog?.ldr.planned)
   const gsrStatus = status(prog?.gsr.met, prog?.gsr.planned)
@@ -277,15 +277,31 @@ export default function Home() {
             <div className="meter">
               <span>Spring units{spring?.core_units ? ` (incl. ${spring.core_units} core)` : ''}</span>
               <span className="mono">{springUnits} / {unitGoal}{minApplies ? ' min' : ' max'}</span>
-              <Bar pct={(springUnits / unitGoal) * 100} tone={springUnits > 24 ? 'amber' : minApplies && springUnits >= 16 ? 'lime' : ''} />
-              <span>Electives</span><span className="mono">{prog?.electives.planned ?? 0} / 41.5</span>
-              <Bar pct={((prog?.electives.planned ?? 0) / 41.5) * 100} />
-              <span>Global Studies days left</span><span className="mono">{gsaLeft} / 10</span>
-              <Bar pct={gsaLeft * 10} tone="gray" />
+              <Bar pct={(springUnits / unitGoal) * 100} tone={springUnits > (springTerm?.max_units ?? 24) ? 'amber' : minApplies && springUnits >= unitGoal ? 'lime' : ''} />
+              {prog?.mba_rules === false ? (
+                <>
+                  <span>Units in plan</span><span className="mono">{prog.planned_total} / {prog.total_target}</span>
+                  <Bar pct={(prog.planned_total / (prog.total_target || 1)) * 100} />
+                </>
+              ) : (
+                <>
+                  <span>Electives</span><span className="mono">{prog?.electives.planned ?? 0} / 41.5</span>
+                  <Bar pct={((prog?.electives.planned ?? 0) / 41.5) * 100} />
+                  <span>Global Studies days left</span><span className="mono">{gsaLeft} / 10</span>
+                  <Bar pct={gsaLeft * 10} tone="gray" />
+                </>
+              )}
             </div>
-            {prog?.modelled === false && <p className="faint small">{prog.notes[0]}</p>}
-            <div className="row between small"><span>Leadership</span><span style={{ color: ldrStatus[1] }}>{ldrStatus[0]}</span></div>
-            <div className="row between small" style={{ marginTop: 6 }}><span>Global Studies</span><span style={{ color: gsrStatus[1] }}>{gsrStatus[0]}</span></div>
+            {prog?.mba_rules === false ? (
+              (prog.checks ?? []).filter((c) => c.status === 'missing').slice(0, 3).map((c) => (
+                <div key={c.label} className="row between small" style={{ marginTop: 6 }}><span>{c.label}</span><span style={{ color: 'var(--amber)' }}>Not yet</span></div>
+              ))
+            ) : (
+              <>
+                <div className="row between small"><span>Leadership</span><span style={{ color: ldrStatus[1] }}>{ldrStatus[0]}</span></div>
+                <div className="row between small" style={{ marginTop: 6 }}><span>Global Studies</span><span style={{ color: gsrStatus[1] }}>{gsrStatus[0]}</span></div>
+              </>
+            )}
             <div className="row between small" style={{ marginTop: 6 }}><span>Clashes</span><span style={{ color: clashes ? 'var(--red)' : 'var(--green)' }}>{clashes ? `${clashes} to fix` : 'None'}</span></div>
           </div>
 

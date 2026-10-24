@@ -18,7 +18,7 @@ export default function CommandPalette({ open, onClose, onOpenCourse }: { open: 
 
   const offerings = useMemo(() => {
     const seen = new Map<string, (typeof sections)[number]>()
-    for (const s of sections) if (!seen.has(s.key) && s.programs.includes(program)) seen.set(s.key, s)
+    for (const s of sections) if (!seen.has(s.key) && (s.audiences ?? s.programs).includes(program)) seen.set(s.key, s)
     return [...seen.values()]
   }, [sections, program])
 

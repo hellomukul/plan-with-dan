@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from typing import Iterable
 
 from catalog import DAY_ORDER, Catalog, Offering, Section, clock
+import programs
 from rules import COHORT_SECTIONS, DEGREE, GSA_DAYS, GSR_OPTIONS, gsr_courses
 
 PASSING_MINUTES = 15
@@ -191,7 +192,8 @@ def units_by_term(rows: Iterable[PlanRow]) -> dict[str, float]:
 
 
 def mba_rules_apply(profile: dict) -> bool:
-    return (profile.get("program") or "MBA") == "MBA"
+    """Full-time MBA rules (cohort core, LDR, GSR, GSA): MBA and joint-degree MBA students."""
+    return programs.is_mba(profile.get("program"))
 
 
 def core_load(profile: dict, term: str, catalog: Catalog) -> dict:
@@ -223,12 +225,68 @@ def core_load(profile: dict, term: str, catalog: Catalog) -> dict:
     }
 
 
+def min_units(profile: dict, term: str) -> float | None:
+    """The per-term unit minimum for this student, or None when no minimum applies.
+
+    MBA: 16 units in each of the first three terms (year 1 fall/spring, year 2 fall).
+    MAM: 20 units each term. MMS (except PEM): 18 units each term. EMBA, PEM, PhD: none stated.
+    """
+    prog = programs.get(profile.get("program"))
+    if prog["base"] == "MBA":
+        year = profile.get("year") or ""
+        return float(prog["min_units"]) if year == "1" or (year == "2" and term == "202603") else None
+    return float(prog["min_units"]) if prog.get("min_units") else None
+
+
 def min_units_apply(profile: dict, term: str) -> bool:
-    """The 16-unit minimum covers the first three terms only (year 1 fall/spring, year 2 fall)."""
-    if not mba_rules_apply(profile):
-        return False
-    year = profile.get("year") or ""
-    return year == "1" or (year == "2" and term == "202603")
+    return min_units(profile, term) is not None
+
+
+def max_units(profile: dict) -> float | None:
+    """More than this many units in a term needs approval (all residential programs and the EMBA: 24)."""
+    cap = programs.get(profile.get("program")).get("max_units")
+    return float(cap) if cap else None
+
+
+def program_checks(profile: dict, rows: list[PlanRow], catalog: Catalog) -> list[dict]:
+    """Requirement checklist for programs other than the full-time MBA, from programs.py."""
+    prog = programs.get(profile.get("program"))
+    if prog["base"] == "MBA":
+        return []
+    done_status = ("completed", "enrolled")
+    completed = {" ".join(c.split()).upper() for c in profile.get("completed", [])}
+    checks: list[dict] = []
+    required_numbers = set()
+    for req in prog.get("required", []):
+        required_numbers.add(req["number"])
+        label = f"{req['number']} {req['title']} ({'Fall' if req['term'] == '202603' else 'Spring'}, {req['units']:g} units)"
+        mine = [r for r in rows if r.section.number == req["number"] and r.section.term == req["term"]]
+        if any(r.status in done_status for r in mine) or (req["number"] in completed and req["term"] == "202603"):
+            checks.append({"label": label, "status": "done", "detail": "Required course"})
+        elif mine:
+            checks.append({"label": label, "status": "planned", "detail": "Required course, in your plan"})
+        elif not catalog.offering_for_number(req["number"], req["term"]):
+            checks.append({"label": label, "status": "info",
+                           "detail": "Required, but not in SOM's public course feed. Confirm with your program office."})
+        elif req["term"] == "202603" and date.today() >= date(2026, 9, 2):
+            checks.append({"label": label, "status": "info",
+                           "detail": "Required fall course, already under way. Add it to your plan as enrolled or completed."})
+        else:
+            checks.append({"label": label, "status": "missing", "detail": "Required course: add it so clash checks include it"})
+    if prog.get("list_tag"):
+        tag, need = prog["list_tag"], prog["list_units"]
+        got = sum(r.section.units for r in rows if tag in r.section.tracks and r.section.number not in required_numbers)
+        checks.append({"label": f"{prog['list_label']}: {got:g} of {need} units", "status": "done" if got >= need else
+                       ("planned" if got else "missing"), "detail": f"Courses tagged for {prog['label']} in the catalog"})
+    if prog.get("total_units"):
+        units = sum(r.section.units for r in rows)
+        checks.append({"label": f"Total: {units:g} of {prog['total_units']} units in your plan", "status":
+                       "done" if units >= prog["total_units"] else "planned" if units else "missing",
+                       "detail": "Includes courses you've completed or planned in the app"})
+    checks.append({"label": "Global", "status": "info", "detail": prog["global"]})
+    for item in prog.get("unconfirmed", []):
+        checks.append({"label": "Not confirmed in official sources", "status": "unconfirmed", "detail": item})
+    return checks
 
 
 def effective_gsa_used(profile: dict, global_choices: list[dict]) -> int:
@@ -244,9 +302,9 @@ def requirement_progress(profile: dict, rows: list[PlanRow], catalog: Catalog, g
     completed_numbers = {" ".join(c.split()).upper() for c in profile.get("completed", [])}
     done_status = ("completed", "enrolled")
 
-    core_units_done = DEGREE["core_units"] if year == "2" else 0.0
-    if year == "1":  # core is assigned by cohort across year 1
-        core_units_done = DEGREE["core_units"]
+    prog = programs.get(program)
+    mba = mba_rules_apply(profile)
+    core_units_done = DEGREE["core_units"] if mba and year in ("1", "2") else 0.0  # assigned by cohort in year 1
 
     elective_rows = [r for r in rows if not r.section.core_for(program)]
     elective_units = sum(r.section.units for r in elective_rows)
@@ -270,13 +328,14 @@ def requirement_progress(profile: dict, rows: list[PlanRow], catalog: Catalog, g
     term_checks = []
     for term, units in sorted(term_units.items()):
         status = "ok"
-        if min_units_apply(profile, term) and units < DEGREE["min_units_first_three_terms"]:
+        minimum, cap = min_units(profile, term), max_units(profile)
+        if minimum is not None and units < minimum:
             status = "low"
-        elif mba_rules_apply(profile) and units > DEGREE["approval_above_units"]:
+        elif cap is not None and units > cap:
             status = "needs_approval"
         core_units = core_load(profile, term, catalog)["units"]
         term_checks.append({"term": term, "units": units, "core_units": core_units, "status": status,
-                            "min_applies": min_units_apply(profile, term)})
+                            "min_applies": minimum is not None, "min_units": minimum, "max_units": cap})
 
     notes = [
         "Each of your first three terms needs at least 16 graded units; a heavy term doesn't make up for a light one.",
@@ -284,13 +343,18 @@ def requirement_progress(profile: dict, rows: list[PlanRow], catalog: Catalog, g
     ]
     if year == "1" and mba_rules_apply(profile):
         notes.insert(0, "Your cohort's core courses are counted automatically in each term's units.")
-    if not mba_rules_apply(profile):
-        notes = [f"Degree requirements for {program} aren't modelled in Plan with Dan yet. "
-                 "Check them with your program office; the MBA rules below are shown for reference only."]
+    if not mba:
+        notes = [prog["summary"]]
+    elif program == "MBA-JOINT":
+        notes.insert(0, prog["summary"])
     return {
-        "modelled": mba_rules_apply(profile),
+        "modelled": program not in ("MMS-PEM",),
+        "mba_rules": mba,
+        "program_label": prog["label"],
+        "checks": program_checks(profile, rows, catalog),
+        "sources": prog["sources"],
         "program": program,
-        "total_target": DEGREE["total_units"],
+        "total_target": prog.get("total_units") or DEGREE["total_units"],
         "core": {"target": DEGREE["core_units"], "counted": core_units_done},
         "electives": {"target": DEGREE["elective_units"], "planned": elective_units},
         "planned_total": core_units_done + elective_units,

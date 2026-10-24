@@ -10,7 +10,7 @@ import json
 from datetime import datetime, timezone
 from typing import Any, Iterator, Optional
 
-from sqlalchemy import event
+from sqlalchemy import event, inspect, text
 from sqlmodel import Field, Session, SQLModel, create_engine
 
 from config import DATA_DIR, DATABASE_URL
@@ -205,7 +205,24 @@ class ActionLog(SQLModel, table=True):
     created_at: datetime = Field(default_factory=utcnow, index=True)
 
 
-USER_TABLES = (AuthSession, Profile, PlanItem, GlobalChoice, ChatMessage, AuditEvent, RecommendationRun,
+class ChatMemory(SQLModel, table=True):
+    """What Dan remembers: a running summary of the current chat, plus lasting facts the student shared.
+
+    The summary covers messages up to `summarized_upto`; newer messages are sent word for word.
+    `facts` survive "New chat" (they're about the student, not one conversation) and the student
+    can see and delete them.
+    """
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(index=True, foreign_key="user.id")
+    mode: str = "dan"
+    summary: str = ""
+    facts: str = "[]"  # JSON list of short strings
+    summarized_upto: int = 0  # ChatMessage.id
+    updated_at: datetime = Field(default_factory=utcnow)
+
+
+USER_TABLES = (AuthSession, Profile, PlanItem, GlobalChoice, ChatMessage, ChatMemory, AuditEvent, RecommendationRun,
                DeskState, DeskBrief, FitDismissal, ActionLog)
 
 
@@ -227,7 +244,10 @@ def _make_engine():
             cur.close()
 
         return eng
-    return create_engine(url, pool_pre_ping=True)
+    # Managed Postgres (Neon, Render, Supabase): check connections before use, recycle idle
+    # ones the server may have closed, and keep timestamps in UTC.
+    return create_engine(url, pool_pre_ping=True, pool_recycle=300, pool_size=5, max_overflow=5,
+                         connect_args={"options": "-c timezone=UTC"})
 
 
 engine = _make_engine()
@@ -235,7 +255,42 @@ engine = _make_engine()
 
 def init_db() -> None:
     SQLModel.metadata.create_all(engine)
+    _add_missing_columns()
     _strip_prompt_previews()
+
+
+def _add_missing_columns() -> None:
+    """Tiny forward-only migration: add columns that newer code expects to existing tables.
+
+    create_all() creates new tables but never alters old ones, so without this an app
+    update that adds a field would break (or tempt someone to delete) a database full of
+    students' plans. Columns are only ever added, never dropped or changed.
+    """
+    insp = inspect(engine)
+    with engine.begin() as conn:
+        for table in SQLModel.metadata.sorted_tables:
+            if not insp.has_table(table.name):
+                continue
+            have = {c["name"] for c in insp.get_columns(table.name)}
+            for col in table.columns:
+                if col.name in have or col.primary_key:
+                    continue
+                ddl_type = col.type.compile(dialect=engine.dialect)
+                default = col.default.arg if col.default is not None and not callable(col.default.arg) else None
+                clause = ""
+                if isinstance(default, bool):
+                    clause = f" DEFAULT {'TRUE' if default else 'FALSE'}" if engine.dialect.name == "postgresql" else f" DEFAULT {int(default)}"
+                elif isinstance(default, (int, float)):
+                    clause = f" DEFAULT {default}"
+                elif isinstance(default, str):
+                    clause = " DEFAULT '" + default.replace("'", "''") + "'"
+                conn.execute(text(f'ALTER TABLE "{table.name}" ADD COLUMN "{col.name}" {ddl_type}{clause}'))
+
+
+def storage_info() -> dict:
+    from config import STORAGE_IS_EPHEMERAL
+    kind = engine.dialect.name
+    return {"engine": "postgres" if kind == "postgresql" else kind, "ephemeral": STORAGE_IS_EPHEMERAL}
 
 
 def _strip_prompt_previews() -> None:

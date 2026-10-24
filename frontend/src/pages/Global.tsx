@@ -444,12 +444,25 @@ export default function Global() {
 }
 
 function PageHead() {
+  const { profile, plan } = useApp()
+  const program = profile?.program || 'MBA'
+  const mba = program === 'MBA' || program === 'MBA-JOINT'
+  const note = plan?.progress.checks?.find((c) => c.label === 'Global')?.detail
   return (
-    <div className="page-head">
-      <div>
-        <h1>Global studies</h1>
-        <p>Plan your Global Studies Requirement around your 10 funded GSA days, and keep the Leadership requirement in view.</p>
+    <>
+      <div className="page-head">
+        <div>
+          <h1>Global studies</h1>
+          <p>Plan your Global Studies Requirement around your 10 funded GSA days, and keep the Leadership requirement in view.</p>
+        </div>
       </div>
-    </div>
+      {!mba && (
+        <div className="card" role="note" style={{ marginBottom: 16, borderColor: 'var(--pink-line)' }}>
+          <b>For your program{plan?.progress.program_label ? ` (${plan.progress.program_label})` : ''}:</b>{' '}
+          {note ?? 'The Global Studies Requirement below is a full-time MBA rule.'}{' '}
+          <span className="muted">The options below are the MBA rules, shown for reference; Global Network Weeks and online courses are open to many programs.</span>
+        </div>
+      )}
+    </>
   )
 }

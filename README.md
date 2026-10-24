@@ -50,11 +50,26 @@ uvicorn backend.main:app --port 8000
 - If port 8000 is busy, use `--port 8010` and open that port instead.
 - With no key, the app still runs. Search, planner, calendar, bids and Global Studies all work, and only the AI features say they're offline.
 
+**Hosting it for friends (keep their accounts safe)**
+
+Render's free disk is wiped on every deploy, restart or idle spin-down. A SQLite file there would lose every account, so online the app must use a managed Postgres:
+1. Create a free database at [neon.tech](https://neon.tech). It has no expiry; Render's own free Postgres is deleted after 30 days. Copy its connection string.
+2. In Render, go to **Environment** and set `DATABASE_URL` to that string. `/api/health` should then show `"storage": {"engine": "postgres"}`.
+3. Optional: move your local data first. Run `python scripts/db_tools.py backup` locally, then run `python scripts/db_tools.py restore backups/<file>.json` with `DATABASE_URL` pointing at Neon.
+
+Owner tools (`scripts/db_tools.py`):
+- `stats`: row counts.
+- `backup`: a JSON snapshot. Keep these private, since they contain emails and password hashes.
+- `restore`: loads a snapshot, and only into an empty database.
+- `reset-password EMAIL`: there's no email service, so this is how you help a friend who forgot their password. It prompts for the new password and never echoes it.
+
+Sessions last 30 days and renew while in use. App updates that add database fields migrate existing tables automatically; columns are only ever added, never dropped.
+
 **Run the tests** (offline, no key needed)
 ```bash
 python -m pytest -q
 ```
-There are 49 tests covering:
+There are 58 tests covering:
 - safety: injection blocking, invented-course removal and spend caps
 - accounts and web security: login enumeration, CSRF and the CSP header
 - planning rules: clash logic, spring core units, the 16-unit window, non-MBA programs, Global Studies data, the make-up day, and planned-vs-done requirements
@@ -64,6 +79,10 @@ There are 49 tests covering:
 - bid-report privacy and duplicates
 - profile validation
 - account export and delete
+- chat memory
+- Yale facts lookup
+- program rules for EMBA, MAM and all MMS tracks
+- database migrations
 
 **Frontend development (optional, needs Node 20+)**
 ```bash
@@ -76,8 +95,9 @@ The dev UI runs on http://127.0.0.1:5173 and forwards `/api` to `API_PORT` (defa
 | Feature | What a student gets |
 |---|---|
 | **Dan's Desk** (home) | A 2–3 sentence brief written by the Chief of Staff agent *only* from decision cards that code computes (clashes, the 16-unit minimum, SOM deadlines, Global Studies, Leadership, bid split). Each card has a due date, a cited source, and approve / snooze / done. Below it: **best fits**, ranked in code with a label (Strong fit / Good fit / Worth a look), up to two reasons, demand shown separately, "Not for me", and a "Why?" panel quoting the course description. A side pane shows what's next, plan meters and an **undoable action log**. |
+| 🎓 **Every SOM program** | Rules from the 2026–27 Yale Bulletin for the full-time MBA, joint-degree MBA, MBA for Executives, MAM, every MMS track (Asset Management, Global Business & Society, Systemic Risk, Technology Management, Public Education Management), and PhD students. Each program gets its own course eligibility, unit limits, required-course checklist and calendar. Gaps in the official data are listed in `docs/programs_data_audit.md`. |
 | ✨ **Find my courses** | A 5-step quiz (program, background, interests, short- and long-term goals, schedule vibe) leads to a shortlist of real courses. Each pick comes with a reason, a quoted line from the course description, a clash check, and backups in the same slot. |
-| 🐶 **Ask Dan** | Chat that routes each question to one specialist (Course Scout, Planner, Bid Coach or Career Coach). Specialists use tools that read real data and can offer one-click "add to plan" buttons. |
+| 🐶 **Ask Dan** | Chat that routes each question to one specialist: Course Scout, Planner, Bid Coach, Career Coach or SOM Guide. Specialists use tools that read real data and can offer one-click "add to plan" buttons.<ul><li>**Personal:** every answer sees your program, goals and plan.</li><li>**Memory:** Dan remembers the whole conversation. Older turns are folded into a summary by a Memory Keeper agent, and lasting facts about you are kept. You can see and delete those facts.</li><li>**Honest:** when the catalog and the sourced Yale facts base don't cover a question, Dan says "I don't know" and links the official page.</li></ul> |
 | 📰 **AI News Desk** | Answers about current AI news using web search, with sources, and finishes with the SOM course where you can learn the topic. |
 | 🗓️ **My plan** | A weekly timetable with session-1 and session-2 views, clash detection based on real session dates, section switching, a unit check (16-unit minimum, approval needed above 24), and status tracking (planned, bidding, enrolled, completed). |
 | 🌍 **Global studies** | Every way to meet the GSR (IE, GNW, SNOC, GSE, exchange), checked against your 10 funded GSA days, with the matching courses and key dates. |
@@ -146,7 +166,7 @@ docs/              research notes, evidence log, submission checklist
 
 This started from the class's *Yale SOM Course Explorer* (lecture 8: a catalog browser plus a single Q&A agent; upstream `zlisto/yale_som_courses_zlisto`, my fork `hellomukul/yale_som_courses_silver`). I kept the course data and the Handsome Dan mascot and **rewrote the backend and UI**:
 
-- **Agents:** a multi-agent crew (Dispatcher plus 5 specialists) and a 5-stage recommender pipeline (Retriever, Curator, Validator, Scheduler, Critic), with an AI News Desk using web search.
+- **Agents:** a multi-agent crew (Dispatcher plus 6 specialists, a Memory Keeper) and a 5-stage recommender pipeline (Retriever, Curator, Validator, Scheduler, Critic), with an AI News Desk using web search.
 - **Accounts and storage:** student accounts with saved profiles, plans, Global Studies choices, chats and bid reports.
 - **Planning tools:** deterministic tools for clashes (fixing the base app's half-term bug), requirements, the GSA budget, backups and bid splits.
 - **Calendar:** a subscription feed for Google, Outlook and Apple.

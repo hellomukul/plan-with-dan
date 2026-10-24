@@ -27,6 +27,8 @@ from planning import (
     suggest_bids,
     week_review,
 )
+import knowledge
+import programs
 from rules import CALENDAR, GSA_DAYS, GSR_OPTIONS, LDR, gsr_courses
 from safety import fence
 
@@ -63,6 +65,62 @@ def _resolve(ctx: StudentContext, key_or_number: str, term: str | None = None):
                [o for o in cat.offerings.values() if len(want) > 6 and want in o.lead.title.lower()]
     offs = [o for o in offs if o.sections_for(program, ctx.today) and (not term or o.lead.term == term)]
     return sorted(offs, key=lambda o: (o.lead.term != DEFAULT_TERM, o.lead.term))
+
+
+def student_card(d: StudentContext) -> str:
+    """A compact, always-included picture of the student, so every answer is personal."""
+    p = d.profile or {}
+    prog = programs.get(p.get("program"))
+    if prog.get("terms") == 2 or prog["base"] in ("MMS", "MAM"):
+        who = f"program={prog['label']} (a one-year program, 2026-27; there is no year or cohort to ask about)"
+    elif prog["base"] == "PhD":
+        who = f"program={prog['label']}"
+    else:
+        who = (f"program={prog['label']} year={p.get('year') or '?'}"
+               + (f" cohort={p.get('cohort') or '?'}" if prog["base"] == "MBA" else ""))
+    lines = [
+        who,
+        f"background={p.get('background') or 'not given'}",
+        f"interests={', '.join(p.get('interests', [])) or 'not given'}",
+        f"short-term goal={p.get('goal_short') or 'not given'}; long-term goal={p.get('goal_long') or 'not given'}",
+        f"schedule preferences={prefs_text(p.get('prefs'))}",
+        f"completed={', '.join(p.get('completed', [])) or 'none listed'}",
+    ]
+    by_term: dict[str, list[str]] = {}
+    for r in d.plan:
+        by_term.setdefault(r.section.term, []).append(f"{r.section.number} {r.section.title} ({r.status})")
+    for term, items in sorted(by_term.items()):
+        units = sum(r.section.units for r in d.plan if r.section.term == term)
+        core = core_load(p, term, d.catalog)["units"]
+        total = f"{units + core:g} units incl. {core:g} core" if core else f"{units:g} units"
+        lines.append(f"plan {TERM_NAMES.get(term, term)} [{total}]: " + "; ".join(items))
+    if not d.plan:
+        lines.append("plan: empty")
+    if d.global_choices:
+        lines.append("global studies picks: " + ", ".join(f"{c['option_key']} ({c['status']})" for c in d.global_choices))
+    return fence("\n".join(lines), "student_profile")
+
+
+def yale_facts(ctx: RunContext[StudentContext], question: str) -> str:
+    """Official Yale SOM rules, dates, processes and offices (with source links), for the student's program.
+
+    Use for anything that isn't a specific course: degree requirements, deadlines, the auction,
+    add/drop, cross-registration, Global Studies, program rules. If this returns NO_MATCH, tell the
+    student you don't know and give them the official links it lists.
+
+    Args:
+        question: the student's question in plain words.
+    """
+    if not _log(ctx, "yale_facts", question=question):
+        return LOOP_MSG
+    program = _program(ctx.deps)
+    hits = knowledge.search(question, program)
+    if not hits:
+        links = "\n".join(f"- {name}: {url}" for name, url in knowledge.links_for(program))
+        return ("NO_MATCH: Plan with Dan has no official information on this. Say you don't know, and send the student "
+                f"to the right official page:\n{links}")
+    return fence("\n\n".join(f"[{e['title']}] {e['text']}\nSource: {e['url']} (checked {knowledge.CHECKED})" for e in hits),
+                 "yale_official_facts")
 
 
 # ------------------------------------------------------------------ catalog
@@ -237,14 +295,16 @@ def plan_review(ctx: RunContext[StudentContext], term: Literal["202603", "202701
 
 
 def requirements_status(ctx: RunContext[StudentContext]) -> str:
-    """Progress toward the MBA requirements: 72 units, core, electives, per-term minimums, LDR and GSR."""
+    """Progress toward the student's degree requirements (any SOM program): units, per-term limits, required courses."""
     _log(ctx, "requirements_status")
     d = ctx.deps
     r = requirement_progress(d.profile, d.plan, d.catalog, d.global_choices)
     terms = "; ".join(f"{t['term']}: {t['units']:g}u incl. {t['core_units']:g} core ({t['status']})"
                       for t in r["terms"]) or "no terms planned"
-    if not r["modelled"]:
-        return " ".join(r["notes"])
+    if not r["mba_rules"]:
+        checks = "\n".join(f"- [{c['status']}] {c['label']}: {c['detail']}" for c in r["checks"])
+        return (f"Program: {r['program_label']}. {' '.join(r['notes'])}\nPer term: {terms}.\n"
+                f"Checklist:\n{checks}\nSources: {', '.join(r['sources'])}")
     return (
         f"Target {r['total_target']} units. Core counted {r['core']['counted']:g}/{r['core']['target']:g}. "
         f"Electives planned {r['electives']['planned']:g}/{r['electives']['target']:g}.\n"
@@ -331,9 +391,10 @@ def suggest_bid_split(ctx: RunContext[StudentContext], budget: int, must_haves: 
         "\n(Heuristic: weights priority, seat count and any reported winning bids. Not a guarantee.)"
 
 
-CATALOG_TOOLS = [search_catalog, course_details, check_fit, find_alternates, suggest_add, my_profile_and_plan]
+CATALOG_TOOLS = [search_catalog, course_details, check_fit, find_alternates, suggest_add, my_profile_and_plan, yale_facts]
 PLANNER_TOOLS = [my_profile_and_plan, plan_review, requirements_status, global_options, upcoming_dates,
-                 check_fit, find_alternates, course_details, search_catalog, suggest_add]
-BID_TOOLS = [my_profile_and_plan, bid_history, suggest_bid_split, course_details]
-CAREER_TOOLS = [my_profile_and_plan, search_catalog, course_details, suggest_add, check_fit]
+                 check_fit, find_alternates, course_details, search_catalog, suggest_add, yale_facts]
+BID_TOOLS = [my_profile_and_plan, bid_history, suggest_bid_split, course_details, yale_facts]
+CAREER_TOOLS = [my_profile_and_plan, search_catalog, course_details, suggest_add, check_fit, yale_facts]
+GUIDE_TOOLS = [yale_facts, upcoming_dates, requirements_status, my_profile_and_plan, search_catalog]
 NEWS_TOOLS = [search_catalog]

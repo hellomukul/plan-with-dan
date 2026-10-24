@@ -17,7 +17,8 @@ from pydantic_ai.capabilities import WebSearch
 
 from config import PROMPTS_DIR
 from crew.context import StudentContext
-from crew.tools import BID_TOOLS, CAREER_TOOLS, CATALOG_TOOLS, NEWS_TOOLS, PLANNER_TOOLS
+from crew.memory import MemoryUpdate
+from crew.tools import BID_TOOLS, CAREER_TOOLS, CATALOG_TOOLS, GUIDE_TOOLS, NEWS_TOOLS, PLANNER_TOOLS
 
 
 def _sections(filename: str) -> dict[str, str]:
@@ -34,7 +35,7 @@ def instructions(role: str) -> str:
     return f"{PRIMER}\n\n# Your role\n{ROLES[role]}"
 
 
-SpecialistName = Literal["course_scout", "planner", "bid_coach", "career_coach", "news_desk", "none"]
+SpecialistName = Literal["course_scout", "planner", "bid_coach", "career_coach", "som_guide", "news_desk", "none"]
 
 
 class Route(BaseModel):
@@ -70,6 +71,7 @@ SPECIALIST_LABELS = {
     "planner": "Planner",
     "bid_coach": "Bid Coach",
     "career_coach": "Career Coach",
+    "som_guide": "SOM Guide",
     "news_desk": "AI News Desk",
 }
 
@@ -84,6 +86,8 @@ specialists: dict[str, Agent] = {
                        tools=BID_TOOLS, name="bid_coach"),
     "career_coach": Agent(deps_type=StudentContext, instructions=instructions("career_coach"),
                           tools=CAREER_TOOLS, name="career_coach"),
+    "som_guide": Agent(deps_type=StudentContext, instructions=instructions("som_guide"),
+                       tools=GUIDE_TOOLS, name="som_guide"),
     "news_desk": Agent(deps_type=StudentContext, instructions=instructions("news_desk"),
                        tools=NEWS_TOOLS, capabilities=[WebSearch(search_context_size="low")], name="news_desk"),
 }
@@ -91,3 +95,4 @@ specialists: dict[str, Agent] = {
 curator = Agent(output_type=Curation, instructions=instructions("curator"), name="curator")
 critic = Agent(output_type=Critique, instructions=instructions("critic"), name="critic")
 chief = Agent(output_type=Brief, instructions=instructions("chief"), name="chief_of_staff")
+memory_keeper = Agent(output_type=MemoryUpdate, instructions=instructions("memory_keeper"), name="memory_keeper")

@@ -20,7 +20,7 @@ import re
 from dataclasses import dataclass
 
 from catalog import Catalog, Offering, Section, _tokens, clock
-from planning import PlanRow, best_section, bid_stats, clean_prefs, mba_rules_apply, min_units_apply, respects_prefs
+from planning import PlanRow, best_section, bid_stats, clean_prefs, max_units, min_units, respects_prefs
 
 TIERS = [(0.62, "Strong fit"), (0.40, "Good fit"), (0.0, "Worth a look")]
 GOAL_FILLER = set(
@@ -166,8 +166,9 @@ def best_fits(ctx: FitContext, term: str = "202701", top: int = 3) -> dict:
     planned_keys = {r.section.offering_key for r in ctx.plan}
     chosen = [r.section for r in ctx.plan if r.section.term == term] + list(ctx.core_sections or [])
     term_units = sum(r.section.units for r in ctx.plan if r.section.term == term) + ctx.core_units
-    min_applies = min_units_apply(p, term)
-    mba = mba_rules_apply(p)
+    minimum = min_units(p, term)
+    min_applies = minimum is not None
+    cap = max_units(p)
     planned_trip = any(_is_trip_section(r.section) for r in ctx.plan)
     interests = set(p.get("interests", []))
     dismissed = set(ctx.dismissed)
@@ -218,7 +219,7 @@ def best_fits(ctx: FitContext, term: str = "202701", top: int = 3) -> dict:
             req_bonus += 0.08
         if not ctx.gsr_met and lead.counts_for_gsr:
             req_bonus += 0.06
-        if min_applies and term_units < 16:
+        if min_applies and term_units < minimum:
             req_bonus += 0.04
         sched = 0.08 if respects_prefs(sec, prefs) and sec.meeting else 0.0
         penalty = 0.12 * sum(dismissed_topics.get(t, 0) for t in lead.topics)
@@ -237,8 +238,8 @@ def best_fits(ctx: FitContext, term: str = "202701", top: int = 3) -> dict:
             chips.append("Counts: Leadership")
         elif not ctx.gsr_met and lead.counts_for_gsr:
             chips.append("Counts: Global Studies")
-        elif min_applies and term_units < 16:
-            chips.append(f"+{lead.units:g} toward 16 units")
+        elif min_applies and term_units < minimum:
+            chips.append(f"+{lead.units:g} toward {minimum:g} units")
         elif sec.meeting and prefs.get("fridays_free") and "F" not in sec.meeting.days:
             chips.append("Keeps Fridays free")
         chips = chips[:2]
@@ -252,8 +253,8 @@ def best_fits(ctx: FitContext, term: str = "202701", top: int = 3) -> dict:
             "enrollment": lead.enrollment, "tier": tier, "score": round(score, 3), "chips": chips,
             "why": {
                 "evidence": _evidence(lead.description, qtokens),
-                "counter": (f"Would take Spring to {term_units + lead.units:g} units; over 24 needs approval"
-                            if mba and term_units + lead.units > 24 else _counter(sec)),
+                "counter": (f"Would take the term to {term_units + lead.units:g} units; over {cap:g} needs approval"
+                            if cap and term_units + lead.units > cap else _counter(sec)),
                 "factors": {"goal": round(goal, 2), "interests": len(topic_hits),
                             "requirements": round(req_bonus, 2), "schedule": round(sched, 2)},
             },
@@ -284,7 +285,7 @@ def best_fits(ctx: FitContext, term: str = "202701", top: int = 3) -> dict:
         "swap_count": len(swaps),
         "pref_misses": pref_misses,
         "term_units": term_units,
-        "over_cap": bool(mba and term_units >= 24),
+        "over_cap": bool(cap and term_units >= cap),
         "eligible": len(pool),
         "how": "Ranked in code from your goals and interests (text match), requirement gaps, and schedule fit. "
                "Clashing, planned or already-taken courses, and sections outside your schedule preferences, are hidden. Demand comes from seat limits and "

@@ -30,11 +30,15 @@ const NOTE_ICON = {
 
 const units = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1))
 
-function termStatus(status: 'ok' | 'low' | 'needs_approval', minApplies = true): { text: string; tone: string; cls: string } {
-  if (status === 'low') return { text: 'Below the 16-unit minimum', tone: 'amber', cls: 'pa-warn' }
-  if (status === 'needs_approval') return { text: 'Over 24 units, needs approval', tone: 'red', cls: 'pa-bad' }
-  return { text: minApplies ? 'In range (16–24)' : 'Under the 24-unit cap', tone: 'green', cls: 'pa-ok' }
+function termStatus(status: 'ok' | 'low' | 'needs_approval', minApplies = true, min: number | null = 16, max: number | null = 24): { text: string; tone: string; cls: string } {
+  if (status === 'low') return { text: `Below the ${min}-unit minimum`, tone: 'amber', cls: 'pa-warn' }
+  if (status === 'needs_approval') return { text: `Over ${max} units, needs approval`, tone: 'red', cls: 'pa-bad' }
+  if (minApplies && min != null) return { text: max ? `In range (${min}–${max})` : `At least ${min}`, tone: 'green', cls: 'pa-ok' }
+  return { text: max ? `Under the ${max}-unit cap` : 'No unit limits stated', tone: 'green', cls: 'pa-ok' }
 }
+
+const CHECK_TONE: Record<string, string> = { done: 'pa-ok', planned: '', missing: 'pa-warn', info: 'muted', unconfirmed: 'faint' }
+const CHECK_TEXT: Record<string, string> = { done: 'Done', planned: 'Planned', missing: 'Not yet', info: 'Note', unconfirmed: 'Unconfirmed' }
 
 /** What every plan change returns: the action id lets the toast offer Undo. */
 type Work = () => Promise<{ ok: boolean; action_id?: number }>
@@ -100,6 +104,17 @@ export default function Plan() {
             </div>
           </Empty>
         </div>
+        {plan.progress.mba_rules === false && (plan.progress.checks ?? []).length > 0 && (
+          <div className="card mt">
+            <div className="section-label"><span>What your program requires · {plan.progress.program_label}</span></div>
+            <p className="muted small" style={{ marginTop: 0 }}>{plan.progress.notes[0]}</p>
+            <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 8 }}>
+              {(plan.progress.checks ?? []).filter((c) => c.status !== 'done').map((c, i) => (
+                <li key={i} className="small"><b style={{ fontWeight: 500 }}>{c.label}</b> <span className="faint">· {c.detail}</span></li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
     )
   }
@@ -158,14 +173,25 @@ function PlanBody({ plan, term, setTerm, view, setView, busy, run, onOpen, go, c
             <span className="value">{units(springUnits)} <span className="muted small" style={{ fontFamily: 'var(--font)' }}>units</span></span>
           </div>
           {spring
-            ? <span className={`badge ${termStatus(spring.status, spring.min_applies).tone}`}>{termStatus(spring.status, spring.min_applies).text}</span>
+            ? <span className={`badge ${termStatus(spring.status, spring.min_applies, spring.min_units ?? null, spring.max_units ?? null).tone}`}>{termStatus(spring.status, spring.min_applies, spring.min_units ?? null, spring.max_units ?? null).text}</span>
             : <span className="badge gray">Nothing planned yet</span>}
         </div>
       </div>
 
       {/* ---------------------------------------------------------- requirements */}
       <div className="card">
-        <div className="section-label"><span>Requirements</span></div>
+        <div className="section-label"><span>Requirements{p.program_label ? ` · ${p.program_label}` : ''}</span></div>
+        {p.mba_rules === false ? (
+          <ul className="pl-checks" style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 8 }}>
+            {(p.checks ?? []).map((c, i) => (
+              <li key={i} className="row between small" style={{ flexWrap: 'nowrap', alignItems: 'flex-start', gap: 12 }}>
+                <span><b style={{ fontWeight: 500 }}>{c.label}</b><br /><span className="faint">{c.detail}</span></span>
+                <span className={CHECK_TONE[c.status]} style={{ whiteSpace: 'nowrap' }}>{CHECK_TEXT[c.status]}</span>
+              </li>
+            ))}
+            {(p.sources ?? []).length > 0 && <li className="faint small">Sources: {(p.sources ?? []).map((u) => <a key={u} href={u} target="_blank" rel="noreferrer" style={{ marginRight: 8 }}>{u.replace(/^https:\/\//, '').split('/').slice(0, 3).join('/')}</a>)}</li>}
+          </ul>
+        ) : (
         <div className="pl-req">
           <div className="meter">
             <span>Core</span><span className="mono">{units(p.core.counted)} / {units(p.core.target)}</span>
@@ -192,13 +218,14 @@ function PlanBody({ plan, term, setTerm, view, setView, busy, run, onOpen, go, c
             <div><span>Core status</span><span className="muted small">{p.core.counted >= p.core.target ? 'Complete' : 'Counted from your year and planned core'}</span></div>
           </div>
         </div>
+        )}
         {p.terms.length > 0 && (
           <>
             <hr className="divider" />
             <div className="section-label"><span>Units by term</span></div>
             <div className="pl-terms">
               {p.terms.map((t) => {
-                const st = termStatus(t.status, t.min_applies)
+                const st = termStatus(t.status, t.min_applies, t.min_units ?? null, t.max_units ?? null)
                 return (
                   <div key={t.term}>
                     <span style={{ minWidth: 92 }}>{termName(t.term)}</span>

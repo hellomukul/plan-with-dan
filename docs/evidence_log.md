@@ -83,3 +83,27 @@ All P0 and P1 bugs from `docs/persona_testing.md` were fixed. Tests went from 35
 - **Shortcuts.** "G G" now opens Global studies, and ⌘K scrolls to the highlighted row.
 - **Phone navigation.** A "More" tab now reaches Catalog, Calendar, Global studies, Bid coach, Cost and safety, Profile, Privacy and Sign out.
 - **Signup honesty.** README and report now say signup can't fully hide an existing email without email verification. Its timing is now equal: both paths hash the password.
+
+## Oct 24 (late): storage, chatbot memory, every SOM program
+
+**Storage**
+- **Local:** SQLite (`data/app.db`, WAL). Durable on your laptop.
+- **Render free tier:** the disk is wiped on every deploy and restart, so `DATABASE_URL` (Neon Postgres) is now required. The app logs a warning without it, and `/api/health` reports the storage engine.
+- **Backups:** a backup → restore round trip into a fresh database brought back all 14 tables with identical row counts (10 users, 47 plan items, 102 chat messages, …). Restore refuses a database that already has accounts.
+- **Migrations and sessions:** an old table missing columns gets them added on startup (test). Sessions are now 30 days with sliding renewal.
+- **Not tested on Postgres:** I couldn't run a live Postgres here (no embedded Postgres for Python 3.13). It's untested until a Neon URL is configured.
+
+**Chatbot (live, gpt-6-luna)**
+- **Personal:** with a goal of "healthcare consulting, nothing before 10am", Dan recommended MGT 525 (Tue/Thu 1:00) and flagged that the plan was already at 26 units. $0.0024.
+- **Honest "no":**
+  - Parking at Evans Hall: Dan said it didn't know and linked the SOM contact page. $0.0006.
+  - EMBA auction: Dan said it didn't know, cited the EMBA requirements page, and pointed to the registrar's email. $0.0006.
+- **Program-aware:**
+  - MAM: "40 units, at least 20 per term, MGT 633 + MGT 636". $0.0009.
+  - MMS-SR: listed exactly its 5 required spring courses. $0.0007.
+- **Memory Keeper:** folded 24 messages into a 70-word summary plus 4 facts (impact investing switch, weak in finance, no Fridays, chose MGT 806 over MGT 541). The memory block sent per prompt is about 1.7k characters, regardless of conversation length.
+
+**Programs**
+- Spring 2027 courses visible per program: MAM 2 → 88, MMS tracks about 90, EMBA 10, PhD 109.
+- Gaps in the official data are in `docs/programs_data_audit.md`.
+- Tests: 49 → 58.

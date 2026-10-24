@@ -135,6 +135,7 @@ export default function Calendar() {
       <div>
         <h1>Calendar</h1>
         <p>Your classes and SOM deadlines in one place, with a private feed for the calendar app you already use.</p>
+        {events?.calendar_note && <p className="small" style={{ color: 'var(--amber)' }}>{events.calendar_note}</p>}
       </div>
     </div>
   )

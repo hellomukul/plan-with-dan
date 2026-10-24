@@ -83,6 +83,10 @@ def _start_session(db: Session, user: User, request: Request, response: Response
     token = secrets.token_urlsafe(32)
     db.add(AuthSession(token_hash=_hash_token(token), user_id=user.id, expires_at=utcnow() + timedelta(days=SESSION_DAYS)))
     db.commit()
+    _set_cookie(request, response, token)
+
+
+def _set_cookie(request: Request, response: Response, token: str) -> None:
     secure = request.url.scheme == "https" if SECURE_COOKIES == "auto" else SECURE_COOKIES == "true"
     response.set_cookie(
         COOKIE, token, httponly=True, samesite="lax", secure=secure, max_age=SESSION_DAYS * 86400, path="/"
@@ -93,7 +97,7 @@ def public_user(user: User) -> dict:
     return {"id": user.id, "email": user.email, "name": user.name}
 
 
-def current_user(request: Request, db: Session = Depends(get_db)) -> User:
+def current_user(request: Request, response: Response, db: Session = Depends(get_db)) -> User:
     token = request.cookies.get(COOKIE)
     if not token:
         raise HTTPException(401, "Please sign in.")
@@ -103,12 +107,18 @@ def current_user(request: Request, db: Session = Depends(get_db)) -> User:
     user = db.get(User, session.user_id)
     if not user:
         raise HTTPException(401, "Please sign in.")
+    # Sliding expiry: a student who uses the app at least once a fortnight stays signed in.
+    if aware(session.expires_at) - utcnow() < timedelta(days=SESSION_DAYS / 2):
+        session.expires_at = utcnow() + timedelta(days=SESSION_DAYS)
+        db.add(session)
+        db.commit()
+        _set_cookie(request, response, token)
     return user
 
 
-def optional_user(request: Request, db: Session = Depends(get_db)) -> User | None:
+def optional_user(request: Request, response: Response, db: Session = Depends(get_db)) -> User | None:
     try:
-        return current_user(request, db)
+        return current_user(request, response, db)
     except HTTPException:
         return None
 

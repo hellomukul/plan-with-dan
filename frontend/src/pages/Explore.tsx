@@ -106,7 +106,7 @@ export default function Explore() {
     for (const rows of groups.values()) {
       const c = rows[0]
       if (term !== 'all' && c.term !== term) continue
-      if (mbaOnly && !c.programs.includes(program)) continue
+      if (mbaOnly && !(c.audiences ?? c.programs).includes(program)) continue
       if (!showCore && c.core) continue
       if (sessions.size && !sessions.has(sessionPart(c))) continue
       if (pickedTopics.size && !c.topics.some((t) => pickedTopics.has(t))) continue
@@ -231,7 +231,7 @@ export default function Explore() {
             <div className="ex-filter-row">
               <span className="section-label">Include</span>
               <div className="row" style={{ gap: 18 }}>
-                <label className="toggle small"><input type="checkbox" checked={mbaOnly} onChange={(e) => { setMbaOnly(e.target.checked); setLimit(PAGE) }} /> {program} courses only</label>
+                <label className="toggle small"><input type="checkbox" checked={mbaOnly} onChange={(e) => { setMbaOnly(e.target.checked); setLimit(PAGE) }} /> Open to my program</label>
                 <label className="toggle small"><input type="checkbox" checked={showCore} onChange={(e) => { setShowCore(e.target.checked); setLimit(PAGE) }} /> Core courses</label>
               </div>
             </div>

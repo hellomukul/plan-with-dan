@@ -18,4 +18,5 @@ services:
       - key: SECURE_COOKIES
         value: "true"
       - key: DATABASE_URL
-        sync: false        # optional: a Neon Postgres URL so accounts survive restarts
+        sync: false        # REQUIRED for real users: a Neon Postgres URL. Render's disk is wiped on every deploy/restart,
+                           # so without this every account and plan is lost. The app logs a warning if it's missing.

@@ -33,3 +33,4 @@ output/
 # Local tooling
 .claude/
 data/*.local.txt
+backups/

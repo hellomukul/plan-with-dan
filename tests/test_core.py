@@ -425,3 +425,127 @@ def test_dev_origin_only_trusted_on_localhost(client):
     r = client.post("/api/plan", json={"course_id": "22400"},
                     headers={"Origin": "http://localhost:5173", "Host": "plan.example.com"})
     assert r.status_code == 403
+
+
+# ---------------------------------------------------------------- memory, Yale facts, storage (Oct 24, late)
+
+def test_memory_keeps_whole_conversation_within_budget(client):
+    import json as _json
+    from crew import memory
+    from db import ChatMemory, ChatMessage, engine
+    from sqlmodel import Session
+    c = _login_new(client, "memory@yale.edu")
+    uid = c.get("/api/auth/me").json()["user"]["id"]
+    with Session(engine) as db:
+        for i in range(30):
+            db.add(ChatMessage(user_id=uid, mode="dan", role="user" if i % 2 == 0 else "assistant", content=f"turn {i}"))
+        db.commit()
+        assert memory.needs_fold(db, uid, "dan")
+        block = memory.context_block(db, uid, "dan")
+        assert "turn 29" in block and "turn 17" not in block  # only the last 12 verbatim until folded
+        db.add(ChatMemory(user_id=uid, mode="dan", summary="Asked about PE; Dan suggested MGT 846.",
+                          facts=_json.dumps(["Recruiting for healthcare PE"]), summarized_upto=10**9))
+        db.commit()
+        block = memory.context_block(db, uid, "dan")
+        assert "MGT 846" in block and "healthcare PE" in block and "<untrusted" in block
+    assert c.get("/api/chat/memory").json()["facts"] == ["Recruiting for healthcare PE"]
+    c.delete("/api/chat/history")  # New chat: summary resets, facts stay
+    mem = c.get("/api/chat/memory").json()
+    assert mem["facts"] == ["Recruiting for healthcare PE"] and mem["summary"] == ""
+    assert c.post("/api/chat/memory/forget", json={}).json()["facts"] == []
+    assert "ChatMemory" in c.get("/api/account/export").json()
+
+
+def test_yale_facts_answers_or_says_no():
+    import knowledge
+    assert knowledge.search("how many units do I need to graduate", "MBA")[0]["id"] == "mba-units"
+    assert knowledge.search("when does spring add drop end", "MBA")
+    assert knowledge.search("best pizza in new haven", "MBA") == []
+    assert all(url.startswith("https://") for _, url in knowledge.links_for("MBA"))
+
+
+def test_student_card_is_personal():
+    from crew.context import StudentContext
+    from crew.tools import student_card
+    from planning import PlanRow
+    cat = get_catalog()
+    ctx = StudentContext(run=None, catalog=cat, profile={**MBA1, "goal_short": "healthcare PE", "prefs": {"no_before": 600}},
+                         plan=[PlanRow(cat.by_id["22725"], "planned")], global_choices=[])
+    card = student_card(ctx)
+    assert "healthcare PE" in card and "10:00" in card and "MGT 530" in card and "13 core" in card
+
+
+def test_old_database_gets_new_columns(tmp_path):
+    import sqlite3
+    from sqlalchemy import create_engine, inspect
+    import db as dbmod
+    path = tmp_path / "old.db"
+    con = sqlite3.connect(path)
+    con.execute("CREATE TABLE globalchoice (id INTEGER PRIMARY KEY, user_id INTEGER, option_key VARCHAR)")
+    con.execute("INSERT INTO globalchoice VALUES (1, 1, 'ie')")
+    con.commit()
+    con.close()
+    old = dbmod.engine
+    dbmod.engine = create_engine(f"sqlite:///{path}")
+    try:
+        dbmod._add_missing_columns()
+        cols = {c["name"] for c in inspect(dbmod.engine).get_columns("globalchoice")}
+        assert {"status", "note", "target_term"} <= cols
+        with dbmod.engine.connect() as conn:
+            from sqlalchemy import text
+            assert conn.execute(text("SELECT option_key, status FROM globalchoice")).one() == ("ie", "considering")
+    finally:
+        dbmod.engine = old
+
+
+def test_health_reports_storage(client):
+    assert client.get("/api/health").json()["storage"]["engine"] == "sqlite"
+
+
+def test_every_program_sees_its_own_courses():
+    cat = get_catalog()
+    counts = {p: len(cat.eligible("202701", program=p)) for p in ("MBA", "EMBA", "MAM", "MMS-AM", "MMS-SR", "PhD")}
+    assert counts["MAM"] > 50 and counts["MMS-AM"] > 50  # SOM electives, not just the 2 MAM-only courses
+    assert 0 < counts["EMBA"] < 20  # EMBA students see EMBA sections
+    sr = {o.lead.number for o in cat.eligible("202701", program="MMS-SR")}
+    assert {"MGT 945", "MGT 949"} <= sr
+    am = {o.lead.number for o in cat.eligible("202701", program="MMS-AM")}
+    assert "MGT 949" not in am  # the Systemic Risk colloquium is SR-only
+    assert not any(o.lead.is_core for o in cat.eligible("202701", program="MAM"))
+
+
+def test_program_rules_minimums_and_required_courses():
+    from datetime import date
+    from crew.desk import scan
+    from planning import PlanRow, max_units, min_units, requirement_progress
+    cat = get_catalog()
+    assert min_units({"program": "MAM"}, "202701") == 20 and min_units({"program": "MMS-SR"}, "202701") == 18
+    assert min_units({"program": "EMBA", "year": "1"}, "202701") is None and max_units({"program": "MAM"}) == 24
+    sr = {"program": "MMS-SR"}
+    prog = requirement_progress(sr, [PlanRow(cat.by_id[cat.offering_for_number("MGT 945", "202701")[0].sections[0].id], "planned")], cat, [])
+    status = {c["label"].split(" (")[0]: c["status"] for c in prog["checks"]}
+    assert status["MGT 945 Macroprudential Policy"] == "planned" and status["MGT 523 Monetary Policy"] == "missing"
+    assert not prog["mba_rules"] and prog["total_target"] == 36
+    kinds = [c.kind for c in scan({"program": "MAM"}, [], cat, [], {}, date(2026, 10, 24))]
+    assert "units_low" in kinds and "gsr" not in kinds and "ldr" not in kinds
+    low = next(c for c in scan({"program": "MAM"}, [], cat, [], {}, date(2026, 10, 24)) if c.kind == "units_low")
+    assert "20-unit" in low.detail
+    emba = [c.kind for c in scan({"program": "EMBA", "year": "1"}, [], cat, [], {}, date(2026, 10, 24))]
+    assert "deadline" not in emba  # EMBA runs on its own calendar
+
+
+def test_profile_accepts_every_program(client):
+    c = _login_new(client, "programs@yale.edu")
+    for code in ("MAM", "MMS-AM", "MMS-GBS", "MMS-SR", "MMS-TM", "MMS-PEM", "EMBA", "MBA-JOINT", "PhD"):
+        assert c.put("/api/profile", json={"program": code, "year": "1"}).status_code == 200, code
+    assert c.put("/api/profile", json={"program": "LLM"}).status_code == 422
+    c.put("/api/profile", json={"program": "MAM"})
+    assert c.post("/api/plan", json={"course_id": "22725"}).status_code == 200  # an MBA elective is open to MAM
+    assert c.get("/api/requirements").json()["progress"]["program_label"] == "Master of Advanced Management"
+
+
+def test_yale_facts_by_program():
+    import knowledge
+    assert knowledge.search("how many units do I need", "MAM")[0]["id"] == "program-mam"
+    assert knowledge.search("required courses", "MMS-SR")[0]["id"] == "program-mms-sr"
+    assert not any(e["id"] == "calendar" for e in knowledge.search("calendar dates", "EMBA"))

@@ -1,15 +1,26 @@
 import { useEffect, useState } from 'react'
 import { api, type Profile } from '../api'
 import HandsomeDan from '../mascots/HandsomeDan'
-import { Briefcase, Clock, Coffee, GraduationCap, Globe2, BookOpen, Moon } from 'lucide-react'
+import { Briefcase, Clock, Coffee, GraduationCap, Globe2, BookOpen, Moon, Scale, FlaskConical } from 'lucide-react'
 import { EMPTY_PROFILE, useApp } from '../state'
 
 const PROGRAMS = [
-  { v: 'MBA', label: 'MBA', big: <GraduationCap className="icon lg" /> },
-  { v: 'EMBA', label: 'EMBA', big: <Briefcase className="icon lg" /> },
+  { v: 'MBA', label: 'Full-time MBA', big: <GraduationCap className="icon lg" /> },
+  { v: 'MBA-JOINT', label: 'MBA joint degree', big: <Scale className="icon lg" /> },
+  { v: 'EMBA', label: 'MBA for Executives', big: <Briefcase className="icon lg" /> },
   { v: 'MAM', label: 'MAM', big: <Globe2 className="icon lg" /> },
   { v: 'MMS', label: 'MMS', big: <BookOpen className="icon lg" /> },
+  { v: 'PhD', label: 'PhD (taking SOM courses)', big: <FlaskConical className="icon lg" /> },
 ]
+const MMS_TRACKS = [
+  { v: 'MMS-GBS', label: 'Global Business & Society' },
+  { v: 'MMS-AM', label: 'Asset Management' },
+  { v: 'MMS-SR', label: 'Systemic Risk' },
+  { v: 'MMS-TM', label: 'Technology Management' },
+  { v: 'MMS-PEM', label: 'Public Education Management' },
+]
+const TWO_YEAR = new Set(['MBA', 'MBA-JOINT', 'EMBA'])
+const isOn = (program: string, v: string) => program === v || (v === 'MMS' && program.startsWith('MMS'))
 const COHORTS = ['Gold', 'Silver', 'Blue', 'Green', 'Red']
 const BACKGROUNDS = ['Consulting', 'Banking / Finance', 'Tech / Product', 'Healthcare', 'Nonprofit / Public', 'Startup', 'Marketing / Brand', 'Military', 'Education', 'Other']
 const SHORT_GOALS = ['Consulting internship', 'Investment banking', 'PE / VC', 'Product management', 'Healthcare', 'Start my own company', 'Social impact', 'Still exploring']
@@ -42,7 +53,7 @@ export default function Onboarding({ editing = false }: { editing?: boolean }) {
     }))
 
   const canNext = [
-    Boolean(p.program && (p.program !== 'MBA' || p.year)),
+    Boolean(p.program && p.program !== 'MMS' && (!TWO_YEAR.has(p.program) || p.year)),
     true,
     p.interests.length > 0,
     Boolean(p.goal_short.trim() || p.goal_long.trim()),
@@ -86,18 +97,32 @@ export default function Onboarding({ editing = false }: { editing?: boolean }) {
             <h3>Which program are you in?</h3>
             <div className="choice-grid">
               {PROGRAMS.map((o) => (
-                <button key={o.v} className={`choice ${p.program === o.v ? 'on' : ''}`} onClick={() => set('program', o.v)}>
+                <button key={o.v} className={`choice ${isOn(p.program, o.v) ? 'on' : ''}`} onClick={() => set('program', o.v === 'MMS' && p.program.startsWith('MMS') ? p.program : o.v)}>
                   <span className="big">{o.big}</span>{o.label}
                 </button>
               ))}
             </div>
-            <h3>What year?</h3>
-            <div className="row">
-              {[['1', 'First year (core + first electives)'], ['2', 'Second year (all electives)']].map(([v, l]) => (
-                <button key={v} className={`chip ${p.year === v ? 'on' : ''}`} onClick={() => set('year', v)}>{l}</button>
-              ))}
-            </div>
-            {p.program === 'MBA' && p.year === '1' && (
+            {p.program.startsWith('MMS') && (
+              <>
+                <h3>Which MMS track?</h3>
+                <div className="row">
+                  {MMS_TRACKS.map((t) => (
+                    <button key={t.v} className={`chip ${p.program === t.v ? 'on' : ''}`} onClick={() => set('program', t.v)}>{t.label}</button>
+                  ))}
+                </div>
+              </>
+            )}
+            {TWO_YEAR.has(p.program) && (
+              <>
+                <h3>What year?</h3>
+                <div className="row">
+                  {[['1', p.program === 'EMBA' ? 'First year' : 'First year (core + first electives)'], ['2', p.program === 'EMBA' ? 'Second year' : 'Second year (all electives)']].map(([v, l]) => (
+                    <button key={v} className={`chip ${p.year === v ? 'on' : ''}`} onClick={() => set('year', v)}>{l}</button>
+                  ))}
+                </div>
+              </>
+            )}
+            {(p.program === 'MBA' || p.program === 'MBA-JOINT') && p.year === '1' && (
               <>
                 <h3>Your cohort</h3>
                 <div className="row">

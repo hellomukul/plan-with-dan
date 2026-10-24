@@ -61,6 +61,10 @@ class Critique(BaseModel):
     watch_outs: list[str]
 
 
+class Brief(BaseModel):
+    text: str = Field(description="2-3 sentences, plain text, facts from the cards only.")
+
+
 SPECIALIST_LABELS = {
     "course_scout": "Course Scout",
     "planner": "Planner",
@@ -86,3 +90,4 @@ specialists: dict[str, Agent] = {
 
 curator = Agent(output_type=Curation, instructions=instructions("curator"), name="curator")
 critic = Agent(output_type=Critique, instructions=instructions("critic"), name="critic")
+chief = Agent(output_type=Brief, instructions=instructions("chief"), name="chief_of_staff")

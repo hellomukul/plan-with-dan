@@ -63,9 +63,9 @@ async def run_turn(db: Session, user_id: int | None, message: str, mode: str = "
 
     screen = screen_input(message)
     if not screen.allowed:
-        run.audit("input_blocked", reasons=screen.reasons, preview=message[:120])
+        run.audit("input_blocked", reasons=screen.reasons, length=len(message))  # no message text is stored
         result.update(answer=REFUSAL.format(why="; ".join(screen.reasons)), blocked=True, safety=screen.reasons)
-        _save(db, user_id, mode, "user", message[:2000], {"blocked": True})
+        _save(db, user_id, mode, "user", "(message blocked by the safety screen; text not stored)", {"blocked": True})
         _save(db, user_id, mode, "assistant", result["answer"], {"blocked": True})
         return _finish(run, result)
 

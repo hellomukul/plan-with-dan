@@ -118,9 +118,9 @@ def signup(request: Request, response: Response, body: SignupIn, db: Session = D
     if problem:
         raise HTTPException(422, problem)
     if db.exec(select(User).where(User.email == email)).first():
-        # Same shape as a bad login: do not confirm that the account exists.
+        # Don't reveal whether an email is registered: same status as a new signup, no session.
         log_audit(db, "signup_existing_email")
-        raise HTTPException(409, "Could not create that account. If you already have one, sign in instead.")
+        return {"user": None, "message": "Check your details. If you already have an account with this email, log in instead."}
     user = User(
         email=email,
         name=body.name.strip()[:80],

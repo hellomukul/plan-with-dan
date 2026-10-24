@@ -159,6 +159,56 @@ class RecommendationRun(SQLModel, table=True):
     created_at: datetime = Field(default_factory=utcnow)
 
 
+class DeskState(SQLModel, table=True):
+    """What the student did with a Dan's Desk decision card."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(index=True, foreign_key="user.id")
+    card_id: str = Field(index=True)
+    status: str  # snoozed | dismissed | done
+    until: Optional[datetime] = None
+    created_at: datetime = Field(default_factory=utcnow)
+
+
+class DeskBrief(SQLModel, table=True):
+    """Cached daily brief: one LLM call per student per day per set of cards."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(index=True, foreign_key="user.id")
+    day: str = Field(index=True)
+    cards_hash: str
+    text: str
+    run_id: str = ""
+    created_at: datetime = Field(default_factory=utcnow)
+
+
+class FitDismissal(SQLModel, table=True):
+    """'Not for me' on a best-fit card, with an optional reason."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(index=True, foreign_key="user.id")
+    course_key: str = Field(index=True)
+    reason: str = ""
+    created_at: datetime = Field(default_factory=utcnow)
+
+
+class ActionLog(SQLModel, table=True):
+    """Every plan change, so the student can see it and undo it."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(index=True, foreign_key="user.id")
+    action: str  # add | remove | switch | status
+    summary: str
+    payload: str = "{}"  # JSON needed to undo
+    by: str = "student"  # student | dan
+    undone: bool = False
+    created_at: datetime = Field(default_factory=utcnow, index=True)
+
+
+USER_TABLES = (AuthSession, Profile, PlanItem, GlobalChoice, ChatMessage, AuditEvent, RecommendationRun,
+               DeskState, DeskBrief, FitDismissal, ActionLog)
+
+
 def _make_engine():
     url = DATABASE_URL
     if url.startswith("postgres://"):

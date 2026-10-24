@@ -29,10 +29,12 @@ from auth import current_user, limiter  # noqa: E402
 from catalog import TERM_NAMES, TOPIC_RULES, get_catalog  # noqa: E402
 from config import DAILY_BUDGET_USD, MODEL_NAME, ROOT, RUN_BUDGET_USD, ai_available  # noqa: E402
 from crew.chat import run_turn, stream_turn  # noqa: E402
+from crew.desk import apply_states, brief as desk_brief, scan as desk_scan, set_state as set_desk_state  # noqa: E402
 from crew.recommender import recommend  # noqa: E402
+from fit import FitContext, best_fits  # noqa: E402
 from db import (  # noqa: E402
-    AuditEvent, BidReport, ChatMessage, GlobalChoice, PlanItem, Profile, RecommendationRun,
-    UsageLog, User, get_db, init_db, utcnow,
+    USER_TABLES, ActionLog, AuditEvent, BidReport, ChatMessage, FitDismissal, GlobalChoice, PlanItem, Profile,
+    RecommendationRun, UsageLog, User, get_db, init_db, utcnow,
 )
 from ics import build_calendar, google_template_link, meeting_dates  # noqa: E402
 from planning import (  # noqa: E402
@@ -63,6 +65,9 @@ async def _rate_limited(_request: Request, _exc: RateLimitExceeded):
 
 # The Vite dev server (npm run dev) proxies /api from another port; production is same-origin.
 DEV_ORIGINS = {"http://127.0.0.1:5173", "http://localhost:5173"}
+CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+       "font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; "
+       "frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'")
 
 
 @app.middleware("http")
@@ -77,6 +82,8 @@ async def guard_requests(request: Request, call_next):
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("Referrer-Policy", "same-origin")
     response.headers.setdefault("X-Frame-Options", "DENY")
+    if not request.url.path.startswith(("/docs", "/redoc", "/openapi.json")):
+        response.headers.setdefault("Content-Security-Policy", CSP)
     return response
 
 
@@ -205,6 +212,14 @@ def get_plan(user: User = Depends(current_user), db: Session = Depends(get_db)):
     }
 
 
+def _log_action(db: Session, user_id: int, action: str, summary: str, payload: dict, by: str = "student") -> int:
+    entry = ActionLog(user_id=user_id, action=action, summary=summary, payload=json.dumps(payload), by=by)
+    db.add(entry)
+    db.commit()
+    db.refresh(entry)
+    return entry.id
+
+
 @app.post("/api/plan")
 def add_plan(body: PlanIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
     cat = get_catalog()
@@ -215,19 +230,23 @@ def add_plan(body: PlanIn, user: User = Depends(current_user), db: Session = Dep
     for item in existing:
         other = cat.by_id.get(item.course_id)
         if other and other.offering_key == sec.offering_key:
+            old_id = item.course_id
             item.course_id = sec.id  # same course, different section: switch
             db.add(item)
             db.commit()
-            return {"ok": True, "id": item.id, "switched": True}
+            action_id = _log_action(db, user.id, "switch", f"Switched {sec.number} to section {sec.section}",
+                                    {"item_id": item.id, "from": old_id, "to": sec.id}, body.added_by)
+            return {"ok": True, "id": item.id, "switched": True, "action_id": action_id}
     if len(existing) >= 60:
         raise HTTPException(400, "Your plan is full (60 courses).")
     item = PlanItem(user_id=user.id, course_id=sec.id, status=body.status, added_by=body.added_by)
     db.add(item)
     db.commit()
     db.refresh(item)
+    action_id = _log_action(db, user.id, "add", f"Added {sec.number} {sec.title}", {"item_id": item.id}, body.added_by)
     _, rows = _plan_rows(db, user.id)
     clashes = [c for c in conflicts([r.section for r in rows if r.section.term == sec.term]) if sec.id in (c["a_id"], c["b_id"])]
-    return {"ok": True, "id": item.id, "clashes": clashes}
+    return {"ok": True, "id": item.id, "clashes": clashes, "action_id": action_id}
 
 
 @app.patch("/api/plan/{item_id}")
@@ -235,19 +254,24 @@ def patch_plan(item_id: int, body: PlanPatch, user: User = Depends(current_user)
     item = db.get(PlanItem, item_id)
     if not item or item.user_id != user.id:
         raise HTTPException(404, "Not in your plan.")
+    cat = get_catalog()
+    before = {"status": item.status, "bid_points": item.bid_points, "course_id": item.course_id}
     if body.status:
         item.status = body.status
     if body.bid_points is not None:
         item.bid_points = body.bid_points
     if body.course_id:
-        cat = get_catalog()
         new, old = cat.by_id.get(body.course_id), cat.by_id.get(item.course_id)
         if not new or not old or new.offering_key != old.offering_key:
             raise HTTPException(400, "You can only switch to another section of the same course.")
         item.course_id = new.id
     db.add(item)
     db.commit()
-    return {"ok": True}
+    sec = cat.by_id.get(item.course_id)
+    label = sec.number if sec else "course"
+    what = "section" if body.course_id else "status" if body.status else "bid points"
+    action_id = _log_action(db, user.id, "update", f"Changed {label} {what}", {"item_id": item.id, "before": before})
+    return {"ok": True, "action_id": action_id}
 
 
 @app.delete("/api/plan/{item_id}")
@@ -255,7 +279,49 @@ def delete_plan(item_id: int, user: User = Depends(current_user), db: Session = 
     item = db.get(PlanItem, item_id)
     if not item or item.user_id != user.id:
         raise HTTPException(404, "Not in your plan.")
+    sec = get_catalog().by_id.get(item.course_id)
+    payload = {"course_id": item.course_id, "status": item.status, "bid_points": item.bid_points, "added_by": item.added_by}
     db.delete(item)
+    db.commit()
+    action_id = _log_action(db, user.id, "remove", f"Removed {sec.number if sec else 'a course'}", payload)
+    return {"ok": True, "action_id": action_id}
+
+
+@app.get("/api/actions")
+def list_actions(user: User = Depends(current_user), db: Session = Depends(get_db)):
+    rows = db.exec(select(ActionLog).where(ActionLog.user_id == user.id).order_by(ActionLog.id.desc()).limit(20)).all()
+    return {"actions": [{"id": a.id, "action": a.action, "summary": a.summary, "by": a.by, "undone": a.undone,
+                         "at": a.created_at.isoformat()} for a in rows]}
+
+
+@app.post("/api/actions/{action_id}/undo")
+def undo_action(action_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    a = db.get(ActionLog, action_id)
+    if not a or a.user_id != user.id:
+        raise HTTPException(404, "Nothing to undo.")
+    if a.undone:
+        return {"ok": True, "already": True}
+    data = json.loads(a.payload or "{}")
+    if a.action == "add":
+        item = db.get(PlanItem, data.get("item_id"))
+        if item and item.user_id == user.id:
+            db.delete(item)
+    elif a.action == "remove":
+        db.add(PlanItem(user_id=user.id, course_id=data["course_id"], status=data.get("status", "planned"),
+                        bid_points=data.get("bid_points"), added_by=data.get("added_by", "student")))
+    elif a.action in ("switch", "update"):
+        item = db.get(PlanItem, data.get("item_id"))
+        if item and item.user_id == user.id:
+            if a.action == "switch":
+                item.course_id = data["from"]
+            else:
+                before = data.get("before", {})
+                item.status = before.get("status", item.status)
+                item.bid_points = before.get("bid_points")
+                item.course_id = before.get("course_id", item.course_id)
+            db.add(item)
+    a.undone = True
+    db.add(a)
     db.commit()
     return {"ok": True}
 
@@ -576,6 +642,129 @@ def safety_events(user: User = Depends(current_user), db: Session = Depends(get_
     rows = db.exec(select(AuditEvent).where(AuditEvent.user_id == user.id).order_by(AuditEvent.id.desc()).limit(50)).all()
     return {"events": [{"kind": r.kind, "detail": json.loads(r.detail or "{}"), "at": r.created_at.isoformat(),
                         "run_id": r.run_id} for r in rows]}
+
+
+# ------------------------------------------------------------------ Dan's Desk (chief of staff) + best fits
+
+def _bid_points(db: Session, user_id: int) -> dict[str, int | None]:
+    cat = get_catalog()
+    out: dict[str, int | None] = {}
+    for i in db.exec(select(PlanItem).where(PlanItem.user_id == user_id)).all():
+        sec = cat.by_id.get(i.course_id)
+        if sec:
+            out[sec.number] = i.bid_points
+    return out
+
+
+@app.get("/api/desk")
+async def desk(user: User = Depends(current_user), db: Session = Depends(get_db)):
+    cat = get_catalog()
+    _, rows = _plan_rows(db, user.id)
+    profile = (db.get(Profile, user.id) or Profile(user_id=user.id)).as_dict()
+    today = date.today()
+    cards = desk_scan(profile, rows, cat, _globals(db, user.id), _bid_points(db, user.id), today)
+    visible, hidden = apply_states(db, user.id, cards)
+    top = visible[:3]
+    b = await desk_brief(db, user.id, user.name, profile, top, today)
+    return {
+        "today": today.isoformat(),
+        "brief": b,
+        "top": [c.as_dict(today) for c in top],
+        "later": [c.as_dict(today) for c in visible[3:]],
+        "hidden": len(hidden),
+    }
+
+
+class DeskStateIn(BaseModel):
+    status: Literal["done", "snoozed", "dismissed", "active"]
+
+
+@app.post("/api/desk/{card_id}")
+def desk_card(card_id: str, body: DeskStateIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    set_desk_state(db, user.id, card_id[:40], body.status)
+    return {"ok": True}
+
+
+@app.get("/api/bestfits")
+def bestfits(term: Literal["202603", "202701"] = "202701", user: User = Depends(current_user),
+             db: Session = Depends(get_db)):
+    cat = get_catalog()
+    _, rows = _plan_rows(db, user.id)
+    profile = (db.get(Profile, user.id) or Profile(user_id=user.id)).as_dict()
+    prog = requirement_progress(profile, rows, cat, _globals(db, user.id))
+    reports: dict[str, list[dict]] = {}
+    for r in db.exec(select(BidReport)).all():
+        reports.setdefault(r.course_number, []).append(r.model_dump())
+    dismissed = [d.course_key for d in db.exec(select(FitDismissal).where(FitDismissal.user_id == user.id)).all()]
+    ctx = FitContext(catalog=cat, profile=profile, plan=rows, dismissed=dismissed, bid_reports=reports,
+                     ldr_met=prog["ldr"]["met"], gsr_met=prog["gsr"]["met"] or bool(prog["gsr"]["in_plan"]))
+    return best_fits(ctx, term)
+
+
+class DismissIn(BaseModel):
+    key: str = Field(max_length=200)
+    reason: Literal["", "time", "interest", "taken", "competitive", "other"] = ""
+
+
+@app.post("/api/bestfits/dismiss")
+def dismiss_fit(body: DismissIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    if not get_catalog().offering(body.key):
+        raise HTTPException(404, "Unknown course.")
+    db.add(FitDismissal(user_id=user.id, course_key=body.key, reason=body.reason))
+    db.commit()
+    return {"ok": True}
+
+
+@app.delete("/api/bestfits/dismiss")
+def undismiss_fit(key: str, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    for d in db.exec(select(FitDismissal).where(FitDismissal.user_id == user.id, FitDismissal.course_key == key)).all():
+        db.delete(d)
+    db.commit()
+    return {"ok": True}
+
+
+# ------------------------------------------------------------------ your data: export + delete
+
+def _rows_for(db: Session, model, user_id: int) -> list[dict]:
+    return [r.model_dump(mode="json", exclude={"password_hash", "token_hash"})
+            for r in db.exec(select(model).where(model.user_id == user_id)).all()]
+
+
+@app.get("/api/account/export")
+def export_account(user: User = Depends(current_user), db: Session = Depends(get_db)):
+    data = {"user": {"email": user.email, "name": user.name, "created_at": user.created_at.isoformat()}}
+    for model in (Profile, PlanItem, GlobalChoice, ChatMessage, RecommendationRun, FitDismissal, ActionLog, AuditEvent):
+        data[model.__name__] = _rows_for(db, model, user.id)
+    data["BidReport"] = _rows_for(db, BidReport, user.id)
+    data["UsageLog"] = _rows_for(db, UsageLog, user.id)
+    return Response(json.dumps(data, indent=2, default=str), media_type="application/json",
+                    headers={"Content-Disposition": 'attachment; filename="plan-with-dan-my-data.json"'})
+
+
+class DeleteIn(BaseModel):
+    password: str = Field(max_length=200)
+
+
+@app.post("/api/account/delete")
+@limiter.limit("5/minute")
+def delete_account(request: Request, response: Response, body: DeleteIn, user: User = Depends(current_user),
+                   db: Session = Depends(get_db)):
+    if not auth.hasher.verify(body.password, user.password_hash):
+        raise HTTPException(401, "That password doesn't match.")
+    for model in USER_TABLES:
+        for row in db.exec(select(model).where(model.user_id == user.id)).all():
+            db.delete(row)
+    for r in db.exec(select(BidReport).where(BidReport.user_id == user.id)).all():
+        r.user_id = None  # keep the anonymous bid outcome for classmates, unlink it from you
+        db.add(r)
+    for u in db.exec(select(UsageLog).where(UsageLog.user_id == user.id)).all():
+        u.user_id = None  # keep anonymous token counts for cost reporting
+        db.add(u)
+    db.commit()  # children first, so foreign keys hold
+    db.delete(user)
+    db.commit()
+    response.delete_cookie(auth.COOKIE, path="/")
+    return {"ok": True}
 
 
 # ------------------------------------------------------------------ the web app

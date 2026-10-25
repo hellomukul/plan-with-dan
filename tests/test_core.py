@@ -1346,8 +1346,9 @@ def test_owner_dashboard_is_private_and_counts_without_leaking(client, monkeypat
     assert d["methods"]["email"] >= 2
     assert any(f["key"] == "plan_next" for f in d["features"])
     assert any(row["you"] for row in d["recent"])
-    body = r.text.lower()
-    assert "@yale.edu" not in body and "nosy" not in body  # counts and anonymous rows only
+    emails = {row["email"] for row in d["recent"]}
+    assert {"boss@yale.edu", "nosy.student@yale.edu"} <= emails  # the owner sees account emails
+    assert stranger.get("/api/owner/stats").status_code == 404 and "nosy" not in stranger.get("/api/owner/stats").text
 
 
 def test_activity_is_logged_once_per_day(client):

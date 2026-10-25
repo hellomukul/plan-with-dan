@@ -16,7 +16,7 @@ export interface OwnerStats {
   features: { key: string; label: string; count: number; users: number | null }[]
   spend: Record<'today' | 'd7' | 'd30' | 'all', { usd: number; runs: number }> & { daily_cap_per_student_usd: number }
   daily: { date: string; signups: number; active: number; questions: number; cost_usd: number }[]
-  recent: { label: string; you: boolean; joined: string; method: string; program: string; year: string; onboarded: boolean; last_active: string | null; active_days: number; plan_items: number; questions: number }[]
+  recent: { label: string; email: string; you: boolean; joined: string; method: string; program: string; year: string; onboarded: boolean; last_active: string | null; active_days: number; plan_items: number; questions: number }[]
 }
 /** Full-page link that starts "Continue with Google / Microsoft" (a redirect, not a fetch). */
 export const oauthStartUrl = (p: OAuthProvider, intent: 'signup' | 'login' | 'calendar' | 'link') => `/api/auth/oauth/${p}/start?intent=${intent}`

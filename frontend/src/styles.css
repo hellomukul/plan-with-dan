@@ -440,3 +440,10 @@ input[type='range'] { accent-color: var(--pink); padding: 0; }
 .tw-note { margin: 10px 0 0; padding: 8px 10px; border-left: 2px solid var(--blue); background: var(--blue-soft); border-radius: 6px; color: var(--muted); }
 .tw-note b { color: var(--text); }
 .py-chip-tag.tw { color: var(--blue); border-color: rgba(95, 212, 196, 0.4); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 90px; }
+
+/* 2027-28 disclaimer */
+.ny-note { display: flex; gap: 8px; align-items: flex-start; margin: 0; padding: 8px 12px; border-radius: 8px; font-size: 13px; line-height: 1.45;
+  color: var(--muted); background: var(--pink-soft); border: 1px solid var(--pink-line); }
+.ny-note .icon { color: var(--pink); flex: none; margin-top: 2px; }
+.ny-note b { color: var(--text); font-weight: 600; }
+.ny-note.compact { font-size: 12.5px; padding: 6px 10px; }

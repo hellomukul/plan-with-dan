@@ -35,3 +35,6 @@
   .xp-strip-chip { display: none; }
   .xp-elihu { height: 60px; }
 }
+
+.xp-scope { margin-bottom: 14px; }
+@media (max-width: 640px) { .xp-scope button { min-height: 44px; } }

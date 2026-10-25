@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { MessageCircle, UserRound, X } from 'lucide-react'
 import { api, type Section } from '../api'
 import CourseExplorer from '../components/CourseExplorer'
+import YaleCourses from '../components/YaleCourses'
 import Elihu from '../mascots/Elihu'
 import { setElihuContext } from '../lib/elihu'
 import { useApp } from '../state'
@@ -18,6 +19,9 @@ const TERMS = ['202603', '202701']
 const facultyHref = (name: string) => `#/faculty/${encodeURIComponent(name)}`
 
 export default function Explore() {
+  // SOM's own courses, or courses at other Yale schools (from the Yale Bulletin), kept apart
+  const [scope, setScope] = useState<'som' | 'yale'>(() => (sessionStorage.getItem('pwd-xp-scope') === 'yale' ? 'yale' : 'som'))
+  useEffect(() => { sessionStorage.setItem('pwd-xp-scope', scope) }, [scope])
   const { plan, profile, sectionById, addCourse, refreshPlan, undoToast, toast, routeArg, shortlist, go } = useApp()
   const program = profile?.program || 'MBA'
   const who = useMemo(() => ({ program, year: profile?.year ?? '', cohort: profile?.cohort ?? '' }), [program, profile?.year, profile?.cohort])
@@ -82,14 +86,21 @@ export default function Explore() {
       <div className="page-head">
         <div>
           <h1>Course explorer</h1>
-          <p>Every SOM course this year, and who teaches it. Pick one to see if it’s open to you and which sections fit your week, then add it to your plan.</p>
+          <p>Every SOM course this year, and who teaches it, plus courses at other Yale schools you can take. Pick one to see if it’s open to you, then add it to your plan.</p>
         </div>
       </div>
 
+      <div className="tabs xp-scope" role="tablist" aria-label="Which courses">
+        <button type="button" role="tab" aria-selected={scope === 'som'} className={scope === 'som' ? 'on' : ''} onClick={() => setScope('som')}>SOM courses</button>
+        <button type="button" role="tab" aria-selected={scope === 'yale'} className={scope === 'yale' ? 'on' : ''} onClick={() => setScope('yale')}>Other Yale schools</button>
+      </div>
+
+      {scope === 'yale' ? <YaleCourses /> : <>
       <PromptStrip />
 
       <CourseExplorer variant="page" who={who} week={week} autoIds={coreIds} onAdd={onAdd} onEnroll={onEnroll}
         initialFaculty={routeArg || undefined} listSlot={elihuSlot} facultyHref={facultyHref} />
+      </>}
     </div>
   )
 }

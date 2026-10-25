@@ -169,6 +169,7 @@ async def guard_requests(request: Request, call_next):
 app.include_router(auth.router)
 import oauth  # noqa: E402  (Continue with Google / Microsoft)
 app.include_router(oauth.router)
+import other_courses  # noqa: E402
 import owner  # noqa: E402  (owner-only dashboard: sign-ups, active students, spend)
 app.include_router(owner.router)
 
@@ -867,6 +868,15 @@ def import_courses(body: ImportCoursesIn, user: User = Depends(current_user), db
     db.add(prof)
     db.commit()
     return {"ok": True, "added": added, "completed": completed}
+
+
+# ------------------------------------------------------------------ courses at other Yale schools (from the Bulletin)
+
+@app.get("/api/yale-courses")
+def yale_courses(q: str = "", school: str = "", term: Literal["", "202603", "202701"] = "", limit: int = 40,
+                 _user: User | None = Depends(auth.optional_user)):
+    """Courses at other Yale schools that SOM students can take with the instructor's permission."""
+    return {**other_courses.summary(), "courses": other_courses.search(q[:120], school[:60], term, max(1, min(limit, 80)))}
 
 
 @app.get("/api/grades")

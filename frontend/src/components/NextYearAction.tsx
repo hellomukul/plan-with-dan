@@ -10,6 +10,7 @@ import { NEXT_YEAR, quarterLabel, termName } from '../lib/format'
 import { nextYearSection } from '../lib/eligibility'
 import { useApp } from '../state'
 import './course-explorer.css'
+import { NEXT_YEAR_DISCLAIMER } from './NextYearNote'
 
 export default function NextYearAction({ secs, program }: { secs: Section[]; program: string }) {
   const { plan, refreshPlan, undoToast, toast } = useApp()
@@ -62,7 +63,7 @@ export default function NextYearAction({ secs, program }: { secs: Section[]; pro
       ) : (
         <>
           <span className="nx-text small muted">
-            SOM hasn’t published 2027–28 yet, so this is an expected course based on this year’s {quarter} offering, times TBA.
+            An expected course for {when}, from this year’s {quarter} offering, times TBA. {NEXT_YEAR_DISCLAIMER}
           </span>
           <button type="button" className="btn sm nx-btn" disabled={busy} aria-busy={busy || undefined} onClick={() => void add()}>
             <CalendarPlus className="icon sm" />{busy ? 'Planning…' : `Plan for ${when}`}</button>

@@ -165,6 +165,26 @@ def ldr_courses(ctx: RunContext[StudentContext], term: Term = "any") -> str:
     return fence(text, "som_catalog", limit=len(text) + 100)  # the whole list, never cut short
 
 
+def other_yale_courses(ctx: RunContext[StudentContext], query: str) -> str:
+    """Courses at OTHER Yale schools (Graduate School, Jackson, Environment, Public Health) that SOM students can take
+    with the instructor's permission. Use when the student asks for courses outside SOM.
+
+    Args:
+        query: plain words, e.g. "English literature" or "climate policy".
+    """
+    if not _log(ctx, "other_yale_courses", query=query):
+        return LOOP_MSG
+    import other_courses
+    hits = other_courses.search(query, limit=8)
+    if not hits:
+        return "No matching courses at other Yale schools in the 2026-27 Bulletin."
+    rules = other_courses.load().get("rules", "")
+    lines = [f"RULES: {rules}"] + [
+        f"{c['number']} {c['title']} | {c['school']} · {c['dept']} | {', '.join(c['term_names'])} | {c['instructor'] or 'instructor TBA'} | "
+        f"{c['description'][:220]}" for c in hits]
+    return fence("\n".join(lines), "yale_bulletin")
+
+
 def course_details(ctx: RunContext[StudentContext], key_or_number: str) -> str:
     """Full details for one course: every section, time, room, seats, faculty, prerequisites.
 
@@ -415,10 +435,10 @@ def suggest_bid_split(ctx: RunContext[StudentContext], budget: int, must_haves: 
         "\n(Heuristic: weights priority, seat count and any reported winning bids. Not a guarantee.)"
 
 
-CATALOG_TOOLS = [search_catalog, ldr_courses, course_details, check_fit, find_alternates, suggest_add, my_profile_and_plan, yale_facts]
+CATALOG_TOOLS = [search_catalog, ldr_courses, other_yale_courses, course_details, check_fit, find_alternates, suggest_add, my_profile_and_plan, yale_facts]
 PLANNER_TOOLS = [my_profile_and_plan, plan_review, requirements_status, global_options, upcoming_dates, ldr_courses,
                  check_fit, find_alternates, course_details, search_catalog, suggest_add, yale_facts]
 BID_TOOLS = [my_profile_and_plan, bid_history, suggest_bid_split, course_details, yale_facts]
-CAREER_TOOLS = [my_profile_and_plan, search_catalog, course_details, suggest_add, check_fit, yale_facts]
+CAREER_TOOLS = [my_profile_and_plan, search_catalog, other_yale_courses, course_details, suggest_add, check_fit, yale_facts]
 GUIDE_TOOLS = [yale_facts, upcoming_dates, requirements_status, my_profile_and_plan, search_catalog, ldr_courses]
 NEWS_TOOLS = [search_catalog]

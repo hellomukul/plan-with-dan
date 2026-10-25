@@ -245,6 +245,16 @@ export interface SwapCheck {
   form: { opens: string; where: string; url: string }
 }
 
+/** A course at another Yale school (from the public Yale Bulletin) that SOM students can take with permission. */
+export interface YaleCourse {
+  id: string; number: string; also: string[]; title: string; instructor: string; school: string; dept: string
+  terms: string[]; term_names: string[]; description: string; source: string
+}
+export interface YaleCoursesResponse {
+  count: number; schools: { name: string; count: number }[]; rules: string; rules_source: string; source: string; fetched: string
+  courses: YaleCourse[]
+}
+
 /** Pass/Fail budget: finished courses with the grades the student chose to log. */
 export interface GradesResponse {
   program: string
@@ -296,6 +306,8 @@ export interface PackageResult {
   followups?: string[]
   blocked: boolean
   items: PackageItem[]
+  /** closest matches at other Yale schools (shown apart, never placed or counted) */
+  beyond_som?: (Omit<YaleCourse, 'also'>)[]
   terms: PackageTerm[]
   dropped: { key?: string; dropped_because: string }[]
   trace: TraceStep[]
@@ -558,6 +570,7 @@ export const api = {
     request<{ ok: boolean; course: OutsideCourse; clashes: Clash[] }>('POST', '/api/outside', c),
   removeOutside: (id: number) => request<{ ok: boolean }>('DELETE', `/api/outside/${id}`),
   grades: () => request<GradesResponse>('GET', '/api/grades'),
+  yaleCourses: (q = '', school = '', term = '') => request<YaleCoursesResponse>('GET', `/api/yale-courses?q=${encodeURIComponent(q)}&school=${encodeURIComponent(school)}&term=${term}`),
   swapCheck: (giveItemId: number, want: string) => request<SwapCheck>('POST', '/api/swap/check', { give_item_id: giveItemId, want }),
   readCourses: (image: string) => request<{ courses: { number: string; title: string; grade: string; known: boolean; already: boolean }[]; note: string; usage: Usage; run_id: string }>('POST', '/api/profile/read-courses', { image }),
   importCourses: (courses: { number: string; grade: string }[]) => request<{ ok: boolean; added: string[]; completed: string[] }>('POST', '/api/profile/import-courses', { courses }),

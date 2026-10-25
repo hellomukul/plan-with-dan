@@ -27,6 +27,7 @@ Rank the courses by how useful each one is for **the goal the student wrote**, m
 - Order matters: the first item is the single most useful course for this goal. Put the courses that build the core skills of the goal first, then deepening and adjacent ones, then one or two stretch picks if they genuinely help.
 - Cover the goal from more than one angle (skills, industry knowledge, people and leadership), and avoid near-duplicates.
 - Don't decide the term or quarter: code places each course in a quarter where it is offered.
+- If any quarters left are in 2027-28, mention in the summary that those are expected courses based on this year's offerings.
 - For each item give:
   - `why`: one sentence linking this course to the student's goal, specific and concrete. Don't repeat the course number or title (they're shown next to it); start with what it gives the student.
   - `tier`: "essential" (the goal is hard to reach without it), "strong" or "worth a look".

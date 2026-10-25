@@ -11,7 +11,7 @@ import {
 import { api, type ActionEntry, type Clash, type OutsideCourse, type PlanItem, type PlanResponse, type Section } from '../api'
 import CourseDrawer from '../components/CourseDrawer'
 import Timetable, { sectionsClash } from '../components/Timetable'
-import { Empty, Overlay, Spinner } from '../components/ui'
+import { Empty, Spinner } from '../components/ui'
 import { scoreOffering } from '../lib/courseSearch'
 import { DAYS, DAY_NAMES, NEXT_YEAR, PLANNING_TERM, QUARTER_SHORT, TERM_NAMES, quarterLabel, shortExam, termName as baseTermName } from '../lib/format'
 import { addDropClosed } from '../lib/eligibility'
@@ -20,6 +20,8 @@ import './pages-a.css'
 import './plan-actions.css'
 import './plan-years.css'
 import { taughtWithLabel } from '../components/TaughtWith'
+import NextYearNote from '../components/NextYearNote'
+import OutsideCourseDialog from '../components/OutsideCourseDialog'
 
 type SessionView = 'all' | '1' | '2'
 type Status = PlanItem['status']
@@ -494,6 +496,7 @@ function Overview({ plan, terms, years, coreByTerm, cohortSet, termName, isExpec
               <span className="py-year-sub">{exp ? <><Clock className="icon sm" />Expected courses · times TBA</> : 'This year · times published'}</span>
               <span className="py-year-units mono">{units(yUnits)} units</span>
             </header>
+            {exp && <NextYearNote />}
             <div className={`py-year-terms n${ts.length}`}>
               {ts.map((t) => {
                 const info = plan.terms[t]
@@ -807,9 +810,10 @@ function ExpectedPane({ plan, term, active, termName, year, busy, run, onOpen, g
             </span>
           </div>
           <div className="py-term-rule"><UnitMeter rule={rule} /><span className="faint small">{badge.long}</span></div>
+          <NextYearNote compact />
           <p className="py-exp-note">
             <Clock className="icon sm" />
-            <span>SOM publishes 2027–28 courses next year. These are expected: this year's {source ? baseTermName(source) : ''} offerings in the same quarter. Times, rooms and sections are TBA.</span>
+            <span>Expected from this year’s {source ? baseTermName(source) : ''} offerings in the same quarter: what second-years are taking now. Times, rooms and sections are TBA.</span>
           </p>
           <QuarterBoard term={term} entries={items.map((i) => ({ s: i.section, item: i, core: false }))} missingCore={0} expected onOpen={onOpen} go={go} />
         </div>
@@ -1108,10 +1112,6 @@ function PlanRow({ item, busy, run, onOpen }: { item: PlanItem; busy: boolean; r
 
 /* ---------------------------------------------------------------- courses outside SOM (student feedback, Oct 25) */
 
-const DAY_OPTS = ['M', 'T', 'W', 'Th', 'F'] as const
-const SCHOOLS = ['GSAS', 'Yale College', 'Law School', 'Jackson School', 'School of Public Health', 'Engineering & Applied Science', 'Environment', 'Divinity', 'Other']
-const toMin = (t: string) => (t ? Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5)) : null)
-
 /** Outside-SOM courses in one term: shown with their units apart from SOM's totals, each removable. */
 function OutsideChips({ list }: { list: OutsideCourse[] }) {
   const { refreshPlan, toast } = useApp()
@@ -1142,81 +1142,13 @@ function OutsideChips({ list }: { list: OutsideCourse[] }) {
   )
 }
 
-/** "Add a course from outside SOM": school, number, title, units, term, days and time. It joins the term, the
-    timetable and the clash check; how its units count toward the MBA is the registrar's call, and we say so. */
+/** "Add a course from outside SOM" button: opens the shared form (components/OutsideCourseDialog). */
 function OutsideAdd({ terms, termName }: { terms: string[]; termName: (t: string) => string }) {
-  const { refreshPlan, toast } = useApp()
   const [open, setOpen] = useState(false)
-  const [f, setF] = useState({ school: 'GSAS', number: '', title: '', units: '4', term: terms.find((t) => t === '202701') ?? terms[0] ?? '', days: [] as string[], start: '', end: '' })
-  const [error, setError] = useState('')
-  const [saving, setSaving] = useState(false)
-  const save = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError('')
-    if (f.title.trim().length < 2) { setError('Add the course title.'); return }
-    if (!!f.start !== !!f.end || (f.start && f.end <= f.start)) { setError('Give both a start and an end time, with the end after the start.'); return }
-    if ((f.start || f.end) && !f.days.length) { setError('Pick the days it meets.'); return }
-    setSaving(true)
-    try {
-      const r = await api.addOutside({ school: f.school, number: f.number.trim(), title: f.title.trim(), units: Number(f.units) || 0, term: f.term,
-        days: f.days, start_min: toMin(f.start), end_min: toMin(f.end) })
-      await refreshPlan()
-      toast(r.clashes.length ? `Added, but it clashes with ${r.clashes.map((c) => (c.a_id === r.course.section.id ? c.b : c.a)).join(', ')}` : `Added ${r.course.number || r.course.title} to ${termName(f.term)}`,
-        r.clashes.length ? 'bad' : 'good')
-      setOpen(false)
-      setF((x) => ({ ...x, number: '', title: '', days: [], start: '', end: '' }))
-    } catch (err) {
-      setError((err as Error).message)
-    } finally {
-      setSaving(false)
-    }
-  }
   return (
     <>
       <button type="button" className="btn sm ghost" onClick={() => setOpen(true)}><Building2 className="icon sm" aria-hidden="true" />Add a course from outside SOM</button>
-      {open && (
-        <Overlay onClose={() => setOpen(false)} center>
-          <form className="py-out-form" onSubmit={(e) => void save(e)}>
-            <div className="row between"><h3 style={{ margin: 0 }}>Add a course from outside SOM</h3>
-              <button type="button" className="btn icon ghost" aria-label="Close" onClick={() => setOpen(false)}><X className="icon" /></button></div>
-            <p className="muted small" style={{ margin: 0 }}>For a class at another Yale school. It joins your term, your timetable and the clash check. Its units show apart from SOM’s totals: ask the registrar how they count toward your degree.</p>
-            <div className="py-out-grid">
-              <label className="field">School
-                <select value={f.school} onChange={(e) => setF({ ...f, school: e.target.value })}>{SCHOOLS.map((x) => <option key={x}>{x}</option>)}</select>
-              </label>
-              <label className="field">Course number (optional)
-                <input value={f.number} maxLength={16} placeholder="e.g. ENGL 3450" onChange={(e) => setF({ ...f, number: e.target.value })} />
-              </label>
-            </div>
-            <label className="field">Title
-              <input value={f.title} maxLength={120} required placeholder="e.g. Shakespeare: Comedies and Romances" onChange={(e) => setF({ ...f, title: e.target.value })} />
-            </label>
-            <div className="py-out-grid">
-              <label className="field">Term
-                <select value={f.term} onChange={(e) => setF({ ...f, term: e.target.value })}>{terms.map((t) => <option key={t} value={t}>{termName(t)}</option>)}</select>
-              </label>
-              <label className="field">Units
-                <input type="number" min={0} max={8} step={0.5} value={f.units} onChange={(e) => setF({ ...f, units: e.target.value })} />
-              </label>
-            </div>
-            <fieldset className="py-out-days"><legend className="small muted">Days (optional)</legend>
-              {DAY_OPTS.map((d) => (
-                <button key={d} type="button" className={`chip ${f.days.includes(d) ? 'on' : ''}`} aria-pressed={f.days.includes(d)}
-                  onClick={() => setF({ ...f, days: f.days.includes(d) ? f.days.filter((x) => x !== d) : [...f.days, d] })}>{d}</button>
-              ))}
-            </fieldset>
-            <div className="py-out-grid">
-              <label className="field">Starts<input type="time" value={f.start} onChange={(e) => setF({ ...f, start: e.target.value })} /></label>
-              <label className="field">Ends<input type="time" value={f.end} onChange={(e) => setF({ ...f, end: e.target.value })} /></label>
-            </div>
-            <p className="small error-text py-out-err" role={error ? 'alert' : undefined}>{error || '\u00a0'}</p>
-            <div className="row" style={{ justifyContent: 'flex-end' }}>
-              <button type="button" className="btn ghost" onClick={() => setOpen(false)}>Cancel</button>
-              <button type="submit" className="btn primary" disabled={saving} aria-busy={saving}>{saving ? 'Adding…' : 'Add to my plan'}</button>
-            </div>
-          </form>
-        </Overlay>
-      )}
+      {open && <OutsideCourseDialog terms={terms} termName={termName} onClose={() => setOpen(false)} />}
     </>
   )
 }

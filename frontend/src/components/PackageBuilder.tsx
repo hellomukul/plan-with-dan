@@ -14,6 +14,8 @@ import AgentTrace from './AgentTrace'
 import { Bar, CostChip } from './ui'
 import './package.css'
 import TaughtWith from './TaughtWith'
+import NextYearNote from './NextYearNote'
+import { AddYaleCourse, YaleBadge } from './YaleCourses'
 
 const MAX_GOAL = 600
 const TIER_TONE: Record<string, string> = { essential: 'pink', strong: 'lilac', 'worth a look': 'gray' }
@@ -317,6 +319,7 @@ export default function PackageBuilder({ onOpenCourse }: { onOpenCourse: (key: s
             </div>
           </div>
 
+          {terms.some((t) => t.expected) && <NextYearNote compact />}
           <div className="pk-terms" role="list" aria-label="Units per term with what you tick">
             {terms.map((t) => {
               const u = Math.round((units[t.code] ?? 0) * 10) / 10
@@ -342,6 +345,25 @@ export default function PackageBuilder({ onOpenCourse }: { onOpenCourse: (key: s
                 </section>
               ))}
             </div>
+          )}
+
+          {(result.beyond_som ?? []).length > 0 && (
+            <section className="pk-beyond" aria-labelledby="pk-beyond-h">
+              <h4 id="pk-beyond-h">Beyond SOM: also at Yale</h4>
+              <p className="small muted" style={{ margin: 0 }}>Closest matches for your goal at other Yale schools. You need the instructor’s permission, they follow that school’s calendar, and the registrar sets the units (typically 4).</p>
+              <ul>
+                {result.beyond_som!.map((c) => (
+                  <li key={c.id}>
+                    <div className="pk-beyond-main">
+                      <span className="pk-line"><span className="course-num">{c.number}</span><YaleBadge c={c} /><span className="small faint">{c.term_names.join(' · ')}</span></span>
+                      <b>{c.title}</b>
+                      <span className="small muted pk-beyond-desc">{c.description}</span>
+                    </div>
+                    <AddYaleCourse c={c} label="Add" />
+                  </li>
+                ))}
+              </ul>
+            </section>
           )}
 
           <div className={`pk-footer${applied && applied.added.length ? ' is-done' : ''}`}>

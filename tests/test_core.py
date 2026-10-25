@@ -1534,3 +1534,15 @@ def test_cross_listed_courses_name_their_partner_school():
     from catalog import get_catalog
     tagged = {s.number for s in get_catalog().sections if s.taught_with}
     assert {"MGT 659", "MGT 622", "MGT 563"} <= tagged and "MGT 698" not in tagged
+
+
+def test_other_yale_courses_search_and_labels(client):
+    r = client.get("/api/yale-courses?q=European%20novel").json()
+    assert r["count"] > 500 and r["rules"] and r["courses"]
+    c = r["courses"][0]
+    assert c["school"] and c["dept"] and c["terms"] and not c["number"].startswith("MGT")
+    numbers = [x["number"] for x in r["courses"]] + [a for x in r["courses"] for a in x["also"]]
+    assert len(numbers) == len(set(numbers))  # one entry per real course, cross-listed codes kept as "also"
+    by_code = client.get("/api/yale-courses?q=" + (c["also"][0] if c["also"] else c["number"]).replace(" ", "%20")).json()["courses"]
+    assert by_code and by_code[0]["id"] == c["id"]
+    assert all("202603" in x["terms"] for x in client.get("/api/yale-courses?term=202603&limit=20").json()["courses"])

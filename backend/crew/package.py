@@ -28,6 +28,7 @@ from crew.agents import packager
 from crew.chat import _split_followups
 from crew.context import load_context
 from crew.runtime import Run
+import other_courses
 from db import RecommendationRun
 from fit import _is_trip
 from planning import (
@@ -207,6 +208,12 @@ async def build_package(db, user_id: int, goal: str) -> dict:
     run.emit("place", agent="Placer (code)", placed={term_name(t): round(load[t], 1) for t in live_terms},
              clashing=[i["number"] for i in items if not i["placement"]["fits"]])
 
+    # Beyond SOM: the closest matches at other Yale schools, shown apart and never placed or counted (instructor
+    # permission, their calendar and units). Code only, no tokens.
+    remaining = {"fall" if t.endswith("03") else "spring" for t in live_terms}
+    beyond = [c for c in other_courses.search(goal, limit=12) if set(c["season"]) & remaining][:4]
+    out["beyond_som"] = [{k: c[k] for k in ("id", "number", "title", "instructor", "school", "dept", "terms", "term_names", "source")}
+                         | {"description": c["description"][:300]} for c in beyond]
     summary, followups = _split_followups(summary or "")  # never show a raw "FOLLOWUPS: a | b" line
     out.update(summary=summary, followups=followups, items=items, dropped=dropped)
     final = _finish(run, out)

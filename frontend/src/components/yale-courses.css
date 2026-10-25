@@ -1,0 +1,25 @@
+/* Courses at other Yale schools: violet labels so they never pass for SOM courses */
+:root { --violet: #b69cff; --violet-soft: rgba(182, 156, 255, 0.12); --violet-line: rgba(182, 156, 255, 0.4); }
+.yc-badge { display: inline-flex; align-items: center; gap: 4px; color: var(--violet); background: var(--violet-soft); border: 1px solid var(--violet-line); }
+.yc { display: grid; gap: 12px; }
+.yc-rules { padding: 12px 14px; font-size: 13.5px; border-color: var(--violet-line); }
+.yc-rules a { display: inline-flex; align-items: center; gap: 3px; }
+.yc-tools { display: grid; gap: 10px; padding: 12px 14px; }
+.yc-search { display: flex; align-items: center; gap: 8px; padding: 0 12px; border: 1px solid var(--line-2); border-radius: 10px; background: var(--bg-2); }
+.yc-search input { border: 0; background: transparent; padding: 10px 0; }
+.yc-filters { gap: 10px; flex-wrap: wrap; }
+.yc-school { width: auto; min-width: 220px; }
+.yc-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; align-items: start; }
+.yc-list { list-style: none; margin: 0; padding: 6px; max-height: 640px; overflow-y: auto; overscroll-behavior: contain; display: grid; gap: 2px; }
+.yc-row { width: 100%; display: grid; gap: 4px; padding: 9px 10px; border: 1px solid transparent; border-radius: 9px; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.yc-row:hover, .yc-row.on { background: var(--card-2); border-color: var(--line-2); }
+.yc-row.on { border-color: var(--violet-line); }
+.yc-row-top { display: flex; gap: 8px; align-items: baseline; min-width: 0; }
+.yc-row-top .mono { font-size: 12px; color: var(--faint); flex: none; }
+.yc-title { font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.yc-row-meta { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.yc-detail { display: grid; gap: 8px; position: sticky; top: 16px; }
+.yc-detail h3 { margin: 0; font-size: 18px; }
+.yc-desc { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.55; max-height: 320px; overflow-y: auto; }
+@media (max-width: 900px) { .yc-body { grid-template-columns: minmax(0, 1fr); } .yc-detail { position: static; } .yc-list { max-height: 420px; } }
+@media (max-width: 640px) { .yc .btn, .yc .tabs button, .yc-school, .yc-row { min-height: 44px; } .yc-school { min-width: 0; width: 100%; } }

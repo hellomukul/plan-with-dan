@@ -117,3 +117,12 @@
   .pk-footer.is-done { flex-wrap: wrap; }
   .pk-select { flex-wrap: wrap; }
 }
+
+/* Beyond SOM: courses at other Yale schools, shown apart from the ranked SOM list */
+.pk-beyond { display: grid; gap: 8px; padding: 12px 14px; border: 1px solid rgba(182, 156, 255, 0.4); border-radius: 12px; background: rgba(182, 156, 255, 0.05); }
+.pk-beyond h4 { margin: 0; font-size: 14px; }
+.pk-beyond ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.pk-beyond li { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding-top: 8px; border-top: 1px solid var(--line); }
+.pk-beyond li:first-child { border-top: 0; padding-top: 0; }
+.pk-beyond-main { display: grid; gap: 3px; min-width: 0; }
+.pk-beyond-desc { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }

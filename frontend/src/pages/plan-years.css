@@ -194,7 +194,7 @@ div.py-chip { cursor: default; }
 .py-swatch.out { border-left: 3px solid var(--blue); background: var(--blue-soft); }
 .py-outside { display: grid; gap: 6px; margin-top: 8px; padding: 8px; border: 1px dashed var(--line-2); border-radius: 8px; }
 .py-chip.out { cursor: default; border-left: 3px solid var(--blue); background: linear-gradient(90deg, var(--blue-soft), transparent 60%), var(--card-2); }
-.py-chip-tag.out { color: var(--blue); border-color: rgba(95, 212, 196, 0.4); }
+.py-chip-tag.out { color: var(--blue); border-color: rgba(95, 212, 196, 0.4); max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .py-out-form { display: grid; gap: 12px; min-width: min(520px, 86vw); }
 .py-out-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .py-out-days { border: 0; padding: 0; margin: 0; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }

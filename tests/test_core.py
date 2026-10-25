@@ -1417,3 +1417,10 @@ def test_package_goal_is_screened_and_second_years_stay_in_this_year(client):
     assert {t["code"] for t in d["terms"]} <= {"202603", "202701"}
     assert c.post("/api/package", json={"goal": "x"}).status_code == 422  # too short
     assert c.post("/api/package/apply", json={"items": []}).status_code == 422
+
+
+def test_followups_split_even_with_a_literal_backslash_n():
+    from crew.chat import _split_followups
+    text, qs = _split_followups("Prioritize MGT 692 first.\\nFOLLOWUPS: Which are hands-on? | Can you check my plan?")
+    assert text == "Prioritize MGT 692 first." and qs == ["Which are hands-on?", "Can you check my plan?"]
+    assert _split_followups("A path like C:\\new stays as it is.")[1] == []

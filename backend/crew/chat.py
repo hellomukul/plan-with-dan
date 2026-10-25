@@ -176,7 +176,9 @@ _FOLLOWUPS = re.compile(r"(?:^|\n)[ \t>*_`]*FOLLOWUPS[*_`]*[ \t]*:[ \t*_`]*([^\n
 
 def _split_followups(answer: str) -> tuple[str, list[str]]:
     """Pull the model's FOLLOWUPS line off the answer and turn it into up to 3 short, screened questions."""
-    m = _FOLLOWUPS.search(answer or "")
+    # Structured outputs sometimes carry a literal backslash-n ("…experience.\\nFOLLOWUPS: …"): make it a real newline.
+    answer = re.sub(r"\\n(?=\s*\W*FOLLOW[\s-]?UPS?\b)", "\n", answer or "", flags=re.I)
+    m = _FOLLOWUPS.search(answer)
     if not m:
         return answer, []
     questions = []

@@ -29,7 +29,8 @@ export function clearElihuContext() {
 /** Elihu's summary may end with the model's "FOLLOWUPS: a | b | c" line (older saved runs, or a backend that didn't
     strip it). Never show that raw: cut it off the text and return the questions, preferring the backend's own list. */
 export function splitFollowups(summary: string, given?: string[] | null): { text: string; followups: string[] } {
-  const m = (summary || '').match(/[\s>*_`]*\bFOLLOW[\s-]?UPS?[*_`]*\s*:\s*([^\n]*?)[\s*_`]*$/i)
+  summary = (summary || '').replace(/\\n(?=\s*\W*FOLLOW[\s-]?UPS?\b)/i, '\n')  // a literal backslash-n from the model
+  const m = summary.match(/[\s>*_`]*\bFOLLOW[\s-]?UPS?[*_`]*\s*:\s*([^\n]*?)[\s*_`]*$/i)
   const text = m ? summary.slice(0, m.index).trimEnd() : (summary || '')
   const parsed = m ? m[1].split('|').map((q) => q.trim().replace(/^[-*•\d.)\s]+/, '')).filter((q) => q.length > 3 && q.length <= 160) : []
   const list = (given?.length ? given : parsed).map((q) => q.trim()).filter(Boolean)

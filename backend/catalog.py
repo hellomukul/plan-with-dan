@@ -309,6 +309,8 @@ class Section:
     cohort: str = ""  # MBA core: the cohort this section is for (live feed only)
     exam: str = ""  # MBA core: the scheduled final exam, when SOM has published one
     projected: bool = False  # an expected 2027-28 offering, copied from this year's (times not published)
+    taught_with: list[str] = field(default_factory=list)  # other Yale schools it's cross-listed with (from its description)
+    partner_calendar: bool = False  # the description says it follows the partner school's academic calendar
 
     @property
     def offering_key(self) -> str:
@@ -381,6 +383,8 @@ class Section:
             "core": self.is_core,
             "prerequisite": self.prerequisite,
             "description": self.description,
+            "taught_with": self.taught_with,
+            "partner_calendar": self.partner_calendar,
             "syllabus": self.syllabus,
             "bio": self.bio,
             "new": self.new_course,
@@ -396,6 +400,38 @@ class Section:
 def offering_key(number: str, title: str, term: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "", title.lower().replace("&", "and"))
     return f"{number}|{slug}|{term}"
+
+
+# Cross-listed courses: SOM's feed says so in the description ("This course is cross-listed with the Law School and
+# will follow the Law School academic calendar"). We read the partner school from that sentence only.
+_PARTNERS = [
+    (re.compile(r"School of (the )?Environment|\bwith Environment\b|\bYSE\b", re.I), "School of the Environment"),
+    (re.compile(r"Yale College|Computer Science", re.I), "Yale College"),
+    (re.compile(r"Law School|Yale Law", re.I), "Law School"),
+    (re.compile(r"Jackson", re.I), "Jackson School"),
+    (re.compile(r"Divinity", re.I), "Divinity School"),
+    (re.compile(r"School of Music|Music course", re.I), "School of Music"),
+    (re.compile(r"School of Public Health|\bYSPH\b", re.I), "School of Public Health"),
+    (re.compile(r"School of Engineering|\bSEAS\b", re.I), "School of Engineering"),
+]
+_CROSS = re.compile(r"[^.]*\bcross[- ]?list(ed)?\b[^.]*\.", re.I)
+
+
+def cross_listing(description: str) -> tuple[list[str], bool]:
+    """(partner schools, follows the partner's calendar) from a course description."""
+    partners: list[str] = []
+    follows = False
+    text = description or ""
+    for m in _CROSS.finditer(text):
+        sentence = m.group(0)
+        if re.search(r"will be charged|copyright", sentence, re.I):
+            continue  # a fee notice that mentions "the cross-listed course number", not a partner
+        for rx, name in _PARTNERS:
+            if rx.search(sentence) and name not in partners:
+                partners.append(name)
+        # "... cross-listed with Yale College. It will follow their Academic Calendar": look one sentence on as well
+        follows = follows or bool(re.search(r"follow\w*\b[^.]*\bcalendar", text[m.start(): m.end() + 140], re.I))
+    return partners, follows and bool(partners)
 
 
 def _row_to_section(row: dict, aliases: dict[str, str]) -> Section:
@@ -442,6 +478,7 @@ def _row_to_section(row: dict, aliases: dict[str, str]) -> Section:
     section.programs = programs_for(section.category, section.course_type)
     section.tracks = mms_tracks_for(section.category, section.course_type)
     section.audiences = audiences_for(section.programs, section.tracks, section.category, section.any_core)
+    section.taught_with, section.partner_calendar = cross_listing(description)
     return section
 
 
@@ -625,6 +662,9 @@ def card_text(o: Offering, max_desc: int = 320) -> str:
     ]
     if flags:
         parts.append("flags: " + ", ".join(flags))
+    if s.taught_with:
+        parts.append(f"cross-listed: taught with {' and '.join(s.taught_with)}"
+                     + ("; follows that school's academic calendar" if s.partner_calendar else ""))
     if s.prerequisite:
         parts.append(f"prereq: {s.prerequisite}")
     parts.append(f"about: {desc or '(no description published)'}")

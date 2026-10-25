@@ -19,6 +19,7 @@ import { useApp } from '../state'
 import './pages-a.css'
 import './plan-actions.css'
 import './plan-years.css'
+import { taughtWithLabel } from '../components/TaughtWith'
 
 type SessionView = 'all' | '1' | '2'
 type Status = PlanItem['status']
@@ -329,6 +330,7 @@ function Chip({ e, onOpen, expected }: { e: Entry; onOpen: (key: string) => void
       <span className="py-chip-top">
         <span className="py-chip-num">{s.number}</span>
         {e.core ? <span className="py-chip-tag">Core</span> : <span className="py-chip-tag mine">{expected ? 'Expected' : 'Elective'}</span>}
+        {!!s.taught_with?.length && <span className="py-chip-tag tw" title={taughtWithLabel(s.taught_with)}>{s.taught_with[0].replace(/^School of (the )?/, '').replace(' School', '')}</span>}
         <span className="py-chip-u">{units(s.units)}</span>
       </span>
       <span className="py-chip-title">{s.title}</span>

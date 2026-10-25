@@ -5,6 +5,7 @@ import { enrollLabel } from '../lib/format'
 import { useApp } from '../state'
 import StarButton from './StarButton'
 import QuarterPill from './QuarterPill'
+import TaughtWith from './TaughtWith'
 
 interface Props {
   course: Section
@@ -43,6 +44,7 @@ export default function CourseCard({ course: c, sectionCount = 1, onOpen, footer
         {c.ldr && <span className="badge lilac" title="Leadership Distribution Requirement (inferred from SOM's feed)">LDR</span>}
         {c.gsr && <span className="badge sky" title="Counts toward the Global Studies Requirement (inferred)">Global</span>}
         {c.new && <span className="badge lime">New</span>}
+        <TaughtWith schools={c.taught_with} calendar={c.partner_calendar} />
         {c.topics.slice(0, compact ? 2 : 3).map((t) => (
           <span key={t} className="badge gray">{t}</span>
         ))}

@@ -11,6 +11,7 @@ import { useApp } from '../state'
 import { Overlay } from './ui'
 import { gradedOn } from '../lib/workload'
 import '../pages/pages-a.css'
+import TaughtWith, { taughtWithLabel } from './TaughtWith'
 
 /** Full details for one offering (all its sections) with add-to-plan per section. */
 export default function CourseDrawer({ courseKey, onClose }: { courseKey: string; onClose: () => void }) {
@@ -61,8 +62,15 @@ export default function CourseDrawer({ courseKey, onClose }: { courseKey: string
         {c.limit && <span className="badge gray">{c.limit} seats</span>}
         {c.ldr && <span className="badge lilac">Counts for LDR*</span>}
         {c.gsr && <span className="badge sky">Global Studies*</span>}
+        <TaughtWith schools={c.taught_with} calendar={c.partner_calendar} />
         {c.topics.map((t) => <span key={t} className="badge gray">{t}</span>)}
       </div>
+      {!!c.taught_with?.length && (
+        <p className="small tw-note">
+          <b>{taughtWithLabel(c.taught_with)}.</b> Cross-listed, so SOM students take it under {c.number}.
+          {c.partner_calendar ? ` It follows the ${c.taught_with.length === 1 ? c.taught_with[0] : 'partner school'}’s academic calendar, so its start, end and break dates can differ from SOM’s quarters; check that school’s calendar before you plan around it.` : ' Check with the registrar how its dates line up with SOM’s calendar.'}
+        </p>
+      )}
       {(c.ldr || c.gsr) && <p className="faint small mt">* Inferred from attribute codes in SOM's public course feed. Confirm on the internal list.</p>}
 
       {user && profile && <div className="cd-nx mt"><NextYearAction secs={rows} program={profile.program || 'MBA'} /></div>}

@@ -13,6 +13,7 @@ import { PACKAGE_GOAL_KEY, splitFollowups } from '../lib/elihu'
 import AgentTrace from './AgentTrace'
 import { Bar, CostChip } from './ui'
 import './package.css'
+import TaughtWith from './TaughtWith'
 
 const MAX_GOAL = 600
 const TIER_TONE: Record<string, string> = { essential: 'pink', strong: 'lilac', 'worth a look': 'gray' }
@@ -196,6 +197,7 @@ export default function PackageBuilder({ onOpenCourse }: { onOpenCourse: (key: s
             <span className="course-num">{i.number} · {fmt(i.units)} units</span>
             {i.ldr && <span className="badge lilac">LDR</span>}
             {i.gsr && <span className="badge sky">Global</span>}
+            <TaughtWith schools={i.taught_with} />
             {already && <span className="badge green"><Check className="icon sm" />In your plan</span>}
           </div>
           <button type="button" className="link-btn pk-title" onClick={() => onOpenCourse(i.key)}>{i.title}</button>

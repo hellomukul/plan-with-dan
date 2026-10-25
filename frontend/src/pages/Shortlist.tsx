@@ -164,6 +164,9 @@ export default function Shortlist() {
                   <td key={c.id}>{c.missing ? '–' : <>{c.enrollment ? c.enrollment[0].toUpperCase() + c.enrollment.slice(1) : '–'}
                     <span className="faint small"> · {c.demand.level}{c.demand.seats ? `, ${c.demand.seats} seats` : ''}{c.demand.median_winning_bid != null ? `, median win ${c.demand.median_winning_bid} pts` : ''}</span></>}</td>
                 ))}</Row>
+                {shown.some((c) => !c.missing && c.taught_with?.length) && (
+                  <Row label="Taught with">{shown.map((c) => <td key={c.id} className="small">{!c.missing && c.taught_with?.length ? <>{c.taught_with.join(', ')}{c.partner_calendar ? <span className="faint"> · their calendar</span> : null}</> : <span className="faint">SOM only</span>}</td>)}</Row>
+                )}
                 <Row label="Units">{shown.map((c) => <td key={c.id} className="mono">{c.missing ? '–' : c.units}</td>)}</Row>
                 <Row label="Faculty">{shown.map((c) => <td key={c.id}>{c.missing ? '–' : c.faculty.join(', ') || 'TBA'}</td>)}</Row>
                 <Row label="Your note">{shown.map((c) => (

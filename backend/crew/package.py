@@ -200,6 +200,7 @@ async def build_package(db, user_id: int, goal: str) -> dict:
             "rank": rank, "key": pk["key"], "number": lead.number, "title": lead.title, "units": lead.units,
             "tier": pk.get("tier", "strong"), "why": pk.get("why", ""), "evidence": pk.get("evidence", ""),
             "evidence_note": pk.get("evidence_note", ""), "ldr": lead.counts_for_ldr, "gsr": lead.counts_for_gsr,
+            "taught_with": lead.taught_with,
             "topics": lead.topics[:3], "faculty": sorted({f for s in slots for f in s.offering.lead.faculty})[:3],
             "placement": choice, "options": options,
         })

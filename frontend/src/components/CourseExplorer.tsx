@@ -22,9 +22,10 @@ import QuarterPill from './QuarterPill'
 import NextYearAction from './NextYearAction'
 import { useApp } from '../state'
 import './course-explorer.css'
+import TaughtWith from './TaughtWith'
 
 type TermPick = 'all' | '202701' | '202603'
-type Extra = 'ldr' | 'gsr' | 'late' | 'fri' | 'bid'
+type Extra = 'ldr' | 'gsr' | 'late' | 'fri' | 'bid' | 'cross'
 /** Quarters: SOM terms have two (Fall-1 + Fall-2, Spring-1 + Spring-2). A quarter chip shows the half-term courses that
     run in exactly that quarter; full-term courses (which run through both quarters) have their own chip, so every
     course sits in one bucket and "Fall-1" never means "Fall-1, plus 40 courses that also run in Fall-2". */
@@ -47,6 +48,7 @@ const PAGE = 60
 const EXTRAS: { value: Extra; label: string; hint: string }[] = [
   { value: 'ldr', label: 'Counts for Leadership', hint: 'Leadership Distribution Requirement (inferred from SOM’s feed)' },
   { value: 'gsr', label: 'Global Studies', hint: 'Counts toward the Global Studies Requirement (inferred)' },
+  { value: 'cross', label: 'Taught with another Yale school', hint: 'Cross-listed with Law, Jackson, Environment, Yale College and more' },
   { value: 'late', label: 'Starts 10am or later', hint: 'A section that starts at 10:00 AM or later (or time TBA)' },
   { value: 'fri', label: 'Fridays free', hint: 'A section with no Friday meetings' },
   { value: 'bid', label: 'Bid only', hint: 'Enrollment is through the course auction' },
@@ -147,6 +149,7 @@ export default function CourseExplorer({ who, week: weekIn, autoIds, onAdd, onEn
       if (facFilter && !all.some((s) => s.faculty.includes(facFilter))) continue
       if (extras.has('ldr') && !lead.ldr) continue
       if (extras.has('gsr') && !lead.gsr) continue
+      if (extras.has('cross') && !lead.taught_with?.length) continue
       if (extras.has('bid') && lead.enrollment.trim().toLowerCase() !== 'bid') continue
       const secs = extras.has('late') || extras.has('fri') ? all.filter(timeOk) : all  // only the sections that pass
       if (!secs.length) continue
@@ -268,7 +271,7 @@ export default function CourseExplorer({ who, week: weekIn, autoIds, onAdd, onEn
               </button>
               {moreOpen && (
                 <div id="cx-more-pop" className={`cx-more-pop ${moreRight ? 'right' : ''}`} role="group" aria-label="More filters">
-                  <div className="section-label"><span>Requirements and timing</span></div>
+                  <div className="section-label"><span>Requirements, timing and school</span></div>
                   <div className="cx-more-chips">
                     {EXTRAS.map((x) => (
                       <button key={x.value} type="button" title={x.hint} className={`chip ${extras.has(x.value) ? 'on' : ''}`} aria-pressed={extras.has(x.value)}
@@ -361,6 +364,7 @@ export default function CourseExplorer({ who, week: weekIn, autoIds, onAdd, onEn
                         : !r.open.length ? <span className="cx-pill no">{r.tag === 'closed' ? 'Add/drop closed' : r.tag === 'ended' ? 'Ended' : 'Not for you'}</span>
                           : r.fits ? <span className="cx-pill ok">Fits your week</span> : <span className="cx-pill warn">Clashes</span>}
                       <span className="cx-pill plain">{r.lead.units} units</span>
+                      <TaughtWith schools={r.lead.taught_with} calendar={r.lead.partner_calendar} className="cx-pill" />
                       {nextYear.has(r.lead.number) && <span className="cx-pill in" title={`Planned for ${nextYear.get(r.lead.number)} (expected, times TBA)`}><CalendarClock className="icon xs" />{nextYear.get(r.lead.number)}</span>}
                     </span>
                   </button>

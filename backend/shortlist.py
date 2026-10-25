@@ -86,6 +86,7 @@ def compare(profile: dict, plan: list[PlanRow], catalog: Catalog, items: list[di
             **item,
             "missing": False,
             "number": lead.number, "title": lead.title,
+            "taught_with": lead.taught_with, "partner_calendar": lead.partner_calendar,
             "term": lead.term, "term_name": TERM_NAMES.get(lead.term, lead.term), "session": SESSION_NAMES.get(lead.session, lead.session),
             "units": lead.units, "faculty": lead.faculty,
             "enrollment": lead.enrollment, "sections": [{"id": s.id, "section": s.section, "time": s.time_label, "room": s.room} for s in open_secs],

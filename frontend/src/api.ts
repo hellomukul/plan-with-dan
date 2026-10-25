@@ -34,6 +34,10 @@ export interface Section {
   quarter?: string
   /** an expected 2027-28 offering copied from this year's (times, room and dates not published yet) */
   projected?: boolean
+  /** other Yale schools this course is cross-listed with, from SOM's description */
+  taught_with?: string[]
+  /** it follows the partner school's academic calendar */
+  partner_calendar?: boolean
   starts: string | null
   ends: string | null
   days: string[]
@@ -278,6 +282,7 @@ export interface PackageItem {
   evidence_note: string
   ldr: boolean
   gsr: boolean
+  taught_with?: string[]
   topics: string[]
   faculty: string[]
   placement: PackageOption
@@ -441,6 +446,7 @@ export interface ProgramsInfo {
 
 export interface ShortlistCol {
   id: number; key: string; note: string; rank: number; missing: boolean
+  taught_with?: string[]; partner_calendar?: boolean
   number: string; title: string; term: string; term_name: string; session: string; units: number; faculty: string[]
   enrollment: string; sections: { id: string; section: string; time: string; room: string }[]
   fit: { status: 'fits' | 'clash' | 'not_open'; text: string; section_id?: string }

@@ -1523,3 +1523,14 @@ def test_swap_check_fits_week_and_units(client):
     assert r["sections"] and all("fits" in x for x in r["sections"])
     assert r["units_after"] - r["units_before"] == want["units"] - give["units"]
     assert c.post("/api/swap/check", json={"give_item_id": item, "want": "MGT 999"}).status_code == 404
+
+
+def test_cross_listed_courses_name_their_partner_school():
+    from catalog import cross_listing
+    assert cross_listing("Strong stuff. This course is cross-listed with the Law School and will follow the Law School academic calendar.") == (["Law School"], True)
+    assert cross_listing("This course is cross-listed with Yale College. It will follow their Academic Calendar.") == (["Yale College"], True)
+    assert cross_listing("Students enrolled in either the YSOM course number or the cross-listed course number will be charged.") == ([], False)
+    assert cross_listing("A course about the law school of thought.") == ([], False)
+    from catalog import get_catalog
+    tagged = {s.number for s in get_catalog().sections if s.taught_with}
+    assert {"MGT 659", "MGT 622", "MGT 563"} <= tagged and "MGT 698" not in tagged

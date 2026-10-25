@@ -43,3 +43,6 @@ data/*.bak
 # SQLite side files (throwaway test/QA databases)
 *.db-shm
 *.db-wal
+
+# The course brief (the professor's document): kept locally, never published
+Final Project - AI Foundations for Managers.pdf

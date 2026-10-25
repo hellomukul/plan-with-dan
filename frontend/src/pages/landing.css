@@ -531,3 +531,64 @@
   .lp-goal-skip { align-self: center; }
 }
 @media (max-width: 520px) { .lp-goal h1 { font-size: 34px; } }
+
+/* ---- v5: final finish (Oct 25). Five ways to use Dan under the goal box; no dead space beside Dan's chat (what Dan
+   answers from fills the column); tighter rhythm between every band. Static sizes only, as before. ---- */
+.lp-main { padding-top: 16px; padding-bottom: 24px; }
+.lp-goal { padding-top: 36px; gap: 18px; }
+.lp-goal-copy { gap: 12px; }
+.lp-goal-form { gap: 12px; }
+.lp-goal-form textarea { height: calc(2 * 1.5em + 26px); }
+.lp-goal-note { min-height: 1lh; }
+
+.lp-uses { display: grid; gap: 8px; padding-top: 12px; border-top: 1px solid var(--line); }
+.lp-uses-label { font-size: 12.5px; color: var(--faint); }
+.lp-uses-row { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+.lp-use { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 64px; padding: 10px 6px; border-radius: 12px;
+  border: 1px solid var(--line-2); background: var(--bg-2); color: var(--text); font: inherit; font-size: 13px; font-weight: 500; line-height: 1.25;
+  text-align: center; cursor: pointer; }
+.lp-use .icon { color: var(--pink); }
+.lp-use:hover { border-color: var(--pink-line); background: var(--pink-soft); }
+.lp-use:focus-visible { outline: 2px solid var(--pink); outline-offset: 2px; }
+
+.lp-explore { margin-top: 36px; padding-top: 28px; }
+.lp-explore-head { margin-bottom: 16px; }
+.lp-explore .lp-sub { margin-top: 36px; }
+.lp-explore .lp-band-head { margin-bottom: 14px; }
+.lp-hero-copy { gap: 16px; }
+@media (min-width: 901px) { .lp-explore .lp-hero.v3 { grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 32px; } }
+.hc { height: 500px; }
+.lp-knows { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.lp-knows li { display: flex; gap: 10px; align-items: flex-start; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
+.lp-knows li > span:last-child { display: grid; gap: 2px; font-size: 13px; line-height: 1.4; min-width: 0; }
+.lp-knows b { font-weight: 600; color: var(--text); }
+.lp-knows-icon { flex: none; width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; background: var(--pink-soft); color: var(--pink); }
+
+.lp-band { margin-top: 48px; }
+.lp-quote { margin-top: 48px; }
+.lp-quote blockquote { font-size: clamp(19px, 2.2vw, 24px); }
+.lp-quote + .lp-account { margin-top: 24px; }
+.lp-account { padding: clamp(18px, 3vw, 28px); }
+.lp-account-head { margin-bottom: 14px; }
+.lp-account-cta { margin-top: 14px; }
+.lp-benefit { padding: 14px; }
+.lp-faq details { padding: 12px 16px; }
+#answers .lp-band-head { margin-bottom: 12px; }
+.lp-footer { padding-top: 16px; padding-bottom: 16px; }
+
+@media (max-width: 900px) {
+  .lp-goal { padding-top: 24px; }
+  .lp-explore { margin-top: 28px; padding-top: 24px; }
+  .lp-explore .lp-sub { margin-top: 28px; }
+  .lp-band { margin-top: 36px; }
+  .lp-quote { margin-top: 36px; }
+  .lp-use { min-height: 44px; }
+  .lp-knows { display: none; }  /* it fills the column beside the chat; stacked, there's no gap to fill */
+}
+@media (max-width: 640px) {
+  /* one swipeable row of options on phones, instead of three wrapped rows */
+  .lp-uses-row { display: flex; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; margin: 0 -14px; padding: 0 14px 2px;
+    -webkit-mask-image: linear-gradient(90deg, #000 82%, transparent); mask-image: linear-gradient(90deg, #000 82%, transparent); }
+  .lp-use { flex: none; flex-direction: row; min-height: 44px; padding: 0 14px; border-radius: 999px; white-space: nowrap; }
+  .lp-uses-row::-webkit-scrollbar { display: none; }
+}

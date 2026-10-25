@@ -10,7 +10,7 @@
    5. Straight answers.
    6. Footer: privacy, suggestions email, credit. */
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
-import { ArrowDown, ArrowRight, CalendarDays, MessagesSquare, Scale, Target } from 'lucide-react'
+import { ArrowDown, ArrowRight, BookOpenCheck, CalendarDays, CalendarRange, Gavel, Globe, Layers, ListChecks, MessagesSquare, Quote, Scale, Target } from 'lucide-react'
 import { api, type ProgramsInfo } from '../api'
 import AuthDialog, { listenForSignup, type AuthOptions } from '../components/AuthDialog'
 import DanChat from '../components/DanChat'
@@ -18,7 +18,7 @@ import HeroChat from '../components/HeroChat'
 import Workspace, { whoLabel } from '../components/Workspace'
 import Elihu from '../mascots/Elihu'
 import HandsomeDan from '../mascots/HandsomeDan'
-import { setChatContext } from '../lib/danChat'
+import { sendToDan, setChatContext } from '../lib/danChat'
 import { playChime } from '../lib/chime'
 import { scrollToEl } from '../lib/scroll'
 import { loadTryout, saveTryout, type Tryout } from '../lib/tryout'
@@ -30,7 +30,7 @@ const CREATOR = { name: 'Mukul Gupta', line: 'Yale SOM Class of 2028', url: 'htt
 const CONTACT = 'mukul.gupta@yale.edu'
 
 const BENEFITS = [
-  { icon: Target, title: 'Electives that fit your goals', text: 'Tell Dan your short- and long-term goals. It picks electives that fit and tells you why. Your best academic advisor.' },
+  { icon: Target, title: 'A course package for your goal', text: 'Write your goal and Elihu ranks real SOM courses across every quarter you have left. Keep or drop, then add them in one click.' },
   { icon: Scale, title: 'Shortlist and compare', text: 'Save your progress and come back anytime. Shortlist electives and compare them side by side.' },
   { icon: MessagesSquare, title: 'Ask anything about SOM', text: 'Rules, deadlines, bidding, requirements: Dan answers with sources. Think of Dan as your chief of staff.' },
   { icon: CalendarDays, title: 'Your calendar, built', text: 'Download your week as a calendar file, or link Google, Outlook or Apple so changes show up on their own.' },
@@ -42,6 +42,23 @@ const FAQ: [string, string][] = [
   ['What do you store, and who sees it?', 'Visitors: nothing on our servers (your week lives in this browser). With an account: your email, a scrambled (hashed) password if you joined with email, your profile and plan, visible only to you. Export or delete it all from the Privacy page. Where Google or Microsoft sign-in is offered, they share only your name and email, never your calendar or mail.'],
   ['How does Dan answer?', 'AI suggests, software checks. Dan may only name real catalog courses, and code checks every course, quote, clash and unit rule. When the data doesn’t answer a question, Dan says so and links the official page.'],
   ['Why does Dan limit visitor questions?', 'Every answer costs real money to run, so visitors get 15 questions a day per device. Starter questions are often instant and don’t count. A free account gets its own daily budget.'],
+]
+
+/** Five ways to use Dan, under the goal box: each asks Dan in the chat just below (visitors need no account). */
+const USES = [
+  { icon: Target, label: 'Choose electives', q: 'Help me choose electives for next term that fit my goals and my week.' },
+  { icon: Globe, label: 'Explore IE & GNW', q: 'What are the International Experience (IE) and Global Network Week options, and how do my 10 Global Studies days work?' },
+  { icon: CalendarRange, label: 'Plan both years', q: 'How should I plan my courses across both years, quarter by quarter (Fall-1, Fall-2, Spring-1, Spring-2)?' },
+  { icon: Gavel, label: 'Bid smarter', q: 'How does the course auction work, when is add/drop, and how should I split my bid points?' },
+  { icon: ListChecks, label: 'My requirements', q: 'What does my program require, and what’s left for spring?' },
+]
+
+/** What Dan answers from: facts, not features, beside the chat. */
+const KNOWS = [
+  { icon: Layers, title: 'Every SOM course', text: 'Fall 2026 and Spring 2027 from SOM’s course feed, by quarter' },
+  { icon: BookOpenCheck, title: 'The 2026–27 Bulletin', text: 'Degree rules, unit limits, Global Studies and LDR' },
+  { icon: CalendarDays, title: 'Your cohort’s core', text: 'First-year MBA core filled in, Fall-1 to Spring-2' },
+  { icon: Quote, title: 'Sources, every time', text: 'Links the official page, and says when it doesn’t know' },
 ]
 
 /** The package screen (#/find) reads this key, prefills its goal box, and clears it. */
@@ -123,15 +140,20 @@ export default function Landing() {
   const scrollToId = (id: string) => scrollToEl(document.getElementById(id))
   const toPlan = () => scrollToId('plan')
   // "Ask Dan" in the header: bring the hero chat into view, put the cursor in it, and give it a little sparkle.
-  const askDan = () => {
+  const glowChat = () => {
     playChime()
     scrollToEl(document.getElementById('ask'), 'center')
     const card = document.querySelector('.hc')
     card?.classList.remove('hc-glow')
     void (card as HTMLElement | null)?.offsetWidth  // restart the animation
     card?.classList.add('hc-glow')
+  }
+  const askDan = () => {
+    glowChat()
     setTimeout(() => (document.querySelector('.hc-input textarea') as HTMLTextAreaElement | null)?.focus({ preventScroll: true }), 450)
   }
+  // One of the five ways to use Dan: bring the chat into view and ask it there.
+  const askAbout = (q: string) => { glowChat(); void sendToDan(q) }
 
   return (
     <div className="lp">
@@ -179,6 +201,16 @@ export default function Landing() {
               </p>
               <button type="submit" className="btn primary lg lp-goal-btn">Build my course package<ArrowRight className="icon" /></button>
             </div>
+            <div className="lp-uses" role="group" aria-labelledby="lp-uses-label">
+              <span id="lp-uses-label" className="lp-uses-label">Or ask Dan to</span>
+              <div className="lp-uses-row">
+                {USES.map((u) => (
+                  <button key={u.label} type="button" className="lp-use" onClick={() => askAbout(u.q)}>
+                    <u.icon className="icon sm" aria-hidden="true" />{u.label}
+                  </button>
+                ))}
+              </div>
+            </div>
           </form>
           <button type="button" className="link-btn lp-goal-skip" onClick={() => scrollToId('explore')}>
             Or explore without an account<ArrowDown className="icon sm" />
@@ -204,6 +236,14 @@ export default function Landing() {
                 <h3>Ask Dan anything about SOM</h3>
                 <p className="muted">Rules, deadlines, bidding and requirements, answered with sources.</p>
               </div>
+              <ul className="lp-knows" aria-label="What Dan answers from">
+                {KNOWS.map((k) => (
+                  <li key={k.title}>
+                    <span className="lp-knows-icon"><k.icon className="icon sm" aria-hidden="true" /></span>
+                    <span><b>{k.title}</b><span className="muted">{k.text}</span></span>
+                  </li>
+                ))}
+              </ul>
               <ul className="lp-trust three">
                 <li>Free, no card</li>
                 <li>Never registers you for anything</li>

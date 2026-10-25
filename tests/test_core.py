@@ -1236,3 +1236,14 @@ def test_malformed_public_base_url_falls_back_to_request_host(monkeypatch):
     assert _oauth.redirect_uri(req(), "google") == "https://plan-with-dan.onrender.com/api/auth/oauth/google/callback"
     monkeypatch.setattr(_config, "PUBLIC_BASE_URL", "https://plan-with-dan.onrender.com")
     assert _oauth.redirect_uri(req(), "microsoft") == "https://plan-with-dan.onrender.com/api/auth/oauth/microsoft/callback"
+
+
+def test_cache_headers_for_assets_shell_and_catalog(client):
+    import main as _main
+    assets = list((_main.DIST / "assets").glob("*.js")) if (_main.DIST / "assets").exists() else []
+    if assets:
+        r = client.get(f"/assets/{assets[0].name}")
+        assert r.status_code == 200 and "immutable" in r.headers["cache-control"]
+    assert client.get("/").headers.get("cache-control") == "no-cache"
+    assert client.get("/api/catalog").headers.get("cache-control") == "public, max-age=300"
+    assert "cache-control" not in client.get("/api/auth/me").headers  # personal data is never cached

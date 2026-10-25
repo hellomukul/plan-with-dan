@@ -145,6 +145,16 @@ async def guard_requests(request: Request, call_next):
         response.headers.setdefault("Content-Security-Policy", CSP)
     if config.ON_HOSTED_PLATFORM:
         response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    # Caching: built files have a content hash in their name, so browsers (and Cloudflare in front of Render) can keep
+    # them for a year; the HTML shell must always be re-checked so a new deploy shows up; the course catalog only
+    # changes when SOM's feed is refreshed, so a few minutes is safe and saves the free server most of its work.
+    path = request.url.path
+    if path.startswith("/assets/") and response.status_code == 200:
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    elif path in ("/api/catalog", "/api/programs") and response.status_code == 200:
+        response.headers.setdefault("Cache-Control", "public, max-age=300")
+    elif not path.startswith(("/api/", "/cal/")):
+        response.headers.setdefault("Cache-Control", "no-cache")
     return response
 
 

@@ -95,7 +95,7 @@ def scan(profile: dict, plan: list[PlanRow], catalog, global_choices: list[dict]
             due=ADD_DROP[PLANNING_TERM][0],
             title=f"Add {short:g} more unit{'s' if short != 1 else ''} to Spring 2027",
             detail=f"You have {term_units:g} of the {minimum:g}-unit minimum{core_note}. Dan can suggest courses that fit your timetable.",
-            action={"type": "go", "route": "find", "label": "Find courses"},
+            action={"type": "go", "route": "find", "label": "Get course picks"},
             source=f"programs.{profile.get('program') or 'MBA'} min_units (Yale Bulletin 2026-27)",
             why=(f"{prog_info['label']}: at least {minimum:g} units "
                  + ("in each of the first three terms; a heavy term doesn't make up for a light one." if mba
@@ -151,7 +151,7 @@ def scan(profile: dict, plan: list[PlanRow], catalog, global_choices: list[dict]
                 title=label.split(" (")[0],
                 detail=("First-years bid on IE, GNW and SNOC in rounds 1–2 and on electives in rounds 2–3. "
                         f"The auction runs Nov 9 to Jan 4 ({AUCTION['opens_time']})."),
-                action={"type": "go", "route": "bids", "label": "Open bid coach"},
+                action={"type": "go", "route": "bids", "label": "Open bidding"},
                 source=f"rules.AUCTION_DATES ({AUCTION['source']})",
                 why="From the registrar's auction email to first-year MBAs.",
             ))
@@ -236,7 +236,7 @@ def scan(profile: dict, plan: list[PlanRow], catalog, global_choices: list[dict]
             kind="tba", key=",".join(tba), severity="low", due=None,
             title=f"Check meeting times for {', '.join(tba[:3])}",
             detail="SOM hasn't published a time yet, so clash checks can't cover these courses.",
-            action={"type": "go", "route": "plan", "label": "Open plan"},
+            action={"type": "go", "route": "plan", "label": "Open my timetable"},
             source="catalog (Daytimes missing)",
         ))
 

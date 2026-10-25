@@ -124,13 +124,13 @@ function Shell() {
           </div>
         </div>
         <button className="search-trigger" onClick={() => setCmdk(true)}><Search className="icon sm" /> Search <kbd>⌘K</kbd></button>
-        {NAV.map((n) => {
+        {NAV.filter((n) => !n.account).map((n) => {
           const header = n.section && n.section !== lastSection ? <div className="nav-section" key={`s-${n.section}`}>{n.section}</div> : null
           lastSection = n.section
           return (
             <div key={n.route}>
               {header}
-              <a href={`#/${n.route}`} className={`nav-item ${route === n.route ? 'active' : ''}`} aria-current={route === n.route ? 'page' : undefined}>
+              <a href={`#/${n.route}`} title={n.hint} className={`nav-item ${route === n.route ? 'active' : ''}`} aria-current={route === n.route ? 'page' : undefined}>
                 <n.icon className="icon" />
                 <span>{n.label}</span>
                 {n.route === 'plan' && clashCount > 0 && <span className="badge red" style={{ marginLeft: 'auto' }}>{clashCount}</span>}
@@ -142,6 +142,9 @@ function Shell() {
         <div className="nav-spacer" />
         <a href="#/profile" className={`nav-item ${route === 'profile' ? 'active' : ''}`} aria-current={route === 'profile' ? 'page' : undefined}><UserRound className="icon" /><span>Profile and goals</span></a>
         <a href="#/privacy" className={`nav-item ${route === 'privacy' ? 'active' : ''}`} aria-current={route === 'privacy' ? 'page' : undefined}><Shield className="icon" /><span>Privacy and data</span></a>
+        {NAV.filter((n) => n.account).map((n) => (
+          <a key={n.route} href={`#/${n.route}`} title={n.hint} className={`nav-item ${route === n.route ? 'active' : ''}`} aria-current={route === n.route ? 'page' : undefined}><n.icon className="icon" /><span>{n.label}</span></a>
+        ))}
         {user.owner && <a href="#/owner" className={`nav-item ${route === 'owner' ? 'active' : ''}`} aria-current={route === 'owner' ? 'page' : undefined}><ChartLine className="icon" /><span>Owner dashboard</span></a>}
         <button className="nav-item" onClick={logout}><LogOut className="icon" /><span>Sign out</span></button>
         <div className="faint small" style={{ padding: '8px 10px' }}>{user.email}</div>
@@ -163,10 +166,13 @@ function Shell() {
       {moreOpen && (
         <div className="overlay more-overlay" onClick={() => setMoreOpen(false)}>
           <div className="more-sheet" id="more-sheet" ref={moreRef} role="dialog" aria-modal="true" aria-label="More pages" tabIndex={-1} style={{ outline: 'none' }} onClick={(e) => e.stopPropagation()}>
-            {NAV.filter((n) => !n.mobile).map((n) => (
-              <a key={n.route} href={`#/${n.route}`} className={`nav-item ${route === n.route ? 'active' : ''}`} aria-current={route === n.route ? 'page' : undefined}>
-                <n.icon className="icon" /><span>{n.label}</span>
-              </a>
+            {NAV.filter((n) => !n.mobile).map((n, i, list) => (
+              <div key={n.route}>
+                {n.section && n.section !== list[i - 1]?.section && <div className="nav-section">{n.section}</div>}
+                <a href={`#/${n.route}`} className={`nav-item more-item ${route === n.route ? 'active' : ''}`} aria-current={route === n.route ? 'page' : undefined}>
+                  <n.icon className="icon" /><span className="more-text"><span>{n.label}</span><span className="more-hint">{n.hint}</span></span>
+                </a>
+              </div>
             ))}
             <a href="#/profile" className="nav-item"><UserRound className="icon" /><span>Profile and goals</span></a>
             <a href="#/privacy" className="nav-item"><Shield className="icon" /><span>Privacy and data</span></a>

@@ -1,27 +1,28 @@
-/* Dan's Desk: the signed-in home. Built to be glanced at between classes:
-   0. "Your next step": one card, one primary button, picked from the plan (see nextStep below). Everything
-      else on the Desk is quieter (muted section headings, secondary-looking buttons), so this is what to click.
-   1. today strip (next class, room, live countdown) + a countdown tile (course auction or next deadline)
-   2. this week (at most three things, deadlines and decisions mixed, each with one next action) + progress rings
-   3. a small timetable of this week's real class meetings
-   The brief from Dan is one quiet line under the next-step card. Recent actions (with undo) live on My plan. */
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+/* Dan's Desk: the signed-in home. Built to be glanced at between classes, and to answer "what is this for, and
+   what do I do next?" (student feedback, Oct 25):
+   0. "Your next step": one card, one primary button, picked from the plan.
+   1. "How Dan works": the three steps of a semester (choose courses → plan your terms → lock it in), each with
+      where this student stands and the page that does it (components/DeskGuide).
+   2. today strip (next class, room, live countdown) + a countdown tile (course auction or next deadline)
+   3. this week (deadlines and decisions, each with one next action) + "Where to find it"
+   The weekly timetable lives on My plan & timetable only (it used to be repeated here), and units, Leadership and
+   Global Studies now show in the three steps instead of separate progress rings. */
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  ArrowRight, CalendarClock, CalendarDays, Check, CircleAlert, Gavel, Plus, Sparkles,
+  ArrowRight, CalendarClock, CalendarDays, Check, CircleAlert, Gavel, Sparkles,
 } from 'lucide-react'
 import {
-  api, auctionApplies, type CalendarEvents, type DeskCard, type DeskResponse, type ProgramsInfo, type Section,
+  api, auctionApplies, type CalendarEvents, type DeskCard, type DeskResponse, type ProgramsInfo,
 } from '../api'
 import CourseDrawer from '../components/CourseDrawer'
+import { DeskSteps, DeskWhere } from '../components/DeskGuide'
 import Elihu from '../mascots/Elihu'
 import HandsomeDan from '../mascots/HandsomeDan'
-import ProgressRing from '../components/ProgressRing'
-import Timetable from '../components/Timetable'
 import TodayStrip from '../components/TodayStrip'
 import {
-  WEEKDAY_CODES, auctionPhase, clockText, countdown, dayDiff, dayName, dayStart, isoDay, msToNextMinute, shownWeek, type Meeting,
+  auctionPhase, clockText, countdown, dayDiff, dayName, dayStart, isoDay, msToNextMinute, type Meeting,
 } from '../lib/deskTime'
-import { DAY_NAMES, PLANNING_TERM, TERM_NAMES, termName } from '../lib/format'
+import { DAY_NAMES, termName } from '../lib/format'
 import { useApp, type Route } from '../state'
 import './desk.css'
 import { PACKAGE_GOAL_KEY } from '../lib/elihu'
@@ -59,20 +60,6 @@ function useNow(): Date {
   return now
 }
 
-const RING = 76
-
-/** True on phone widths, where week-view blocks need 44px-tall tap targets. */
-function useNarrow(): boolean {
-  const q = '(max-width: 640px)'
-  const [narrow, setNarrow] = useState(() => window.matchMedia(q).matches)
-  useEffect(() => {
-    const m = window.matchMedia(q)
-    const on = () => setNarrow(m.matches)
-    m.addEventListener('change', on)
-    return () => m.removeEventListener('change', on)
-  }, [])
-  return narrow
-}
 const fmtUnits = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1))
 const firstSentence = (t: string) => (/^[\s\S]*?[.!?](?=\s|$)/.exec(t.trim())?.[0] ?? t).trim()
 
@@ -259,99 +246,6 @@ function WeekRow({ item, now, onDone }: { item: WeekItem; now: Date; onDone?: (c
   )
 }
 
-/* ------------------------------------------------------------------ rings */
-
-function Rings({ go, programs }: { go: (r: Route) => void; programs: ProgramsInfo | null }) {
-  const { plan } = useApp()
-  if (!plan) {
-    return (
-      <section className="card dk-rings" aria-busy="true">
-        <div className="dk-head"><h2>Progress</h2></div>
-        <div className="dk-ring-row">{[0, 1, 2].map((i) => <span key={i} className="skeleton dk-ring-skel" />)}</div>
-      </section>
-    )
-  }
-  const p = plan.progress
-  const target = p.total_target || 72
-  const unitsPct = p.planned_total / target
-  // planned_total already counts courses planned for 2027-28 (expected, times TBA); say so on the ring.
-  const expUnits = plan.items.filter((i) => i.expected).reduce((a, i) => a + i.section.units, 0)
-  const unitsRing = (
-    <ProgressRing
-      key="units" size={RING} value={unitsPct} center={fmtUnits(p.planned_total)} sub={`of ${target}`} label="Units"
-      status={p.planned_total >= target ? 'All planned' : expUnits > 0 ? `${fmtUnits(expUnits)} expected` : `${fmtUnits(target - p.planned_total)} to plan`}
-      tone={p.planned_total >= target ? 'good' : 'accent'}
-      description={`Units: ${fmtUnits(p.planned_total)} of ${target} counted or planned${expUnits > 0 ? `, including ${fmtUnits(expUnits)} expected for 2027–28` : ''}`}
-    />
-  )
-  const reqRing = (label: string, full: string, met: boolean, planned: boolean) => (
-    <ProgressRing
-      key={label} size={RING} value={met ? 1 : planned ? 0.5 : 0}
-      center={met ? <Check className="icon lg" /> : planned ? <CalendarClock className="icon lg" /> : <Plus className="icon lg" />}
-      label={label} status={met ? 'Met' : planned ? 'In your plan' : 'Not yet'} tone={met ? 'good' : planned ? 'accent' : 'warn'}
-      description={`${full}: ${met ? 'met' : planned ? 'planned, not done yet' : 'not started'}`}
-    />
-  )
-  let rings: ReactNode[]
-  let next: { text: string; route: Route } | null = null
-  if (p.mba_rules !== false) {
-    rings = [unitsRing, reqRing('LDR', 'Leadership (LDR)', p.ldr.met, p.ldr.planned), reqRing('GSR', 'Global Studies (GSR)', p.gsr.met, p.gsr.planned)]
-    if (!p.ldr.met && !p.ldr.planned) next = { text: 'Add a Leadership (LDR) course', route: 'explore' }
-    else if (!p.gsr.met && !p.gsr.planned) next = { text: 'Pick a Global Studies path', route: 'global' }
-  } else {
-    rings = [unitsRing]
-    // Required courses from the program's 2026-27 Bulletin list: in the plan (any status) or marked done.
-    const info = programs?.programs.find((x) => x.code === p.program)
-    const required = info?.required ?? []
-    if (required.length) {
-      const inPlan = new Set(plan.items.map((i) => i.section.number))
-      const doneChecks = (p.checks ?? []).filter((c) => c.status === 'done').map((c) => c.label)
-      const have = required.filter((r) => inPlan.has(r.number) || doneChecks.some((l) => l.startsWith(r.number))).length
-      rings.push(
-        <ProgressRing
-          key="req" size={RING} value={have / required.length} center={`${have}/${required.length}`} label="Required courses"
-          status={have === required.length ? 'All in plan' : `${required.length - have} to add`} tone={have === required.length ? 'good' : 'warn'}
-          description={`Required courses: ${have} of ${required.length} in your plan or done`}
-        />,
-      )
-      const missing = required.find((r) => !inPlan.has(r.number) && !doneChecks.some((l) => l.startsWith(r.number)))
-      if (missing) next = { text: `Add required ${missing.number}`, route: 'explore' }
-    }
-    const spring = p.terms.find((t) => t.term === PLANNING_TERM)
-    const springUnits = plan.terms[PLANNING_TERM]?.units ?? spring?.units ?? 0
-    const min = spring ? (spring.min_applies ? spring.min_units ?? null : null) : info?.min_units ?? null
-    const max = spring?.max_units ?? info?.max_units ?? null
-    const goal = min ?? max
-    if (goal) {
-      const low = min != null && springUnits < min
-      const over = max != null && springUnits > max
-      rings.push(
-        <ProgressRing
-          key="spring" size={RING} value={springUnits / goal} center={fmtUnits(springUnits)} sub={min != null ? `of ${min} min` : `max ${max}`}
-          label={TERM_NAMES[PLANNING_TERM]} status={low ? 'Below minimum' : over ? 'Needs approval' : 'In range'}
-          tone={low || over ? 'warn' : 'good'}
-          description={`${TERM_NAMES[PLANNING_TERM]} units: ${fmtUnits(springUnits)}${min != null ? ` of a ${min}-unit minimum` : ` with a ${max}-unit cap`}`}
-        />,
-      )
-      if (!next && low) next = { text: `Add ${fmtUnits(min! - springUnits)} units to ${TERM_NAMES[PLANNING_TERM]}`, route: 'find' }
-    }
-  }
-  return (
-    <section className="card dk-rings" aria-label="Progress">
-      <div className="dk-head">
-        <h2>Progress{p.program_label && p.mba_rules === false ? <span className="dk-head-sub"> · {p.program_label}</span> : null}</h2>
-        <button type="button" className="link-btn small" onClick={() => go('plan')}>My plan</button>
-      </div>
-      <div className={`dk-ring-row n${rings.length}`}>{rings}</div>
-      <div className="dk-rings-foot">
-        {next ? (
-          <button type="button" className="link-btn small" onClick={() => go(next!.route)}>Next: {next.text}<ArrowRight className="icon sm" style={{ verticalAlign: '-2px' }} /></button>
-        ) : <span className="faint small">{p.planned_total >= target ? 'Everything is planned. Keep it that way.' : `On track. ${fmtUnits(target - p.planned_total)} units left to plan.`}</span>}
-      </div>
-    </section>
-  )
-}
-
 /* ------------------------------------------------------------------ your next step */
 
 /** Read and cleared by the course-package screen (#/find), which prefills its goal box with it. */
@@ -431,82 +325,6 @@ function NextStep({ go }: { go: (r: Route) => void }) {
         <p className="dk-next-detail" title={pick.detail}>{pick.detail}</p>
       </div>
       <button type="button" className="btn primary lg dk-next-btn" onClick={pick.run}>{pick.button}<ArrowRight className="icon" /></button>
-    </section>
-  )
-}
-
-/* ------------------------------------------------------------------ week view */
-
-function WeekView({ cal, now, onOpen, go, error, onRetry }: {
-  cal: CalendarEvents | null; now: Date; onOpen: (key: string) => void; go: (r: Route) => void; error: boolean; onRetry: () => void
-}) {
-  const { sectionById } = useApp()
-  const days = useMemo(() => shownWeek(now), [now])
-  const today = isoDay(now)
-  const meetings = useMemo(() => (cal?.classes ?? []).filter((c) => days.includes(c.date)), [cal, days])
-  const sections = useMemo<Section[]>(() => meetings.map((m) => {
-    const code = WEEKDAY_CODES[dayStart(m.date).getDay()]
-    const real = sectionById.get(m.course_id)
-    const [n1, n2, ...rest] = m.title.split(' ')
-    const base: Section = real ?? {
-      id: m.course_id, key: '', number: `${n1} ${n2}`, title: rest.join(' '), term: '', term_name: '', session: '', session_name: '',
-      starts: null, ends: null, days: [], start_min: null, end_min: null, time: '', room: m.room, units: 0, section: '', faculty: [],
-      emails: [], category: '', enrollment: '', limit: null, ldr: false, gsr: false, core: false, prerequisite: '', description: '',
-      syllabus: '', bio: '', new: false, topics: [], programs: [],
-    }
-    return { ...base, id: `${m.course_id}@${m.date}-${m.start_min}`, session: '', days: [code], start_min: m.start_min, end_min: m.end_min, room: m.room }
-  }), [meetings, sectionById])
-  const clashIds = useMemo(() => {
-    const ids = new Set<string>()
-    sections.forEach((a, i) => sections.slice(i + 1).forEach((b) => {
-      if (a.days[0] === b.days[0] && Math.max(a.start_min!, b.start_min!) < Math.min(a.end_min!, b.end_min!)) { ids.add(a.id); ids.add(b.id) }
-    }))
-    return ids
-  }, [sections])
-  const range = useMemo<[number, number]>(() => {
-    if (!meetings.length) return [8 * 60, 17 * 60]
-    let s = Math.floor(Math.min(...meetings.map((m) => m.start_min)) / 60) * 60
-    let e = Math.ceil(Math.max(...meetings.map((m) => m.end_min)) / 60) * 60
-    while (e - s < 8 * 60) { if (e < 22 * 60) e += 60; else s -= 60 }
-    return [s, e]
-  }, [meetings])
-  const narrow = useNarrow()
-  const labels = Object.fromEntries(days.map((d) => [WEEKDAY_CODES[dayStart(d).getDay()], `${dayStart(d).toLocaleDateString('en-US', { weekday: 'short' })} ${dayStart(d).getDate()}`]))
-  const todayCode = days.includes(today) ? WEEKDAY_CODES[now.getDay()] : undefined
-  const first = dayStart(days[0]); const last = dayStart(days[4])
-  const span = `${first.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}–${first.getMonth() === last.getMonth() ? last.getDate() : last.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
-  const nextLater = (cal?.classes ?? []).find((c) => c.date > days[4])
-  const byKey = (s: Section) => {
-    const id = s.id.split('@')[0]
-    const real = sectionById.get(id)
-    if (real) onOpen(real.key)
-  }
-  return (
-    <section className="card dk-weekview" aria-label="Week timetable">
-      <div className="dk-head">
-        <h2>{days.includes(today) ? 'This week' : 'Next week'} <span className="dk-head-sub">· {span}</span></h2>
-        <span className="row" style={{ gap: 14 }}>
-          {cal ? <span className="faint small hide-mobile">{meetings.length} {meetings.length === 1 ? 'class' : 'classes'}</span>
-            : <span className="skeleton hide-mobile dk-count-skel" aria-hidden="true" />}
-          <button type="button" className="link-btn small" onClick={() => go('calendar')}>Full calendar</button>
-        </span>
-      </div>
-      {!cal && error ? (
-        <div className="dk-week-empty"><CalendarDays className="icon lg" /><b>Couldn't load your week</b><button type="button" className="btn sm" onClick={onRetry}>Try again</button></div>
-      ) : !cal ? <span className="skeleton" style={{ display: 'block', height: 240 }} />
-        : meetings.length ? (
-          <Timetable sections={sections} clashIds={clashIds} compact hours={range} dayLabels={labels} today={todayCode} onOpen={byKey} pxPerMin={narrow ? 0.58 : 0.46} />
-        ) : (
-          <div className="dk-week-empty">
-            <HandsomeDan size={56} />
-            <b>No classes {days.includes(today) ? 'this week' : 'next week'}</b>
-            <span className="muted small">
-              {nextLater ? `Your next class is ${dayStart(nextLater.date).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}.`
-                : 'Add courses to your plan and your week fills in here.'}
-            </span>
-            {!nextLater && <button type="button" className="btn sm" onClick={() => go('explore')}>Open the course explorer</button>}
-          </div>
-        )}
     </section>
   )
 }
@@ -602,6 +420,8 @@ export default function Home() {
         )}
       </div>
 
+      <DeskSteps programs={programs} now={now} go={go} />
+
       <div className="dk-grid">
         <TodayStrip
           classes={cal ? cal.classes as Meeting[] : null} now={now} hasPlan={hasPlan} needsCohort={needsCohort}
@@ -641,9 +461,7 @@ export default function Home() {
             </>
           )}
         </section>
-        <Rings go={go} programs={programs} />
-
-        <WeekView cal={cal} now={now} onOpen={setOpen} go={go} error={calError && !cal} onRetry={loadCal} />
+        <DeskWhere go={go} />
       </div>
 
       {open && <CourseDrawer courseKey={open} onClose={closeDrawer} />}

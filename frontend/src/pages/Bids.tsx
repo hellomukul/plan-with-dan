@@ -31,7 +31,7 @@ export default function Bids() {
     <div className="bd-page">
       <div className="page-head">
         <div>
-          <h1>Bid coach</h1>
+          <h1>Bidding</h1>
           <p>SOM doesn't publish past clearing prices, so we split your points with a clear rule of thumb and pool real results from classmates.</p>
         </div>
       </div>

@@ -161,7 +161,7 @@ export default function Plan() {
   if (!plan) {
     return (
       <div>
-        <div className="page-head"><div><h1>My plan</h1><p>Every term by quarter, your week, and how you're tracking on requirements.</p></div></div>
+        <div className="page-head"><div><h1>My plan &amp; timetable</h1><p>Your weekly timetable for each term, every term to Spring 2028 by quarter, and how you're tracking on units.</p></div></div>
         {loaded ? (
           <Empty icon={<CircleAlert className="icon lg faint" />} title="Couldn't load your plan">
             <button type="button" className="btn primary sm" onClick={() => { setLoaded(false); refreshPlan().finally(() => setLoaded(true)) }}>Try again</button>
@@ -207,10 +207,10 @@ function PlanBody({ plan, tab, setTab, busy, run, onOpen, go, children }: BodyPr
     <div>
       <div className="page-head">
         <div>
-          <h1>My plan</h1>
+          <h1>My plan &amp; timetable</h1>
           <p>{years.length > 1
-            ? `Every term from ${termName(terms[0])} to ${termName(terms[terms.length - 1])}, by quarter. Open a term for its week.`
-            : 'Your year by quarter, your week, and how you\'re tracking on requirements.'}</p>
+            ? `Every term from ${termName(terms[0])} to ${termName(terms[terms.length - 1])}, by quarter. Open a term to see its weekly timetable.`
+            : 'Your year by quarter, your weekly timetable, and how you\'re tracking on units.'}</p>
         </div>
       </div>
 

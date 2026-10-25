@@ -37,7 +37,7 @@ export default function CommandPalette({ open, onClose, onOpenCourse }: { open: 
 
   const items: Item[] = useMemo(() => {
     const needle = q.trim().toLowerCase()
-    const pages: Item[] = NAV.filter((n) => !needle || n.label.toLowerCase().includes(needle)).map((n) => ({
+    const pages: Item[] = NAV.filter((n) => !needle || `${n.label} ${n.hint}`.toLowerCase().includes(needle)).map((n) => ({
       id: `p-${n.route}`, group: 'Go to', label: n.label, hint: n.keys, icon: <n.icon className="icon" />,
       run: () => go(n.route as Route),
     }))

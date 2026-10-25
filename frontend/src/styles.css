@@ -412,3 +412,9 @@ input[type='range'] { accent-color: var(--pink); padding: 0; }
 
 /* the AI cost receipt chip can be long ("3 calls · 12.4k in (60% cached) · 900 out · $0.0012"): let it wrap on phones */
 .badge.cost-chip { white-space: normal; max-width: 100%; overflow-wrap: anywhere; line-height: 1.4; }
+
+/* Phone "More" sheet: each page with a one-line "what you get there" */
+.more-item { align-items: flex-start; }
+.more-item .icon { margin-top: 2px; }
+.more-text { display: grid; gap: 1px; min-width: 0; }
+.more-hint { font-size: 12px; color: var(--faint); font-weight: 400; line-height: 1.35; }

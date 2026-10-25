@@ -181,7 +181,7 @@ export default function Workspace({ t, setT, info, onSave, onSignup }: Props) {
                 <button type="button" className="btn primary sm ws-tools-cta" onClick={onSignup}>Create a free account</button>
               </div>
               <ul className="ws-links two">
-                {[['Bid coach', 'Spread your auction points by priority and seat demand'], ['Global Studies planner', 'IE, GNW or SNOC against your funded days (MBA)'], ['Calendar sync', 'One private link for Google, Outlook or Apple'], ['Weekly deadline cards', 'The 3 things due this week, with real dates']].map(([n, s]) => (
+                {[['Bidding help', 'Spread your auction points by priority and seat demand'], ['Global Studies planner', 'IE, GNW or SNOC against your funded days (MBA)'], ['Calendar sync', 'One private link for Google, Outlook or Apple'], ['Weekly deadline cards', 'The 3 things due this week, with real dates']].map(([n, s]) => (
                   <li key={n}><button type="button" className="link-btn" onClick={onSignup}><span className="ws-link-name"><Lock className="icon sm" /><b>{n}</b></span><span className="faint small">{s}</span></button></li>
                 ))}
               </ul>

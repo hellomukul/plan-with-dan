@@ -77,7 +77,7 @@ export default function TodayStrip({ classes, now, hasPlan, needsCohort, onOpenC
             ) : hasPlan ? (
               <button type="button" className="btn" onClick={() => go('plan')}><Compass className="icon sm" />Open my plan</button>
             ) : (
-              <button type="button" className="btn primary" onClick={() => go('find')}><Sparkles className="icon sm" />Find courses with Elihu</button>
+              <button type="button" className="btn primary" onClick={() => go('find')}><Sparkles className="icon sm" />Get course picks</button>
             )}
           </div>
         </div>

@@ -246,3 +246,68 @@
   .dk-next-btn { grid-column: 1 / -1; width: 100%; }
   .dk-next-btn-skel { width: 100%; }
 }
+
+/* ------------------------------------------------------------ how Dan works + where to find it (final IA, Oct 25)
+   The three steps sit between the next step and today's details; "Where to find it" takes the progress rings'
+   place beside This week. Fixed line counts again: status 1 line, question 1 line, so live numbers never move
+   anything. */
+.dk-grid { grid-template-areas: "ts tile" "week week" "where where"; }
+.dk-grid > .dk-where { grid-area: where; }
+.dk-steps { display: grid; gap: 10px; }
+.dk-steps-head { display: flex; align-items: baseline; justify-content: space-between; gap: 6px 16px; flex-wrap: wrap; }
+.dk-steps-head h2 { font-size: 13px; font-weight: 500; color: var(--muted); }
+.dk-steps-head p { margin: 0; font-size: 13px; color: var(--faint); }
+.dk-steps-row { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; counter-reset: none; }
+.dk-step { display: grid; gap: 6px; padding: 14px 16px; align-content: start; }
+.dk-step.is-here { border-color: var(--pink-line); background: linear-gradient(180deg, var(--pink-soft), transparent 70%), var(--card); }
+.dk-step-top { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.dk-step-n { flex: none; width: 24px; height: 24px; border-radius: 999px; display: grid; place-items: center; font-family: var(--mono); font-size: 12px;
+  border: 1px solid var(--line-2); background: var(--bg-2); color: var(--muted); }
+.dk-step.is-here .dk-step-n { background: var(--accent-fill); border-color: var(--accent-fill); color: #fff; }
+.dk-step-title { font-weight: 600; font-size: 15px; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dk-step-here { margin-left: auto; flex: none; font-size: 11.5px; font-weight: 600; color: var(--pink-2); }
+.dk-step-q { margin: 0; font-size: 13px; color: var(--muted); height: 1lh; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dk-step-status { margin: 2px 0 0; display: flex; align-items: center; gap: 6px; font-size: 13px; height: 1lh; min-width: 0; }
+.dk-step-status > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dk-step-status .icon { flex: none; }
+.dk-step-status.t-good { color: var(--green); }
+.dk-step-status.t-todo { color: var(--amber); }
+.dk-step-status.t-plain { color: var(--muted); }
+.dk-step-foot { display: flex; align-items: center; gap: 6px 12px; flex-wrap: wrap; margin-top: 6px; min-height: 32px; }
+.dk-step-also { display: inline-flex; gap: 12px; flex-wrap: wrap; }
+.dk-step-also .link-btn { color: var(--muted); }
+.dk-step-also .link-btn:hover { color: var(--text); }
+.dk .dk-step-go { background: var(--accent-fill); border-color: var(--accent-fill); color: #fff; }
+.dk .dk-step-go:hover { background: var(--accent-fill-hover); }
+.dk-step-skel { display: block; height: 118px; }
+
+.dk-where { display: flex; flex-direction: column; }
+.dk-where-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.dk-where-row { width: 100%; height: 100%; display: grid; gap: 4px; align-content: start; padding: 10px 12px; border-radius: 10px;
+  background: var(--bg-2); border: 1px solid var(--line); font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.dk-where-row:hover { border-color: var(--pink-line); }
+.dk-where-want { font-size: 13px; color: var(--text); line-height: 1.35; }
+.dk-where-to { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--pink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.dk-where-row:hover .dk-where-want { text-decoration: underline; text-decoration-color: var(--line-2); text-underline-offset: 3px; }
+.dk-where-row:focus-visible { outline: 2px solid var(--pink); outline-offset: 2px; border-radius: 6px; }
+
+@container (max-width: 900px) {
+  .dk-grid { grid-template-areas: "ts ts" "tile tile" "week week" "where where"; }
+  .dk-where-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dk-steps-row { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .dk-step { grid-template-columns: minmax(0, 1fr) auto; column-gap: 14px; }
+  .dk-step > * { grid-column: 1; }
+  .dk-step-foot { grid-column: 2; grid-row: 1 / span 3; margin: 0; flex-direction: column; align-items: flex-end; }
+  .dk-step-skel { height: 92px; }
+}
+@container (max-width: 640px) {
+  .dk-grid { grid-template-areas: "ts" "week" "tile" "where"; }
+  .dk-step { grid-template-columns: minmax(0, 1fr); }
+  .dk-step-foot { grid-column: 1; grid-row: auto; flex-direction: row; align-items: center; margin-top: 4px; }
+  .dk-step-foot .btn { min-height: 44px; }
+  .dk-step-also .link-btn { min-height: 44px; display: inline-flex; align-items: center; }
+  .dk-step-q { white-space: normal; height: auto; }
+  .dk-where-list { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .dk-where-row { min-height: 44px; grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+  .dk-step-skel { height: 150px; }
+}

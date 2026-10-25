@@ -203,14 +203,14 @@ export default function Find() {
       <div className="page-head fd-head elihu-host">
         <Elihu size={64} />
         <div style={{ minWidth: 0, flex: 1 }}>
-          <h1>Find courses with Elihu</h1>
-          <p>Elihu is Dan’s bookish owl, named after Elihu Yale. Tell him your goal and he ranks real SOM courses for every quarter you have left.</p>
+          <h1>Course picks</h1>
+          <p>Tell Elihu, Dan’s course-picking owl, what you want from SOM. He ranks real courses for it across every quarter you have left; keep the ones you like and add them to your plan in one click.</p>
         </div>
       </div>
 
       <div className="tabs fd-mode" role="tablist" aria-label="How Elihu helps">
-        <button type="button" role="tab" aria-selected={mode === 'package'} className={mode === 'package' ? 'on' : ''} onClick={() => setMode('package')}>Course package · every quarter</button>
-        <button type="button" role="tab" aria-selected={mode === 'term'} className={mode === 'term' ? 'on' : ''} onClick={() => setMode('term')}>One term, fitted to your week</button>
+        <button type="button" role="tab" aria-selected={mode === 'package'} className={mode === 'package' ? 'on' : ''} onClick={() => setMode('package')}>Ranked for my goal</button>
+        <button type="button" role="tab" aria-selected={mode === 'term'} className={mode === 'term' ? 'on' : ''} onClick={() => setMode('term')}>Fit one term to my week</button>
       </div>
 
       {mode === 'package' ? <PackageBuilder onOpenCourse={setOpen} /> : <>

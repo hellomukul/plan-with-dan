@@ -13,7 +13,7 @@ import os
 import secrets
 import sys
 from contextlib import asynccontextmanager
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import Literal, Optional
 
@@ -48,7 +48,7 @@ from planning import (  # noqa: E402
     units_by_term, week_review,
 )
 from rules import (  # noqa: E402
-    CALENDAR, CALENDAR_ENDS, CORE_COURSES, DEGREE, GLOBAL_WEEKS, GSA_DAYS, GSR_OPTIONS, LDR, SOURCES, gsr_courses,
+    COHORT_SECTIONS, CALENDAR, CALENDAR_ENDS, CORE_COURSES, DEGREE, GLOBAL_WEEKS, GSA_DAYS, GSR_OPTIONS, LDR, SOURCES, gsr_courses,
 )
 from safety import screen_input, spent_today  # noqa: E402
 from seed import seed_sample_bids  # noqa: E402
@@ -147,8 +147,108 @@ def programs_public():
         })
     upcoming = [{"date": d, "end": CALENDAR_ENDS.get(d, d), "title": label, "kind": kind}
                 for d, label, kind in CALENDAR if CALENDAR_ENDS.get(d, d) >= today][:6]
-    return {"programs": progs, "upcoming": upcoming, "today": today,
+    return {"programs": progs, "upcoming": upcoming, "today": today, "data_as_of": _data_as_of(),
             "calendar_note": "Dates are the shared MBA, MAM and MMS calendar. The MBA for Executives and MMS-PEM run on their own calendars."}
+
+
+def _data_as_of() -> str:
+    """When the course data was last refreshed from SOM's public feed."""
+    stamp = ROOT / "data" / "last_updated.json"
+    feed = ROOT / "data" / "yale_som_classes.json"
+    dates = []
+    try:
+        dates.append(json.loads(stamp.read_text()).get("refreshed", ""))
+    except (OSError, ValueError):
+        pass
+    if feed.exists():
+        dates.append(datetime.fromtimestamp(feed.stat().st_mtime).date().isoformat())
+    return max([d for d in dates if d] or [""])
+
+
+class IcsPreviewIn(BaseModel):
+    course_ids: list[str] = Field(max_length=20)
+
+
+@app.post("/api/ics/preview")
+@limiter.limit("10/minute")
+def ics_preview(request: Request, body: IcsPreviewIn):
+    """Public: download the week built on the home page as a calendar file (nothing is stored)."""
+    cat = get_catalog()
+    secs = [cat.by_id[i] for i in body.course_ids if i in cat.by_id]
+    data = build_calendar(secs, owner="visitor", include_deadlines=True)
+    return Response(data, media_type="text/calendar; charset=utf-8",
+                    headers={"Content-Disposition": 'attachment; filename="my-som-week.ics"'})
+
+
+@app.get("/api/starter-week")
+def starter_week(program: str = "MBA", year: str = "", cohort: str = "", term: str = "202701"):
+    """Public: the courses SOM already decides for this student (core or required), where official data exists.
+
+    Used by the home page week builder, so a visitor sees their real week before adding electives.
+    """
+    cat = get_catalog()
+    prog = PROGRAMS.get(program, PROGRAMS["MBA"])
+    today = date.today()
+    ids: list[str] = []
+    notes: list[str] = []
+
+    def live(sec) -> bool:
+        return sec.visible and not sec.ended(today)
+
+    if prog["base"] == "MBA" and year == "admit":
+        # Admitted, not yet enrolled: show a real first-year week as an example (cohorts are assigned at orientation).
+        example = cohort or "Gold"
+        for number, by_cohort in COHORT_SECTIONS.items():
+            for o in cat.offering_for_number(number, "202603"):
+                ids += [x.id for x in o.sections if x.section == by_cohort.get(example) and x.is_core and x.visible]
+        notes.append(f"Example: the Fall 2026 first-year core for the {example} cohort. Your cohort and sections "
+                     "are assigned at orientation; electives come later.")
+        return {"program": program, "term": "202603", "ids": list(dict.fromkeys(ids)), "notes": notes, "example": True}
+    if prog["base"] == "MBA":
+        if year == "1":
+            if term == "202603":
+                if not cohort:
+                    notes.append("Pick your cohort to see your fall core sections.")
+                for number, by_cohort in COHORT_SECTIONS.items():
+                    for o in cat.offering_for_number(number, term):
+                        ids += [x.id for x in o.sections if x.section == by_cohort.get(cohort) and x.is_core and live(x)]
+                if cohort:
+                    notes.append("Fall core for your cohort; session-1 courses that have ended aren't shown.")
+            else:
+                untimed = core_load({"program": program, "year": "1"}, term, cat)["units"]
+                notes.append(f"Your {untimed:g} units of spring core count automatically, but SOM hasn't published "
+                             "their times by cohort, so they aren't on the grid. Add electives below.")
+        elif year == "2":
+            notes.append("Second year is all electives: search and add below.")
+        else:
+            notes.append("Pick your year to see what SOM schedules for you.")
+    elif prog["base"] == "EMBA":
+        if year == "1":
+            ids += [s.id for s in cat.sections if s.term == term and s.core_for("EMBA") and live(s)]
+            notes.append("Your EMBA core for this term. SOM's public feed doesn't list EMBA meeting times "
+                         "(classes run on alternating Friday/Saturday weekends), so they show as a list, not on the grid.")
+        else:
+            notes.append("Search EMBA electives below. EMBA classes meet on alternating Friday/Saturday weekends.")
+    elif prog.get("required"):
+        for req in prog["required"]:
+            if req["term"] != term:
+                continue
+            for o in cat.offering_for_number(req["number"], term):
+                secs = [x for x in o.sections_for(program, today)]
+                if secs:
+                    ids.append(secs[0].id)
+        missing = [r["number"] for r in prog["required"] if r["term"] == term
+                   and not cat.offering_for_number(r["number"], term)]
+        if not any(r["term"] == term for r in prog["required"]):
+            notes.append(f"No required {prog['label']} courses this term: add electives below.")
+        else:
+            notes.append(f"Required {prog['label']} courses for this term."
+                         + (f" Not in SOM's public feed: {', '.join(missing)}." if missing else ""))
+    else:
+        notes.append("Nothing is pre-scheduled for your program here. Search and add courses below.")
+    ids = list(dict.fromkeys(ids))
+    untimed = core_load({"program": program, "year": year}, term, cat)["units"] if prog["base"] == "MBA" and year == "1" and term == "202701" else 0
+    return {"program": program, "term": term, "ids": ids, "notes": notes, "untimed_units": untimed}
 
 
 # ------------------------------------------------------------------ profile

@@ -573,3 +573,19 @@ def test_visitor_chat_needs_no_login_and_is_capped(client):
     app_main._visitor_counts.clear()
     import knowledge
     assert knowledge.search("What does the MAM program require?", None)[0]["id"] == "program-mam"
+
+
+def test_starter_week_prefills_what_som_schedules(client):
+    fresh = client.__class__(client.app)
+    sr = fresh.get("/api/starter-week?program=MMS-SR&term=202701").json()
+    numbers = {get_catalog().by_id[i].number for i in sr["ids"]}
+    assert {"MGT 523", "MGT 945", "MGT 949"} <= numbers
+    admit = fresh.get("/api/starter-week?program=MBA&year=admit").json()
+    assert admit["example"] and len(admit["ids"]) >= 6 and admit["term"] == "202603"
+    spring = fresh.get("/api/starter-week?program=MBA&year=1&cohort=Gold&term=202701").json()
+    assert spring["ids"] == [] and spring["untimed_units"] == 13
+    mam = fresh.get("/api/starter-week?program=MAM&term=202701").json()
+    assert "No required" in mam["notes"][0]
+    ics = fresh.post("/api/ics/preview", json={"course_ids": sr["ids"]})
+    assert ics.status_code == 200 and b"BEGIN:VCALENDAR" in ics.content
+    assert fresh.get("/api/programs").json()["data_as_of"]

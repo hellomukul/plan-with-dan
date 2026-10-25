@@ -35,6 +35,14 @@ export default function DanChat({ onSignup }: { onSignup?: () => void }) {
   const [limited, setLimited] = useState(false)
   const bottom = useRef<HTMLDivElement>(null)
   const loaded = useRef(false)
+  const [pending, setPending] = useState('')
+
+  // Other parts of the page (the home page "Ask Dan anything" bar) hand Dan a question with this event.
+  useEffect(() => {
+    const onAsk = (e: Event) => { const text = (e as CustomEvent<string>).detail; setOpen(true); if (text) setPending(text) }
+    window.addEventListener('dan:ask', onAsk)
+    return () => window.removeEventListener('dan:ask', onAsk)
+  }, [])
 
   // Members pick up where they left off (same conversation as the Ask Dan page).
   useEffect(() => {
@@ -45,6 +53,11 @@ export default function DanChat({ onSignup }: { onSignup?: () => void }) {
   }, [open, member])
   useEffect(() => { if (!member) sessionStorage.setItem(VISITOR_KEY, JSON.stringify(msgs.slice(-12))) }, [msgs, member])
   useEffect(() => { bottom.current?.scrollIntoView({ block: 'end' }) }, [msgs, busy, open])
+
+  useEffect(() => {
+    if (pending && !busy) { const text = pending; setPending(''); void send(text) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pending, busy])
 
   if (member && route === 'chat') return null  // the full Ask Dan page is already open
 

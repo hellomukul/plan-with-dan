@@ -155,3 +155,9 @@
   .cal-feed .input-row { flex-direction: column; }
   .cal-sync-btns .btn { flex: 1 1 calc(50% - 10px); }
 }
+/* Compact timetable (home page hero): fits a phone without sideways scrolling. */
+.tt-scroll.compact .timetable { min-width: 0; }
+.tt-scroll.compact .tt-block { padding: 2px 4px; }
+.tt-scroll.compact .tt-block b { font-size: 10px; }
+.tt-scroll.compact .tt-block .tt-time, .tt-scroll.compact .tt-block .tt-sess { display: none; }
+.tt-scroll.compact .tt-hour { font-size: 9.5px; }

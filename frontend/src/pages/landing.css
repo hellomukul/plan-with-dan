@@ -75,3 +75,66 @@
   .lp-features, .lp-stats { grid-template-columns: 1fr; }
   .lp-header .brand-name { font-size: 14px; }
 }
+
+/* ---- v2: hero with the live week builder (survey-driven) ---- */
+.lp-hero { display: grid; grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr); gap: 36px; align-items: start; padding-top: 12px; }
+.lp-hero-copy { display: flex; flex-direction: column; gap: 18px; padding-top: 28px; }
+.lp-hero-copy .sticker { align-self: flex-start; }
+.lp-hero h1 { font-size: clamp(32px, 4.4vw, 52px); line-height: 1.06; letter-spacing: -0.035em; margin: 0; }
+.lp-trust { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 6px 16px; font-size: 13px; color: var(--muted); }
+.lp-trust li { display: flex; gap: 8px; align-items: baseline; }
+.lp-trust li::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--green); flex: none; transform: translateY(-1px); }
+
+.wb { padding: 14px; display: grid; gap: 10px; position: relative; }
+.wb-who { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.wb-who .lp-select { max-width: 100%; }
+.wb-tabs button { padding: 4px 10px; font-size: 12.5px; }
+.wb-term { gap: 8px; }
+.wb-note { margin: 0; color: var(--muted); }
+.wb-note.example { color: var(--amber); }
+.wb-tba { margin: 0; }
+.wb-search { position: relative; display: flex; align-items: center; gap: 8px; background: var(--bg-2); border: 1px solid var(--line-2); border-radius: 10px; padding: 7px 10px; }
+.wb-search:focus-within { border-color: var(--pink-line); }
+.wb-search input { flex: 1; min-width: 0; background: none; border: 0; outline: none; color: var(--text); font: inherit; font-size: 13.5px; }
+.wb-results { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 20; list-style: none; margin: 0; padding: 0;
+  border: 1px solid var(--line-2); border-radius: 10px; overflow: hidden; background: var(--card); box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5); }
+.wb-results button { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 10px; text-align: left; padding: 8px 12px;
+  background: var(--card); border: 0; border-top: 1px solid var(--line); color: var(--text); font: inherit; font-size: 13px; cursor: pointer; }
+.wb-results li:first-child button { border-top: 0; }
+.wb-results button:hover:not(:disabled) { background: var(--card-2); }
+.wb-results button:disabled { color: var(--faint); cursor: default; }
+.wb-picked { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; max-height: 168px; overflow-y: auto; }
+.wb-picked li { display: flex; align-items: center; gap: 6px; padding: 3px 4px 3px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 12.5px; }
+.wb-picked li.clash { border-color: rgba(255, 92, 92, 0.5); }
+.wb-picked-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wb-tag { font-size: 11px; color: var(--pink-2); background: var(--pink-soft); border-radius: 999px; padding: 1px 8px; }
+.wb-status { min-height: 20px; }
+.wb-actions { gap: 8px; }
+.wb-fine { margin: 0; font-size: 11.5px; }
+
+.lp-band-tight { margin-top: 28px; }
+.lp-ask { padding: 16px; display: grid; gap: 10px; }
+.lp-ask-row { display: flex; gap: 12px; align-items: center; }
+.lp-ask-avatar { width: 44px; height: 44px; border-radius: 50%; background: var(--pink-soft); display: grid; place-items: center; flex: none; }
+.lp-ask-form { flex: 1; display: flex; gap: 8px; min-width: 0; }
+.lp-ask-form input { flex: 1; min-width: 0; background: var(--bg-2); border: 1px solid var(--line-2); border-radius: 10px; padding: 10px 14px; color: var(--text); font: inherit; font-size: 15px; outline: none; }
+.lp-ask-form input:focus { border-color: var(--pink-line); }
+.lp-ask-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.lp-chips { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; }
+.lp-chips .chip { white-space: nowrap; }
+.lp-feature { display: flex; gap: 12px; align-items: flex-start; padding: 14px; }
+.lp-feature h4 { margin: 0 0 4px; font-size: 14px; }
+.lp-feature p { margin: 0; }
+
+@media (max-width: 900px) {
+  .lp-hero { grid-template-columns: 1fr; gap: 20px; }
+  .lp-hero-copy { padding-top: 8px; }
+}
+@media (max-width: 520px) {
+  .lp-trust { grid-template-columns: 1fr; }
+  .lp-ask-row { align-items: stretch; }
+  .lp-ask-avatar { display: none; }
+}
+/* keep the scrolling chip row inside its card (flex/grid children default to min-width: auto) */
+.lp-programs > .card, .lp-hero > *, .lp-band > * { min-width: 0; }
+.lp-chips { max-width: 100%; width: 100%; }

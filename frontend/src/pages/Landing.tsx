@@ -1,43 +1,44 @@
-/* Public home page. One job per band:
-   1. Header: brand, three anchors, Log in / Sign up (opens a dialog; no form on the page).
-   2. Hero: the one-line promise on the left, the product itself on the right.
-   3. Try it, no account: build a clash-checked week from real SOM courses (saved in this browser).
-   4. Every SOM program at a glance, plus the next key dates (public facts from the Bulletin).
-   5. What you get with an account, how a pick is made, honest FAQ.
-   6. Footer: privacy, suggestions email, credit. */
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import {
-  AlarmClock, ArrowRight, CalendarDays, Check, Compass, ExternalLink, Globe, Lock, Plus, Search, ShieldCheck,
-  Sparkles, Target, TriangleAlert, X,
-} from 'lucide-react'
-import { api, type ProgramsInfo, type Section } from '../api'
-import Timetable, { sectionsClash } from '../components/Timetable'
+/* Public home page. Order and copy come from a 5-persona survey (docs/landing_survey.md):
+   1. Header: name, three links, Log in / Sign up (a dialog; no form on the page).
+   2. Hero: a plain promise, two buttons and a trust line on the left; the live week builder on the right.
+   3. "Ask Dan anything" bar: opens the Dan chat with the question already sent.
+   4. Every program at a glance, synced with the builder, with "Coming up" dates beside it.
+   5. Straight answers (moved above features: trust decides sign-up), incl. how picks are made.
+   6. What a free account adds: six compact cards in plain words.
+   7. Footer: privacy, suggestions email, credit. */
+import { useEffect, useState, type FormEvent } from 'react'
+import { ArrowRight, ExternalLink, Lock, MessageCircle, X, AlarmClock, CalendarDays, Compass, Globe, Sparkles, Target } from 'lucide-react'
+import { api, type ProgramsInfo } from '../api'
 import DanChat from '../components/DanChat'
+import WeekBuilder from '../components/WeekBuilder'
 import { Overlay } from '../components/ui'
 import HandsomeDan from '../mascots/HandsomeDan'
-import { prettyDate, relDays, daysUntil, TERM_NAMES } from '../lib/format'
-import { importTryout, loadTryout, saveTryout, type Tryout } from '../lib/tryout'
+import { prettyDate, relDays, daysUntil } from '../lib/format'
+import { importTryout, loadTryout, type Tryout } from '../lib/tryout'
 import { useApp } from '../state'
 import './landing.css'
 
 export const BRAND = { name: 'Plan with Dan', tagline: 'Your chief of staff at Yale SOM' }
 const CREATOR = { name: 'Mukul Gupta', line: 'Yale SOM Class of 2028', url: 'https://www.linkedin.com/in/hellomukul/' }
 const CONTACT = 'mukul.gupta@yale.edu'
+const OWN_CALENDAR = new Set(['EMBA', 'MMS-PEM'])
 
 const FEATURES = [
-  { icon: AlarmClock, title: "Dan's Desk", text: 'A two-line brief and the 3 decisions that matter this week, each with its real SOM deadline.' },
-  { icon: Sparkles, title: 'Best fits', text: 'Real courses ranked against your goals, with the line from the description that proves it.' },
-  { icon: Compass, title: 'Clash-proof plan', text: 'Half-terms, sections and your program’s unit rules, checked in code. Backups that fit the same slot.' },
-  { icon: Globe, title: 'Global Studies', text: 'IE, GNW, SNOC or exchange, mapped against your funded travel days.' },
-  { icon: Target, title: 'Bid coach', text: 'Split your points by priority and seat demand. Honest about what nobody knows.' },
-  { icon: CalendarDays, title: 'Calendar sync', text: 'One private link for Google, Outlook or Apple Calendar, breaks already removed.' },
+  { icon: AlarmClock, title: 'Weekly to-dos', sub: "Dan's Desk", text: 'The 3 things to do this week, each with its real SOM deadline.' },
+  { icon: Sparkles, title: 'Course suggestions', sub: 'Best fits', text: 'Real courses matched to your goals, with the line from the description that shows why.' },
+  { icon: Compass, title: 'Clash and rule checks', sub: 'My plan', text: 'Catches classes at the same time and checks your program’s unit rules.' },
+  { icon: Globe, title: 'Global Studies planner', sub: 'For MBAs', text: 'Compare trips and online options against your funded travel days.' },
+  { icon: Target, title: 'Bidding help', sub: 'Bid coach', text: 'Suggests how to spread your auction points. Past prices aren’t public, so it says so.' },
+  { icon: CalendarDays, title: 'Calendar sync', sub: 'Google, Outlook, Apple', text: 'One private link; holidays and breaks already taken out.' },
 ]
 
-const FAQ = [
-  ['Is this an official Yale tool?', 'No. It’s an independent student project. Rules come from the 2026–27 Yale Bulletin and course data from SOM’s public course directory, with sources linked. Always confirm on the SOM portal.'],
-  ['Will it change my registration?', 'Never. Registration and bidding happen in SOM’s own systems. Dan only suggests; every change to your plan in this app is yours, and every one can be undone.'],
-  ['What do you store, and who sees it?', 'Your email, a hashed password, your profile and plan. Only you can see them. You can export or delete everything from the Privacy page.'],
-  ['Which programs does it support?', 'Full-time MBA (including joint degrees), MBA for Executives, MAM, every MMS track, and PhD students taking SOM courses. Where official data is missing, it says so instead of guessing.'],
+const FAQ: [string, string][] = [
+  ['Is this an official Yale tool?', 'No. It’s a free, independent student project. Rules come from the 2026–27 Yale Bulletin and courses from SOM’s public course directory, with sources linked. Always confirm on the SOM portal.'],
+  ['Will it register me or change my courses in SOM’s systems?', 'Never. Registration and bidding happen only in SOM’s own systems. Dan suggests; every change to your plan in this app is yours, and every one can be undone.'],
+  ['What do you store, and who sees it?', 'Visitors: nothing (the week builder lives in your browser). With an account: your email, a hashed password, your profile and plan, visible only to you. Export or delete everything anytime from the Privacy page.'],
+  ['How does Dan pick courses?', 'AI suggests, software checks. The AI may only choose from real catalog courses, and code checks every pick, quote, time clash and unit rule before you see it. When the data doesn’t answer a question, Dan says so.'],
+  ['Which programs work?', 'Full-time MBA (and joint degrees), MBA for Executives, MAM, every MMS track, and PhD students taking SOM courses. Where official data is missing (for example EMBA meeting times or MGT 627), the app tells you instead of guessing.'],
+  ['What do “units”, “auction” and “add/drop” mean?', 'Units are SOM credits (most electives are 2 or 4). The auction is how SOM fills popular electives: you bid points. Add/drop is the week at the start of each half-term when you can still change courses for free.'],
 ]
 
 /* ---------------------------------------------------------------- sign up / log in dialog */
@@ -115,145 +116,30 @@ function AuthDialog({ initial, onClose }: { initial: 'signup' | 'login'; onClose
   )
 }
 
-/* ---------------------------------------------------------------- hero preview (the product, not a picture of it) */
+/* ---------------------------------------------------------------- ask Dan anything */
 
-function Preview() {
-  return (
-    <div className="card lp-preview" aria-label="Example of Dan's Desk">
-      <div className="row between" style={{ marginBottom: 10 }}>
-        <span style={{ fontWeight: 600 }}>Good afternoon, Alex</span>
-        <span className="faint small mono">Dan’s Desk</span>
-      </div>
-      <div className="brief" style={{ fontSize: 14, marginBottom: 14 }}>
-        Fall add/drop closes in 9 days. Spring is 3 units short of your minimum, and three clash-free fits are ready.
-      </div>
-      <div className="decisions">
-        {[['Add 3 more units to Spring 2027', 'high', 'Jan 26'], ['Set your bid split for 4 courses', 'medium', 'Before the auction']].map(([t, s, d]) => (
-          <div key={t} className="decision"><span className={`sev ${s}`} /><div className="body"><div className="title" style={{ fontSize: 13 }}>{t}</div></div><span className="due">{d}</span></div>
-        ))}
-      </div>
-      <div className="fit" style={{ marginTop: 12 }}>
-        <span className="tier strong"><span className="tier-dots"><i className="on" /><i className="on" /><i className="on" /></span>Strong fit</span>
-        <span style={{ fontWeight: 600 }}>MGT 846 Introduction to Private Equity</span>
-        <span className="row" style={{ gap: 6 }}><span className="reason">Matches: private equity</span><span className="reason">Fits Tue/Thu</span></span>
-      </div>
-    </div>
-  )
-}
-
-/* ---------------------------------------------------------------- try it: build a week, no account */
-
-function TryTimetable({ programs, onSave }: { programs: ProgramsInfo['programs']; onSave: () => void }) {
-  const { sections } = useApp()
-  const [t, setT] = useState<Tryout>(loadTryout)
+function AskBar({ programLabel }: { programLabel: string }) {
   const [q, setQ] = useState('')
-  useEffect(() => { saveTryout(t) }, [t])
-
-  const byId = useMemo(() => new Map(sections.map((s) => [s.id, s])), [sections])
-  const open = (s: Section) => (s.audiences ?? s.programs).includes(t.program) && (!s.ends || s.ends >= new Date().toISOString().slice(0, 10))
-  const picked = t.ids.map((id) => byId.get(id)).filter((s): s is Section => Boolean(s) && s!.term === t.term)
-  const pickedKeys = new Set(picked.map((s) => s.key))
-
-  const results = useMemo(() => {
-    const needle = q.trim().toLowerCase()
-    if (needle.length < 2) return []
-    const seen = new Set<string>()
-    const out: Section[] = []
-    for (const s of sections) {
-      if (s.term !== t.term || seen.has(s.key) || !open(s)) continue
-      if (!`${s.number} ${s.title} ${s.faculty.join(' ')}`.toLowerCase().includes(needle)) continue
-      seen.add(s.key)
-      out.push(s)
-      if (out.length >= 6) break
-    }
-    return out
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, sections, t.term, t.program])
-
-  const clashIds = new Set<string>()
-  const clashes: string[] = []
-  picked.forEach((a, i) => picked.slice(i + 1).forEach((b) => {
-    if (sectionsClash(a, b)) { clashIds.add(a.id); clashIds.add(b.id); clashes.push(`${a.number} and ${b.number}`) }
-  }))
-  const units = picked.reduce((n, s) => n + s.units, 0)
-  const sectionsOf = (key: string) => sections.filter((s) => s.key === key && open(s))
-  const add = (s: Section) => {
-    const best = sectionsOf(s.key).find((x) => !picked.some((p) => sectionsClash(p, x))) ?? s
-    setT((v) => ({ ...v, ids: [...v.ids.filter((id) => byId.get(id)?.key !== s.key), best.id].slice(-12) }))
-    setQ('')
-  }
-  const swap = (oldId: string, newId: string) => setT((v) => ({ ...v, ids: v.ids.map((id) => (id === oldId ? newId : id)) }))
-  const remove = (id: string) => setT((v) => ({ ...v, ids: v.ids.filter((x) => x !== id) }))
-
+  const ask = (text: string) => { if (text.trim()) { window.dispatchEvent(new CustomEvent('dan:ask', { detail: text.trim() })); setQ('') } }
+  const chips = [`What does the ${programLabel} require?`, 'Find a spring course on healthcare strategy', 'What’s the biggest AI news this week?']
   return (
-    <div className="lp-try">
-      <div className="stack" style={{ gap: 12 }}>
-        <div className="row" style={{ gap: 8 }}>
-          <div className="tabs" role="tablist" aria-label="Term">
-            {(['202701', '202603'] as const).map((code) => (
-              <button key={code} type="button" className={t.term === code ? 'on' : ''} onClick={() => setT((v) => ({ ...v, term: code }))}>{TERM_NAMES[code]}</button>
-            ))}
-          </div>
-          <label className="sr-only" htmlFor="try-program">Program</label>
-          <select id="try-program" className="lp-select" value={t.program} onChange={(e) => setT((v) => ({ ...v, program: e.target.value }))}>
-            {(programs.length ? programs : [{ code: 'MBA', label: 'Full-time MBA' }]).filter((p) => p.code !== 'MMS-PEM').map((p) => <option key={p.code} value={p.code}>{p.label}</option>)}
-          </select>
-        </div>
-        <div className="lp-search">
-          <Search className="icon sm faint" aria-hidden />
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search a course, number or professor (try “private equity”)" aria-label="Search courses" />
-        </div>
-        {results.length > 0 && (
-          <ul className="lp-results" role="listbox" aria-label="Matching courses">
-            {results.map((s) => (
-              <li key={s.key}>
-                <button type="button" onClick={() => add(s)} disabled={pickedKeys.has(s.key)}>
-                  <span><span className="course-num">{s.number}</span> {s.title}<span className="faint small"> · {s.time || 'time TBA'} · {s.units} units</span></span>
-                  {pickedKeys.has(s.key) ? <Check className="icon sm" /> : <Plus className="icon sm" />}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-        <ul className="lp-picked">
-          {picked.length === 0 && <li className="faint small">Add two or three courses to see your week and any clashes.</li>}
-          {picked.map((s) => {
-            const options = sectionsOf(s.key)
-            return (
-              <li key={s.id} className={clashIds.has(s.id) ? 'clash' : ''}>
-                <span className="lp-picked-name"><span className="course-num">{s.number}</span> {s.title}</span>
-                {options.length > 1 ? (
-                  <select className="lp-select sm" value={s.id} onChange={(e) => swap(s.id, e.target.value)} aria-label={`Section of ${s.number}`}>
-                    {options.map((o) => <option key={o.id} value={o.id}>§{o.section} · {o.time || 'TBA'}</option>)}
-                  </select>
-                ) : <span className="faint small">{s.time || 'time TBA'}</span>}
-                <button type="button" className="btn icon ghost" aria-label={`Remove ${s.number}`} onClick={() => remove(s.id)}><X className="icon sm" /></button>
-              </li>
-            )
-          })}
-        </ul>
-        {picked.length > 0 && (
-          <div className="row between small" style={{ flexWrap: 'wrap', gap: 8 }}>
-            <span className="mono">{units} units</span>
-            {clashes.length
-              ? <span className="lp-clash"><TriangleAlert className="icon sm" />{clashes.length === 1 ? `${clashes[0]} clash` : `${clashes.length} clashes`}. Try another section.</span>
-              : <span className="pa-ok"><Check className="icon sm" /> No clashes</span>}
-          </div>
-        )}
-        <div className="row" style={{ gap: 8 }}>
-          <button type="button" className="btn primary" onClick={onSave} disabled={!picked.length}>Save this week to a free plan<ArrowRight className="icon sm" /></button>
-          <span className="faint small">Saved in this browser until you do.</span>
-        </div>
+    <div className="card lp-ask">
+      <div className="lp-ask-row">
+        <span className="lp-ask-avatar"><HandsomeDan size={30} furColor="#f4b183" bandanaColor="#00356b" /></span>
+        <form className="lp-ask-form" onSubmit={(e) => { e.preventDefault(); ask(q) }}>
+          <input value={q} onChange={(e) => setQ(e.target.value)} maxLength={2000} placeholder="Ask Dan anything about SOM courses, programs or AI" aria-label="Ask Dan a question" />
+          <button className="btn primary" disabled={!q.trim()}><MessageCircle className="icon sm" />Ask</button>
+        </form>
       </div>
-      <div className="card lp-week"><Timetable sections={picked} clashIds={clashIds} /></div>
+      <div className="lp-ask-chips">{chips.map((c) => <button key={c} type="button" className="chip" onClick={() => ask(c)}>{c}</button>)}</div>
+      <p className="faint small" style={{ margin: 0 }}>Free, no account. Dan is an AI: it answers from SOM’s course data and the Yale Bulletin, links its sources, and says when it doesn’t know.</p>
     </div>
   )
 }
 
 /* ---------------------------------------------------------------- every program at a glance */
 
-function ProgramGuide({ info }: { info: ProgramsInfo | null }) {
-  const [code, setCode] = useState('MBA')
+function ProgramGuide({ info, code, setCode }: { info: ProgramsInfo | null; code: string; setCode: (c: string) => void }) {
   if (!info) return <div className="card faint small">Loading program rules…</div>
   const p = info.programs.find((x) => x.code === code) ?? info.programs[0]
   const today = new Date(info.today + 'T00:00:00')
@@ -262,7 +148,7 @@ function ProgramGuide({ info }: { info: ProgramsInfo | null }) {
       <div className="card stack" style={{ gap: 12 }}>
         <div className="lp-chips" role="tablist" aria-label="Program">
           {info.programs.map((x) => (
-            <button key={x.code} type="button" role="tab" aria-selected={x.code === code} className={`chip ${x.code === code ? 'on' : ''}`} onClick={() => setCode(x.code)}>{x.label}</button>
+            <button key={x.code} type="button" role="tab" aria-selected={x.code === p.code} className={`chip ${x.code === p.code ? 'on' : ''}`} onClick={() => setCode(x.code)}>{x.label}</button>
           ))}
         </div>
         <h3 style={{ margin: 0 }}>{p.label}</h3>
@@ -289,16 +175,22 @@ function ProgramGuide({ info }: { info: ProgramsInfo | null }) {
       </div>
       <div className="card">
         <div className="section-label"><span>Coming up</span></div>
-        <ul className="lp-dates">
-          {info.upcoming.map((d) => (
-            <li key={d.date + d.title}>
-              <span className="mono faint">{prettyDate(d.date)}</span>
-              <span>{d.title.split(' (')[0]}</span>
-              <span className="faint small">{relDays(daysUntil(d.date, today))}</span>
-            </li>
-          ))}
-        </ul>
-        <p className="faint small" style={{ marginBottom: 0 }}>{info.calendar_note}</p>
+        {OWN_CALENDAR.has(p.code) ? (
+          <p className="small muted" style={{ margin: 0 }}>The {p.label} runs on its own calendar ({p.calendar.replace(/^Own calendar:?\s*/i, '')}), which Plan with Dan doesn’t model yet. <a href={p.sources[p.sources.length - 1]} target="_blank" rel="noreferrer">See the official calendar<ExternalLink className="icon sm" /></a></p>
+        ) : (
+          <>
+            <ul className="lp-dates">
+              {info.upcoming.map((d) => (
+                <li key={d.date + d.title}>
+                  <span className="mono faint">{prettyDate(d.date)}</span>
+                  <span>{d.title.split(' (')[0]}</span>
+                  <span className="faint small">{relDays(daysUntil(d.date, today))}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="faint small" style={{ marginBottom: 0 }}>Shared calendar for the MBA, MAM and MMS programs.</p>
+          </>
+        )}
       </div>
     </div>
   )
@@ -309,7 +201,11 @@ function ProgramGuide({ info }: { info: ProgramsInfo | null }) {
 export default function Landing() {
   const [auth, setAuth] = useState<null | 'signup' | 'login'>(null)
   const [info, setInfo] = useState<ProgramsInfo | null>(null)
+  const [t, setTState] = useState<Tryout>(loadTryout)
+  const setT = (f: (v: Tryout) => Tryout) => setTState(f)
   useEffect(() => { api.programs().then(setInfo).catch(() => undefined) }, [])
+  const programLabel = info?.programs.find((p) => p.code === t.program)?.label ?? 'Full-time MBA'
+  const openChat = () => window.dispatchEvent(new CustomEvent('dan:ask', { detail: '' }))
 
   return (
     <div className="lp">
@@ -319,9 +215,9 @@ export default function Landing() {
           <span className="brand-name">{BRAND.name}</span>
         </a>
         <nav className="lp-nav hide-mobile" aria-label="Sections">
-          <a href="#try">Try it</a>
+          <a href="#week">Your week</a>
           <a href="#programs">Programs</a>
-          <a href="#features">Features</a>
+          <a href="#answers">Questions</a>
         </nav>
         <div className="row" style={{ gap: 8 }}>
           <button className="btn ghost sm" onClick={() => setAuth('login')}>Log in</button>
@@ -330,33 +226,30 @@ export default function Landing() {
       </header>
 
       <main className="lp-main">
-        <section className="hero">
-          <div className="stack" style={{ gap: 18 }}>
-            <span className="sticker" style={{ alignSelf: 'flex-start' }}>Spring 2027 planning is open</span>
-            <h1>Your chief of staff for <span className="grad-text">life at Yale SOM.</span></h1>
+        <section className="lp-hero" id="week">
+          <div className="lp-hero-copy">
+            <span className="sticker">{BRAND.tagline}</span>
+            <h1>Plan your SOM term. <span className="grad-text">Clash-free, rule-checked, on time.</span></h1>
             <p className="muted lp-lede">
-              Dan watches your deadlines, plan and degree rules, tells you the few decisions that matter this week, and
-              finds real courses that fit your goals. Nothing changes until you click.
+              Build your week from real SOM courses, check it against your program’s rules, and get reminded before
+              deadlines. Free for every SOM program.
             </p>
             <div className="row">
-              <button className="btn primary lg" onClick={() => setAuth('signup')}>Start free<ArrowRight className="icon" /></button>
-              <a className="btn lg" href="#try">Build your week, no account</a>
+              <button className="btn primary lg" onClick={() => setAuth('signup')}>Create a free account<ArrowRight className="icon" /></button>
+              <button className="btn lg" onClick={openChat}><MessageCircle className="icon" />Ask Dan a question</button>
             </div>
-            <div className="row small muted" style={{ gap: 16 }}>
-              <span className="row" style={{ gap: 6 }}><Check className="icon sm" />Every SOM program</span>
-              <span className="row" style={{ gap: 6 }}><Check className="icon sm" />Real courses, verified in code</span>
-              <span className="row" style={{ gap: 6 }}><Check className="icon sm" />Undo for every change</span>
-            </div>
+            <ul className="lp-trust">
+              <li>Free, no card</li>
+              <li>Independent student project, not official Yale</li>
+              <li>Never registers you for anything</li>
+              <li>Nothing stored until you sign up</li>
+            </ul>
           </div>
-          <div className="mascot-stage"><Preview /></div>
+          <WeekBuilder t={t} setT={setT} programs={info?.programs ?? []} dataAsOf={info?.data_as_of} onSave={() => setAuth('signup')} />
         </section>
 
-        <section id="try" className="lp-band">
-          <div className="lp-band-head">
-            <h2>Build your week. No account needed.</h2>
-            <p className="muted">Real Fall 2026 and Spring 2027 SOM sections for your program, with clashes caught as you go, including half-term sessions.</p>
-          </div>
-          <TryTimetable programs={info?.programs ?? []} onSave={() => setAuth('signup')} />
+        <section className="lp-band lp-band-tight">
+          <AskBar programLabel={programLabel} />
         </section>
 
         <section id="programs" className="lp-band">
@@ -364,45 +257,35 @@ export default function Landing() {
             <h2>Every SOM program, at a glance.</h2>
             <p className="muted">Units, per-term limits, required courses and calendars from the 2026–27 Yale Bulletin, each with its source.</p>
           </div>
-          <ProgramGuide info={info} />
+          <ProgramGuide info={info} code={t.program} setCode={(c) => setT((v) => ({ ...v, program: c, year: '', cohort: '' }))} />
+        </section>
+
+        <section id="answers" className="lp-band">
+          <div className="lp-band-head"><h2>Straight answers</h2></div>
+          <div className="lp-faq">
+            {FAQ.map(([q, a], i) => (
+              <details key={q} className="card flat" open={i < 2}>
+                <summary>{q}</summary>
+                <p className="muted small">{a}</p>
+              </details>
+            ))}
+          </div>
         </section>
 
         <section id="features" className="lp-band">
           <div className="lp-band-head">
-            <h2>With a free account, Dan keeps watch.</h2>
-            <p className="muted">Your profile and goals turn the catalog into a plan, and Dan keeps it on track all term.</p>
+            <h2>What a free account adds</h2>
+            <p className="muted">Save your week, then let Dan keep it on track all term.</p>
           </div>
           <div className="lp-features">
             {FEATURES.map((f) => (
-              <div key={f.title} className="card flat">
-                <f.icon className="icon lg" style={{ color: 'var(--pink)' }} />
-                <h4 style={{ margin: '8px 0 4px' }}>{f.title}</h4>
-                <p className="muted small" style={{ margin: 0 }}>{f.text}</p>
+              <div key={f.title} className="card flat lp-feature">
+                <f.icon className="icon" style={{ color: 'var(--pink)' }} />
+                <div>
+                  <h4>{f.title} <span className="faint small">· {f.sub}</span></h4>
+                  <p className="muted small">{f.text}</p>
+                </div>
               </div>
-            ))}
-          </div>
-          <div className="card mt">
-            <div className="card-title"><ShieldCheck className="icon" /> How a recommendation is made</div>
-            <div className="pipeline">
-              {[['Your goals', 'code'], ['Retriever (code)', 'code'], ['Curator agent', 'ai'], ['Validator (code)', 'code'], ['Scheduler (code)', 'code'], ['Critic agent', 'ai']].map(([label, kind], i, arr) => (
-                <span key={label} className="row" style={{ gap: 6 }}>
-                  <span className={`pipe-node ${kind}`}>{label}</span>
-                  {i < arr.length - 1 && <span className="pipe-arrow">→</span>}
-                </span>
-              ))}
-            </div>
-            <p className="muted small mt" style={{ marginBottom: 0 }}>The AI only chooses from real catalog courses. Code checks every pick, quote and clash before you see it, and Dan says “I don’t know” rather than guess.</p>
-          </div>
-        </section>
-
-        <section className="lp-band">
-          <div className="lp-band-head"><h2>Straight answers</h2></div>
-          <div className="lp-faq">
-            {FAQ.map(([q, a]) => (
-              <details key={q} className="card flat">
-                <summary>{q}</summary>
-                <p className="muted small">{a}</p>
-              </details>
             ))}
           </div>
         </section>

@@ -71,7 +71,7 @@ Sessions last 30 days and renew while in use. App updates that add database fiel
 ```bash
 python -m pytest -q
 ```
-There are 60 tests covering:
+There are 61 tests covering:
 - safety: injection blocking, invented-course removal and spend caps
 - accounts and web security: login enumeration, CSRF and the CSP header
 - planning rules: clash logic, spring core units, the 16-unit window, non-MBA programs, Global Studies data, the make-up day, and planned-vs-done requirements
@@ -96,7 +96,7 @@ The dev UI runs on http://127.0.0.1:5173 and forwards `/api` to `API_PORT` (defa
 
 | Feature | What a student gets |
 |---|---|
-| **Public home page** | No account needed: build a clash-checked week from real Fall 2026 and Spring 2027 sections for your program (saved in the browser, then moved into your plan when you sign up). Also shows every SOM program's rules with sources, the next key dates, and an honest FAQ. Sign-in is a dialog from the header. |
+| **Public home page** | The hero is a live week builder: pick your program, year and cohort, and it fills in what SOM schedules for you (fall core by cohort, MAM/MMS required courses, EMBA core, or an example week for admits). Then add electives, see clashes and units against your minimum, and download a calendar file, all without an account. Below it: an Ask Dan bar, every program's rules with sources, and an FAQ. The order and copy come from a 5-persona survey (`docs/landing_survey.md`). |
 | **Dan's Desk** (home) | A 2–3 sentence brief written by the Chief of Staff agent *only* from decision cards that code computes (clashes, the 16-unit minimum, SOM deadlines, Global Studies, Leadership, bid split). Each card has a due date, a cited source, and approve / snooze / done. Below it: **best fits**, ranked in code with a label (Strong fit / Good fit / Worth a look), up to two reasons, demand shown separately, "Not for me", and a "Why?" panel quoting the course description. A side pane shows what's next, plan meters and an **undoable action log**. |
 | 🎓 **Every SOM program** | Rules from the 2026–27 Yale Bulletin for the full-time MBA, joint-degree MBA, MBA for Executives, MAM, every MMS track (Asset Management, Global Business & Society, Systemic Risk, Technology Management, Public Education Management), and PhD students. Each program gets its own course eligibility, unit limits, required-course checklist and calendar. Gaps in the official data are listed in `docs/programs_data_audit.md`. |
 | ✨ **Find my courses** | A 5-step quiz (program, background, interests, short- and long-term goals, schedule vibe) leads to a shortlist of real courses. Each pick comes with a reason, a quoted line from the course description, a clash check, and backups in the same slot. |

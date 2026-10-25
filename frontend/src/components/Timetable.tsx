@@ -7,8 +7,7 @@ import '../pages/pages-a.css'
 
 const START = 8 * 60
 const END = 20 * 60
-const PX_PER_MIN = 0.8 // 48px per hour
-const HEIGHT = (END - START) * PX_PER_MIN
+const BASE_PX_PER_MIN = 0.8 // 48px per hour
 
 /** True when two sections meet at the same time: same term, overlapping dates, a shared day, overlapping minutes. */
 // eslint-disable-next-line react-refresh/only-export-components
@@ -52,14 +51,17 @@ interface Props {
   sections: Section[]
   clashIds?: Set<string>
   onOpen?: (s: Section) => void
+  compact?: boolean  // short rows, no horizontal scroll: for the home page hero
 }
 
-export default function Timetable({ sections, clashIds = new Set(), onOpen }: Props) {
+export default function Timetable({ sections, clashIds = new Set(), onOpen, compact = false }: Props) {
   const timed = sections.filter((s) => s.start_min != null && s.end_min != null && s.days.length > 0)
   const hours = Array.from({ length: (END - START) / 60 }, (_, i) => START + i * 60)
+  const PX_PER_MIN = compact ? 0.42 : BASE_PX_PER_MIN
+  const HEIGHT = (END - START) * PX_PER_MIN
 
   return (
-    <div className="tt-scroll">
+    <div className={`tt-scroll ${compact ? 'compact' : ''}`}>
       <div className="timetable" role="group" aria-label="Weekly timetable">
         <div className="tt-head" aria-hidden="true" />
         {DAYS.map((d) => <div key={d} className="tt-head" aria-hidden="true">{DAY_NAMES[d]}</div>)}
@@ -82,7 +84,7 @@ export default function Timetable({ sections, clashIds = new Set(), onOpen }: Pr
                   key={s.id}
                   type="button"
                   className={`tt-block ${clash ? 'clash' : ''}`}
-                  style={{ top, height: Math.max(22, bottom - top - 2), left: `calc(${lane * w}% + 3px)`, right: 'auto', width: `calc(${w}% - 6px)` }}
+                  style={{ top, height: Math.max(compact ? 16 : 22, bottom - top - 2), left: `calc(${lane * w}% + 3px)`, right: 'auto', width: `calc(${w}% - 6px)` }}
                   onClick={() => onOpen?.(s)}
                   title={`${s.number} §${s.section} ${s.title}\n${clock(s.start_min)}–${clock(s.end_min)}${s.room ? ` · ${s.room}` : ''}${clash ? '\nTime clash' : ''}`}
                 >

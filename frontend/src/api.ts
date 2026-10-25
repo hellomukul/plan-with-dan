@@ -289,6 +289,7 @@ export interface ProgramsInfo {
   upcoming: { date: string; end: string; title: string; kind: string }[]
   today: string
   calendar_note: string
+  data_as_of?: string
 }
 
 export class ApiError extends Error {
@@ -363,6 +364,9 @@ export const api = {
   clearChat: (mode: 'dan' | 'news') => request<{ ok: boolean }>('DELETE', `/api/chat/history?mode=${mode}`),
   importPlan: (courseIds: string[]) => request<{ added: number }>('POST', '/api/plan/import', { course_ids: courseIds }),
   programs: () => request<ProgramsInfo>('GET', '/api/programs'),
+  starterWeek: (q: { program: string; year: string; cohort: string; term: string }) =>
+    request<{ program: string; term: string; ids: string[]; notes: string[]; example?: boolean; untimed_units?: number }>('GET',
+      `/api/starter-week?${new URLSearchParams(q).toString()}`),
   chatMemory: () => request<{ facts: string[]; summary: string; updated_at: string | null }>('GET', '/api/chat/memory'),
   forgetMemory: (fact?: string) => request<{ facts: string[] }>('POST', '/api/chat/memory/forget', { fact: fact ?? null }),
   recommend: (term = '202701') => request<RecResult>('POST', '/api/recommend', { term }),

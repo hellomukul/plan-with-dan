@@ -12,6 +12,7 @@ import { Overlay } from './ui'
 import { gradedOn } from '../lib/workload'
 import '../pages/pages-a.css'
 import TaughtWith, { taughtWithLabel } from './TaughtWith'
+import { isTrip } from '../lib/courseSearch'
 
 /** Full details for one offering (all its sections) with add-to-plan per section. */
 export default function CourseDrawer({ courseKey, onClose }: { courseKey: string; onClose: () => void }) {
@@ -58,7 +59,7 @@ export default function CourseDrawer({ courseKey, onClose }: { courseKey: string
       </div>
       <div className="row" style={{ gap: 6 }}>
         <span className={`badge ${enrol.tone}`}>{enrol.text}</span>
-        <span className="badge gray">{c.units} units</span>
+        <span className="badge gray">{c.units} {c.units === 1 ? "unit" : "units"}</span>
         {c.limit && <span className="badge gray">{c.limit} seats</span>}
         {c.ldr && <span className="badge lilac">Counts for LDR*</span>}
         {c.gsr && <span className="badge sky">Global Studies*</span>}
@@ -72,6 +73,7 @@ export default function CourseDrawer({ courseKey, onClose }: { courseKey: string
         </p>
       )}
       {(c.ldr || c.gsr) && <p className="faint small mt">* Inferred from attribute codes in SOM's public course feed. Confirm on the internal list.</p>}
+      {isTrip(c) && <p className="small tw-note">A Global Studies experience: you apply for it on its own timeline, which can close well before the term. Check the window on <a href="#/global">Requirements</a> before planning around it.</p>}
 
       {user && profile && <div className="cd-nx mt"><NextYearAction secs={rows} program={profile.program || 'MBA'} /></div>}
 

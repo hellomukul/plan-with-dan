@@ -43,7 +43,7 @@
     ? (Math.abs(hc.top - meet.top) <= 2 && Math.abs(hc.bottom - trust.bottom) <= 2 ? 'aligned' : `misaligned (top ${Math.round(hc.top - meet.top)}px, bottom ${Math.round(hc.bottom - trust.bottom)}px)`)
     : (hc.top >= copy.bottom - 1 ? 'stacked' : 'side-by-side on a phone')
   // Get help (Tools tab): picking any option must not change the page length; nothing spills; tap targets >= 44px.
-  ;[...document.querySelectorAll('.ws-tabs button')].find((b) => b.textContent.trim() === 'Tools')?.click(); await wait(400)
+  ;[...document.querySelectorAll('.ws-tabs button')].find((b) => b.textContent.trim() === 'Get help')?.click(); await wait(400)
   const help = { heights: new Set(), spills: [], smallTargets: [] }
   const pills = [...document.querySelectorAll('.ws-pane.on .hg-pill')]  // tabs stay mounted; use the visible one
   if (!pills.length) help.spills.push('Get help guide not on the Tools tab')

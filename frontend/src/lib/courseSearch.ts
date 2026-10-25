@@ -34,4 +34,6 @@ export function scoreOffering(secs: Section[], query: string): { score: number; 
 }
 
 /** Study trips (IE, GNW): real courses, but they shouldn't crowd the top of a browse list. */
-export const isTrip = (s: Section) => /^(ie:|gnw)/i.test(s.title.trim())
+export const isTrip = (s: Section) => /^(ie:|gnw)|global social entrepreneurship/i.test(s.title.trim())
+/** Global Studies trips (IE, GNW, GSE) are applied for on the Requirements page's timeline, not just added. */
+export const isGlobalTrip = isTrip

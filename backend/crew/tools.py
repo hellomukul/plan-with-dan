@@ -154,13 +154,17 @@ def ldr_courses(ctx: RunContext[StudentContext], term: Term = "any") -> str:
     if not _log(ctx, "ldr_courses", term=term):
         return LOOP_MSG
     program = _program(ctx.deps)
-    pool = [o for o in ctx.deps.catalog.eligible(None if term == "any" else term, program=program, today=ctx.deps.today)
-            if o.lead.counts_for_ldr]
+    # the same list as the Requirements page: every flagged offering with a section open to the student's program
+    pool = [o for o in ctx.deps.catalog.offerings.values()
+            if o.lead.counts_for_ldr and o.sections_for(program) and (term == "any" or o.lead.term == term)]
     if not pool:
         return f"No LDR-flagged courses open to {program} students{'' if term == 'any' else ' in ' + term_name(term)}."
     pool.sort(key=lambda o: (o.lead.term, o.lead.session, o.lead.number))
     lines = [f"{len(pool)} LDR-flagged courses ({LDR['how_flagged']} {LDR['petition']})"]
-    lines += [card_text(o, 160) for o in pool]
+    from planning import add_drop_closed
+    for o in pool:
+        live = [x for x in o.sections_for(program, ctx.deps.today) if not add_drop_closed(x, ctx.deps.today)]
+        lines.append(card_text(o, 160) + ("" if live else " | NOT open to add now (in session or ended): mention it only as already-taken credit"))
     text = "\n".join(lines)
     return fence(text, "som_catalog", limit=len(text) + 100)  # the whole list, never cut short
 
@@ -324,14 +328,17 @@ def plan_review(ctx: RunContext[StudentContext], term: Literal["202603", "202701
     d = ctx.deps
     secs = [s for s in d.sections(term)]
     core = core_load(d.profile, term, d.catalog)
-    if not secs and not core["units"]:
+    outside = [s for s in d.outside if s.term == term]
+    if not secs and not core["units"] and not outside:
         return f"No courses planned for {term_name(term)}."
-    clash_list = conflicts(secs + core["sections"])
-    review = week_review(secs + core["sections"])
+    clash_list = conflicts(secs + core["sections"] + outside)
+    review = week_review(secs + core["sections"] + outside)
     units = sum(s.units for s in secs) + core["units"]
     lines = [f"{term_name(term)}: {len(secs)} electives + cohort core ({core['units']:g} units), {units:g} units in total."
              if core["units"] else f"{term_name(term)}: {len(secs)} courses, {units:g} units."]
-    lines += [f"CLASH: {c['a']} vs {c['b']} on {c['day']} {c['window']}" for c in clash_list] or ["No clashes."]
+    if outside:
+        lines.append("Outside SOM (units not in SOM's totals): " + "; ".join(f"{s.number} {s.title} {s.time_label}" for s in outside))
+    lines += [f"CLASH: {c['a']} vs {c['b']} on {c['day']} {c['window']} (a clash must be fixed before bidding)" for c in clash_list] or ["No clashes."]
     lines += [f"{n['kind']}: {n['text']}" for n in review["notes"]]
     return "\n".join(lines)
 

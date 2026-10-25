@@ -177,7 +177,7 @@ def optional_user(request: Request, response: Response, db: Session = Depends(ge
 
 
 @router.post("/signup")
-@limiter.limit("40/minute")  # a whole class can share one campus Wi-Fi address; per-IP limits stay generous
+@limiter.limit("120/minute")  # a whole class can share one campus Wi-Fi address; per-IP limits stay generous
 def signup(request: Request, response: Response, body: SignupIn, db: Session = Depends(get_db)):
     email = normalise_email(body.email)
     problem = password_problem(body.password, email)
@@ -228,7 +228,7 @@ def _record_failure(email: str) -> None:
 
 
 @router.post("/login")
-@limiter.limit("40/minute")  # per IP (shared campus Wi-Fi); password guessing is throttled per account below
+@limiter.limit("120/minute")  # per IP (shared campus Wi-Fi); password guessing is throttled per account below
 def login(request: Request, response: Response, body: LoginIn, db: Session = Depends(get_db)):
     try:
         email = normalise_email(body.email)

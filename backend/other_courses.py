@@ -18,6 +18,8 @@ from config import DATA_DIR
 
 PATH = DATA_DIR / "yale_other_courses.json"
 TERM_NAME = {"202603": "Fall 2026", "202701": "Spring 2027"}
+GOAL_FILLER = {"become", "understand", "move", "chang", "work", "want", "get", "good", "really", "learn", "lead", "business",
+               "career", "skill", "role", "help", "make", "use", "new", "better", "start", "team", "people", "manag"}
 
 
 @lru_cache(maxsize=1)
@@ -64,7 +66,7 @@ def _index() -> _Index:
     return _Index(load()["courses"])
 
 
-def search(query: str = "", school: str = "", term: str = "", limit: int = 40) -> list[dict]:
+def search(query: str = "", school: str = "", term: str = "", limit: int = 40, min_match: int = 1, min_rel: float = 0.0) -> list[dict]:
     courses = load()["courses"]
     q = query.strip()
     number = " ".join(q.upper().split())
@@ -82,9 +84,15 @@ def search(query: str = "", school: str = "", term: str = "", limit: int = 40) -
             out.append((1000.0, c))
             continue
         s = _index().score(i, terms) if terms else 0.0
-        if s > 0:
+        # min_match: how many different meaningful words of the query the course must contain (Course picks asks for
+        # 2), not counting goal filler like "become", "understand" or "lead"
+        meaningful = set(terms) - GOAL_FILLER
+        title_hit = min_match < 2 or bool(meaningful & set(_tokens(c["title"])))  # strict mode: a key word in the title
+        if s > 0 and title_hit and sum(1 for w in meaningful if _index().docs[i].get(w)) >= min(min_match, len(meaningful) or 1):
             out.append((s, c))
     out.sort(key=lambda x: (-x[0], x[1]["number"]))
+    if min_rel and out:  # only courses nearly as relevant as the best one (Course picks' "Beyond SOM")
+        out = [x for x in out if x[0] >= min_rel * out[0][0]]
     return [c for _, c in out[:limit]]
 
 

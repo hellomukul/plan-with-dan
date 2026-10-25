@@ -56,7 +56,7 @@
 .ts-rail-more { color: var(--faint); }
 .ts-skel { grid-column: 1 / -1; height: 62px; }
 .ts-date { width: 58px; height: 62px; border: 1px solid var(--line-2); border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; background: var(--bg-2); line-height: 1.1; }
-.ts-date span { font-size: 10.5px; color: var(--pink-2); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
+.ts-date span { font-size: 11px; color: var(--pink-2); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
 .ts-date b { font-size: 24px; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 .ts-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .ts-eyebrow { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted); font-weight: 500; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -99,7 +99,7 @@
 .dk-item-main:hover .dk-item-title { text-decoration: underline; text-decoration-color: var(--line-2); text-underline-offset: 3px; }
 .dk-item-main:hover .dk-item-action { color: var(--text); }
 .dk-item-date { width: 44px; height: 44px; border: 1px solid var(--line-2); border-radius: 9px; background: var(--bg-2); display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.05; color: var(--muted); }
-.dk-item-date span { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; }
+.dk-item-date span { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; }
 .dk-item-date b { font-size: 16px; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
 .dk-item.urgent .dk-item-date { border-color: rgba(255, 92, 92, 0.45); color: var(--red); }
 .dk-item-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
@@ -140,7 +140,7 @@
 .pring.tone-good .pring-value { color: var(--green); }
 .pring.tone-warn .pring-value { color: var(--amber); }
 .pring.tone-accent .pring-value .icon { color: var(--pink); }
-.pring-sub { font-size: 10.5px; color: var(--faint); margin-top: 2px; }
+.pring-sub { font-size: 11px; color: var(--faint); margin-top: 2px; }
 .pring figcaption { display: flex; flex-direction: column; align-items: center; text-align: center; min-width: 0; max-width: 100%; }
 .pring-label { font-size: 13px; font-weight: 500; line-height: 1.4; height: 1lh; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .pring-status { font-size: 12px; color: var(--muted); line-height: 1.4; height: 1lh; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }

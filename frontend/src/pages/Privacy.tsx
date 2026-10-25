@@ -88,7 +88,7 @@ export default function Privacy() {
     <div className="pv" style={{ maxWidth: 820 }}>
       <div className="page-head">
         <div>
-          <h1>Privacy and your data</h1>
+          <h1>Privacy and data</h1>
           <p>What Plan with Dan keeps, where it goes, and how to take it with you or delete it.</p>
         </div>
       </div>

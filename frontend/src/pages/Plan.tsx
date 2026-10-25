@@ -468,7 +468,7 @@ function Overview({ plan, terms, years, coreByTerm, cohortSet, termName, isExpec
           <Compass className="icon lg faint" />
           <span className="py-empty-text"><b>Nothing planned yet.</b> <span className="muted">Let Elihu pick courses, or browse the explorer and add them to any term below.</span></span>
           <span className="row py-empty-actions">
-            <button type="button" className="btn primary sm" onClick={() => go('find')}><Sparkles className="icon sm" />Ask Elihu</button>
+            <button type="button" className="btn primary sm" onClick={() => go('find')}><Sparkles className="icon sm" />Get course picks</button>
             <button type="button" className="btn sm" onClick={() => go('explore')}><Search className="icon sm" />Course explorer</button>
           </span>
         </div>
@@ -663,7 +663,7 @@ function TermPane({ plan, term, active, core, termName, year, busy, run, onOpen,
         <div className="card">
           <Empty icon={<BookOpen className="icon lg faint" />} title={`Nothing in ${termName} yet`}>
             <div className="row" style={{ justifyContent: 'center' }}>
-              <button type="button" className="btn primary sm" onClick={() => go('find')}><Sparkles className="icon sm" />Ask Elihu for picks</button>
+              <button type="button" className="btn primary sm" onClick={() => go('find')}><Sparkles className="icon sm" />Get course picks</button>
               <button type="button" className="btn sm" onClick={() => go('explore')}><Search className="icon sm" />Open the course explorer</button>
             </div>
           </Empty>

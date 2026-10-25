@@ -47,10 +47,10 @@ const FAQ: [string, string][] = [
 /** Five ways to use Dan, under the goal box: each asks Dan in the chat just below (visitors need no account). */
 const USES = [
   { icon: Target, label: 'Choose electives', q: 'Help me choose electives for next term that fit my goals and my week.' },
-  { icon: Globe, label: 'Explore IE & GNW', q: 'What are the International Experience (IE) and Global Network Week options, and how do my 10 Global Studies days work?' },
+  { icon: Globe, label: 'Global Studies options', q: 'What are the International Experience (IE) and Global Network Week options, and how do my 10 Global Studies days work?' },
   { icon: CalendarRange, label: 'Plan both years', q: 'How should I plan my courses across both years, quarter by quarter (Fall-1, Fall-2, Spring-1, Spring-2)?' },
-  { icon: Gavel, label: 'Bid smarter', q: 'How does the course auction work, when is add/drop, and how should I split my bid points?' },
-  { icon: ListChecks, label: 'My requirements', q: 'What does my program require, and what’s left for spring?' },
+  { icon: Gavel, label: 'Plan my bids', q: 'How does the course auction work, when is add/drop, and how should I split my bid points?' },
+  { icon: ListChecks, label: 'Check requirements', q: 'What does my program require, and what’s left for spring?' },
 ]
 
 /** What Dan answers from: facts, not features, beside the chat. */
@@ -164,7 +164,7 @@ export default function Landing() {
         </a>
         <nav className="lp-nav hide-mobile" aria-label="Sections">
           <button type="button" onClick={askDan}>Ask Dan</button>
-          <button type="button" onClick={toPlan}>My plan</button>
+          <button type="button" onClick={toPlan}>Try a week</button>
           <button type="button" onClick={() => scrollToId('why')}>Why sign up?</button>
         </nav>
         <div className="row" style={{ gap: 8 }}>
@@ -199,7 +199,7 @@ export default function Landing() {
               <p id="lp-goal-note" className={`lp-goal-note${goalError ? ' is-error' : ''}`} aria-live="polite">
                 {goalError ? 'Add a few words about your goal first.' : 'Free account, about a minute. Dan never registers you for anything.'}
               </p>
-              <button type="submit" className="btn primary lg lp-goal-btn">Build my course package<ArrowRight className="icon" /></button>
+              <button type="submit" className="btn primary lg lp-goal-btn">Get course picks<ArrowRight className="icon" /></button>
             </div>
             <div className="lp-uses" role="group" aria-labelledby="lp-uses-label">
               <span id="lp-uses-label" className="lp-uses-label">Or ask Dan to</span>

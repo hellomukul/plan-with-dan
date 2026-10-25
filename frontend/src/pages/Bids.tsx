@@ -51,7 +51,7 @@ export default function Bids() {
 function SwapSection() {
   const { plan, sections, toast, profile } = useApp()
   const program = profile?.program || 'MBA'
-  const mine = (plan?.items ?? []).filter((i) => !i.expected && !i.section.core && (i.section.term === '202701' || i.section.term === '202603'))
+  const mine = (plan?.items ?? []).filter((i) => !i.expected && !i.section.core && i.section.term === '202701')  // the swap form is for spring
   const [give, setGive] = useState<number | ''>('')
   const [want, setWant] = useState('')
   const [res, setRes] = useState<SwapCheck | null>(null)

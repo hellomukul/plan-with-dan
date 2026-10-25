@@ -48,7 +48,7 @@ export default function Shortlist() {
     const n = shortlist.size
     return (
       <div aria-busy="true">
-        <div className="page-head"><div><h1>Shortlist and compare</h1><p>Star courses anywhere, then compare your top {COMPARE_MAX} side by side and add the winner.</p></div></div>
+        <div className="page-head"><div><h1>Shortlist</h1><p>Star courses anywhere, then compare your top {COMPARE_MAX} side by side and add the winner.</p></div></div>
         <span className="sr-only"><Spinner label="Loading your shortlist…" /></span>
         {n === 0 ? <span className="skeleton sl-skel" style={{ height: 300 }} aria-hidden="true" /> : (
           <>
@@ -92,7 +92,7 @@ export default function Shortlist() {
     <div>
       <div className="page-head sl-head">
         <div>
-          <h1>Shortlist and compare</h1>
+          <h1>Shortlist</h1>
           <p>Star courses anywhere, then compare your top {COMPARE_MAX} side by side and add the winner. {cols.length}/{max} saved.</p>
         </div>
         <div className="row">
@@ -104,10 +104,10 @@ export default function Shortlist() {
       {cols.length === 0 && (
         <div className="card">
           <Empty icon={<Star className="icon lg faint" />} title="Nothing shortlisted yet">
-            <p style={{ margin: 0, maxWidth: 460 }}>Tap the star on any course (in the Course explorer, your best fits, or a course card) to save it here. Compare up to {COMPARE_MAX} at once: time clashes, requirements, goal match and how hard each is to get into.</p>
+            <p style={{ margin: 0, maxWidth: 460 }}>Star any course in the Course explorer or Course picks to save it here. Compare up to {COMPARE_MAX} at once: time clashes, requirements, goal match and how hard each is to get into.</p>
             <div className="row" style={{ justifyContent: 'center' }}>
               <button className="btn primary" onClick={() => go('explore')}><Search className="icon sm" />Open the course explorer</button>
-              <button className="btn" onClick={() => go('home')}><Sparkles className="icon sm" />See my best fits</button>
+              <button className="btn" onClick={() => go('find')}><Sparkles className="icon sm" />Get course picks</button>
             </div>
           </Empty>
         </div>

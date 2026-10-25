@@ -43,7 +43,7 @@ function Weighing({ keys, picked, onOpen, onClear }: { keys: string[]; picked: S
               <button type="button" className="fd-weigh-card" onClick={() => onOpen(c.key)}>
                 <span className="course-num">{c.number} · {TERM_NAMES[c.term] ?? c.term_name}</span>
                 <span className="fd-weigh-title">{c.title}</span>
-                <span className="faint small fd-weigh-meta">{c.time || 'Time TBA'} · {c.units} units · {c.faculty[0] ? displayName(c.faculty[0]) : 'Faculty TBA'}</span>
+                <span className="faint small fd-weigh-meta">{c.time || 'Time TBA'} · {c.units} {c.units === 1 ? "unit" : "units"} · {c.faculty[0] ? displayName(c.faculty[0]) : 'Faculty TBA'}</span>
                 <span className="fd-weigh-pills">
                   {picked.has(c.key) ? <span className="cx-pill in"><Check className="icon xs" />In Elihu’s picks</span>
                     : v.open.length ? <span className="cx-pill plain">{enrollLabel(c.enrollment).text}</span>

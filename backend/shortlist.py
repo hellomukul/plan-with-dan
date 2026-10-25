@@ -23,9 +23,9 @@ def _demand(seats: int | None, reports: list[dict]) -> dict:
     if median is not None:
         level = "High" if median >= 60 else "Medium" if median >= 25 else "Low"
     elif seats:
-        level = "Likely competitive" if seats <= 30 else "Usually open" if seats >= 70 else "Unknown"
+        level = "Likely competitive" if seats <= 30 else "Usually open" if seats >= 70 else "Demand not known yet"
     else:
-        level = "Unknown"
+        level = "Demand not known yet"
     return {"level": level, "seats": seats, "median_winning_bid": median, "reports": stats.get("reports", 0)}
 
 
@@ -80,7 +80,7 @@ def compare(profile: dict, plan: list[PlanRow], catalog: Catalog, items: list[di
         matched = [label for label, pats in goal_terms if _matches(pats, text)]
         topic_hits = sorted(interests & set(lead.topics))
         goal = {"matched": matched[:3], "topics": topic_hits[:3],
-                "level": "Strong" if len(matched) >= 2 or (matched and topic_hits) else "Some" if matched or topic_hits else "None found"}
+                "level": "Strong" if len(matched) >= 2 or (matched and topic_hits) else "Some" if matched or topic_hits else "No direct match"}
 
         cols.append({
             **item,

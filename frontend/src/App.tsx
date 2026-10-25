@@ -147,7 +147,7 @@ function Shell() {
         ))}
         {user.owner && <a href="#/owner" className={`nav-item ${route === 'owner' ? 'active' : ''}`} aria-current={route === 'owner' ? 'page' : undefined}><ChartLine className="icon" /><span>Owner dashboard</span></a>}
         <button className="nav-item" onClick={logout}><LogOut className="icon" /><span>Sign out</span></button>
-        <div className="faint small" style={{ padding: '8px 10px' }}>{user.email}</div>
+        <div className="faint small sidebar-email" title={user.email}>{user.email}</div>
       </aside>
       <main className="main">
         <Page route={route} />

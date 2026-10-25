@@ -23,6 +23,7 @@ class StudentContext:
     plan: list[PlanRow]
     global_choices: list[dict]
     today: date = field(default_factory=date.today)
+    outside: list[Section] = field(default_factory=list)  # courses at other Yale schools the student added
     proposals: list[dict] = field(default_factory=list)
     tool_uses: dict[str, int] = field(default_factory=dict)
 
@@ -39,7 +40,7 @@ class StudentContext:
         return self.tool_uses[tool] <= cap
 
     def bid_reports(self, number: str) -> list[dict]:
-        rows = self.db.exec(select(BidReport).where(BidReport.course_number == number)).all()
+        rows = self.db.exec(select(BidReport).where(BidReport.course_number == number, BidReport.source != "sample")).all()
         return [r.model_dump() for r in rows]
 
 
@@ -58,4 +59,9 @@ def load_context(run: Run) -> StudentContext:
                 plan.append(PlanRow(project(sec, item.target_term) if item.target_term else sec, item.status))
         choices = [c.model_dump(include={"option_key", "target_term", "status", "note"})
                    for c in run.db.exec(select(GlobalChoice).where(GlobalChoice.user_id == run.user_id)).all()]
-    return StudentContext(run=run, catalog=catalog, profile=profile, plan=plan, global_choices=choices)
+    outside = []
+    if run.user_id:
+        from db import OutsideCourse
+        from outside import outside_section
+        outside = [outside_section(o) for o in run.db.exec(select(OutsideCourse).where(OutsideCourse.user_id == run.user_id)).all()]
+    return StudentContext(run=run, catalog=catalog, profile=profile, plan=plan, global_choices=choices, outside=outside)

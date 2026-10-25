@@ -135,7 +135,7 @@ export function CostChip({ usage }: { usage?: Usage | null }) {
   const cachedPct = t.input_tokens ? Math.round((100 * t.cached_tokens) / t.input_tokens) : 0
   return (
     <span className="badge gray mono cost-chip" title={`run ${usage.run_id} · ${usage.model}`}>
-      {t.requests} calls · {tokens(t.input_tokens)} in ({cachedPct}% cached) · {tokens(t.output_tokens)} out
+      {t.requests} {t.requests === 1 ? 'call' : 'calls'} · {tokens(t.input_tokens)} in ({cachedPct}% cached) · {tokens(t.output_tokens)} out
       {t.web_searches ? ` · ${t.web_searches} web` : ''} · {usd(t.cost_usd)}
     </span>
   )

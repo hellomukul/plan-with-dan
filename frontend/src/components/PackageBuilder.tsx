@@ -66,7 +66,7 @@ function loadChoices(r: PackageResult): Choices {
 function termStatus(t: PackageTerm, units: number): { text: string; tone: '' | 'amber' | 'lime' } {
   if (t.max_units && units > t.max_units) return { text: `Over ${t.max_units}: needs approval`, tone: 'amber' }
   if (t.min_units && units < t.min_units) return { text: `Under the ${t.min_units}-unit minimum`, tone: 'amber' }
-  return { text: t.min_units ? 'In range' : 'No minimum', tone: 'lime' }
+  return { text: t.min_units ? 'In range' : t.max_units ? `Under the ${t.max_units} cap` : 'No minimum', tone: 'lime' }
 }
 const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1))
 
@@ -299,7 +299,6 @@ export default function PackageBuilder({ onOpenCourse }: { onOpenCourse: (key: s
               <h3 id="pk-result-h">{items.length} courses ranked for your goal</h3>
               {editing && <p className="small faint pk-for" title={result.goal}>For: “{result.goal}”</p>}
             </div>
-            <CostChip usage={result.usage} />
           </div>
           <div className="brief" style={{ margin: 0 }}>{summary.text}</div>
           {summary.followups.length > 0 && (
@@ -398,6 +397,7 @@ export default function PackageBuilder({ onOpenCourse }: { onOpenCourse: (key: s
           )}
           <div className="pk-meta">
             <button type="button" className="link-btn small" onClick={() => setShowTrace((v) => !v)}>{showTrace ? 'Hide' : 'See'} how Elihu decided</button>
+            {showTrace && <CostChip usage={result.usage} />}
             {result.dropped.length > 0 && <span className="small amber-text">The fact-check removed {result.dropped.length} pick{result.dropped.length > 1 ? 's' : ''} that weren’t real SOM courses.</span>}
           </div>
           {showTrace && <div className="card flat"><AgentTrace steps={result.trace} compact /></div>}

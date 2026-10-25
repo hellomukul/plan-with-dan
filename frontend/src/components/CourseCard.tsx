@@ -34,7 +34,7 @@ export default function CourseCard({ course: c, sectionCount = 1, onOpen, footer
       </div>
       <div className="meta">
         <span><Clock className="icon sm" />{c.time}{sectionCount > 1 ? ` (+${sectionCount - 1} more)` : ''}</span>
-        <span>{c.units} units</span>
+        <span>{c.units} {c.units === 1 ? "unit" : "units"}</span>
         {c.limit && <span><Armchair className="icon sm" />{c.limit} seats</span>}
         {c.faculty.length > 0 && <span><UserRound className="icon sm" />{c.faculty[0]}{c.faculty.length > 1 ? ' +' : ''}</span>}
       </div>

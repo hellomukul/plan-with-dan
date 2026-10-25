@@ -159,7 +159,7 @@ export default function Onboarding({ editing = false }: { editing?: boolean }) {
         <div className="row ob-hello">
           <HandsomeDan size={40} furColor="#f4b183" bandanaColor="#00356b" />
           <div>
-            <h2 style={{ margin: 0 }}>{editing ? 'Your profile' : `Hey${user?.name ? ` ${user.name}` : ''}! Let’s get to know you`}</h2>
+            <h2 style={{ margin: 0 }}>{editing ? 'Profile and goals' : `Hey${user?.name ? ` ${user.name}` : ''}! Let’s get to know you`}</h2>
             <div className="muted small">5 quick steps · ~1 minute · you can change anything later</div>
           </div>
         </div>
@@ -312,7 +312,7 @@ export default function Onboarding({ editing = false }: { editing?: boolean }) {
                 <button type="button" className="btn" disabled={saving} onClick={() => save('home')}>Save and see my desk</button>
                 <button type="button" className="btn primary" disabled={saving} onClick={() => save('find')}>Save and see my course package</button>
               </> : <>
-                <button type="button" className="btn" disabled={saving} onClick={() => save('find')}>Save and ask Elihu for picks</button>
+                <button type="button" className="btn" disabled={saving} onClick={() => save('find')}>Save and get course picks</button>
                 <button type="button" className="btn primary" disabled={saving} onClick={() => save('home')}>Save and see my desk</button>
               </>}
             </>

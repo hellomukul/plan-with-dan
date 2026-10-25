@@ -17,7 +17,10 @@ type ByFeature = Awaited<ReturnType<typeof api.usageAll>>['by_feature']
 const FEATURES: Record<string, string> = {
   chat: 'Ask Dan',
   news: 'AI news',
-  recommend: 'Elihu (find courses)',
+  recommend: 'Course picks (one term)',
+  package: 'Course picks',
+  import: 'Screenshot import',
+  public: 'Ask Dan (visitors)',
   desk: "Dan's Desk brief",
 }
 const featureLabel = (f: string) => FEATURES[f] ?? f

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import gzip
 import json
 import logging
 import os
@@ -53,7 +54,7 @@ from crew.importer import read_courses  # noqa: E402
 from fit import FitContext, best_fits  # noqa: E402
 from db import (  # noqa: E402
     USER_TABLES, ActionLog, AuditEvent, BidReport, ChatMemory, ChatMessage, DeskBrief, DeskState, FitDismissal, GlobalChoice,
-    OutsideCourse, PersonalEvent, ShortlistItem,
+    ActivityDay, OutsideCourse, PersonalEvent, ShortlistItem,
     PlanItem, Profile, RecommendationRun, UsageLog, User, get_db, init_db, log_audit, storage_info, utcnow,
 )
 from ics import build_calendar, google_template_link, meeting_dates  # noqa: E402
@@ -170,6 +171,7 @@ app.include_router(auth.router)
 import oauth  # noqa: E402  (Continue with Google / Microsoft)
 app.include_router(oauth.router)
 import other_courses  # noqa: E402
+from outside import outside_section  # noqa: E402
 import owner  # noqa: E402  (owner-only dashboard: sign-ups, active students, spend)
 app.include_router(owner.router)
 
@@ -191,16 +193,29 @@ def health():
     }
 
 
+_catalog_bytes: dict[int, tuple[bytes, bytes]] = {}
+
+
 @app.get("/api/catalog")
-def catalog_all():
+def catalog_all(request: Request):
+    """Every visible section. Serialised and gzipped once per catalog (it's the app's biggest, most-requested
+    payload), so a busy launch night doesn't rebuild 150 KB of JSON for every visitor."""
     cat = get_catalog()
-    return {
-        "terms": TERM_NAMES,
-        "plan_terms": PLAN_TERMS,  # adds 2027-28: planned from this year's offerings (expected, times TBA)
-        "next_year": NEXT_YEAR,
-        "topics": list(TOPIC_RULES),
-        "sections": [s.to_api() for s in cat.sections if s.visible],
-    }
+    cached = _catalog_bytes.get(id(cat))
+    if cached is None:
+        raw = json.dumps({
+            "terms": TERM_NAMES,
+            "plan_terms": PLAN_TERMS,  # adds 2027-28: planned from this year's offerings (expected, times TBA)
+            "next_year": NEXT_YEAR,
+            "topics": list(TOPIC_RULES),
+            "sections": [s.to_api() for s in cat.sections if s.visible],
+        }, separators=(",", ":")).encode()
+        _catalog_bytes.clear()
+        cached = _catalog_bytes[id(cat)] = (raw, gzip.compress(raw, 6))
+    raw, packed = cached
+    if "gzip" in request.headers.get("accept-encoding", ""):
+        return Response(packed, media_type="application/json", headers={"Content-Encoding": "gzip", "Vary": "Accept-Encoding"})
+    return Response(raw, media_type="application/json")
 
 
 @app.get("/api/programs")
@@ -537,6 +552,8 @@ def _check_section_allowed(db: Session, user_id: int, sec, status: str = "planne
     program = (db.get(Profile, user_id) or Profile(user_id=user_id)).program or "MBA"
     if not sec.open_to(program):
         raise HTTPException(400, f"Section {sec.section} of {sec.number} is only open to {', '.join(sec.programs)} students.")
+    if sec.any_core and status in ("planned", "bidding"):
+        raise HTTPException(400, f"{sec.number} is core: SOM assigns your section by cohort, so there's nothing to add.")
     if status == "completed" and sec.starts and sec.starts > date.today():
         raise HTTPException(400, f"{sec.number} hasn't started yet, so it can't be completed.")
     if sec.ended() and status != "completed":
@@ -608,7 +625,10 @@ def _add_plan(body: PlanIn, user: User, db: Session):
     action_id = _log_action(db, user.id, "add", f"Added {sec.number} {sec.title}", {"item_id": item.id, "course_id": sec.id},
                             body.added_by)
     _, rows = _plan_rows(db, user.id)
-    clashes = [c for c in conflicts([r.section for r in rows if r.section.term == sec.term]) if sec.id in (c["a_id"], c["b_id"])]
+    profile = (db.get(Profile, user.id) or Profile(user_id=user.id)).as_dict()
+    week = ([r.section for r in rows if r.section.term == sec.term] + core_load(profile, sec.term, cat)["sections"]
+            + [_outside_section(o) for o in _outside(db, user.id) if o.term == sec.term])
+    clashes = [c for c in conflicts(week) if sec.id in (c["a_id"], c["b_id"])]
     return {"ok": True, "id": item.id, "clashes": clashes, "action_id": action_id}
 
 
@@ -704,15 +724,7 @@ def delete_plan(item_id: DbId, user: User = Depends(current_user), db: Session =
     return {"ok": True, "action_id": action_id}
 
 
-def _outside_section(o: OutsideCourse) -> Section:
-    """An outside-SOM course as a Section, so the timetable and clash checks treat it like any other class."""
-    days = tuple(json.loads(o.days or "[]"))
-    meeting = Meeting(days, o.start_min, o.end_min) if days and o.start_min is not None and o.end_min is not None else None
-    season = "fall" if o.term.endswith("03") else "spring"
-    return Section(id=f"x{o.id}", number=o.number or o.school or "Outside", title=o.title, term=o.term, session=season, starts=None, ends=None,
-                   meeting=meeting, room="", units=o.units, section="", faculty=[], emails=[], category="Outside SOM", course_type="",
-                   enrollment="outside", limit=None, attributes=[], prerequisite="", description=f"{o.school or 'Outside SOM'} course you added.",
-                   syllabus="", bio="", new_course=False, visible=True)
+_outside_section = outside_section  # backend/outside.py (also used by Dan's tools)
 
 
 def _outside(db: Session, user_id: int) -> list[OutsideCourse]:
@@ -753,8 +765,17 @@ def add_outside(body: OutsideIn, user: User = Depends(current_user), db: Session
     profile = (db.get(Profile, user.id) or Profile(user_id=user.id)).as_dict()
     if body.term not in planning_terms(profile):
         raise HTTPException(400, f"{term_name(body.term)} isn't a term you can plan.")
-    if len(_outside(db, user.id)) >= 12:
+    with _one_at_a_time(user.id):
+        return _add_outside(body, user, db, profile)
+
+
+def _add_outside(body: OutsideIn, user: User, db: Session, profile: dict) -> dict:
+    mine = _outside(db, user.id)
+    if len(mine) >= 12:
         raise HTTPException(400, "That's 12 outside courses already.")
+    number = " ".join(body.number.upper().split())
+    if any(m.term == body.term and (m.number or "") == number and m.title.strip().lower() == body.title.strip().lower() for m in mine):
+        raise HTTPException(400, f"{number or body.title.strip()} is already in your plan for {term_name(body.term)}.")
     o = OutsideCourse(user_id=user.id, school=body.school.strip(), number=" ".join(body.number.upper().split()), title=body.title.strip(),
                       units=round(body.units * 2) / 2, term=body.term, days=json.dumps(body.days), start_min=body.start_min, end_min=body.end_min)
     db.add(o)
@@ -762,7 +783,8 @@ def add_outside(body: OutsideIn, user: User = Depends(current_user), db: Session
     db.refresh(o)
     sec = _outside_section(o)
     _, rows = _plan_rows(db, user.id)
-    others = [r.section for r in rows if r.section.term == o.term] + core_load(profile, o.term, get_catalog())["sections"]
+    others = ([r.section for r in rows if r.section.term == o.term] + core_load(profile, o.term, get_catalog())["sections"]
+              + [_outside_section(m) for m in mine if m.term == o.term])
     clashes = [c for c in conflicts(others + [sec]) if sec.id in (c["a_id"], c["b_id"])]
     return {"ok": True, "course": _outside_api(o), "clashes": clashes}
 
@@ -959,7 +981,7 @@ def move_plan_item(item_id: DbId, body: MoveIn, user: User = Depends(current_use
 
 
 class SwapCheckIn(BaseModel):
-    give_item_id: int
+    give_item_id: int = Field(ge=1, le=2**31 - 1)
     want: str = Field(min_length=3, max_length=16)  # a course number, e.g. "MGT 611"
 
 
@@ -1172,7 +1194,7 @@ def get_shortlist(user: User = Depends(current_user), db: Session = Depends(get_
     items = [{"id": r.id, "key": r.course_key, "note": r.note, "rank": r.rank} for r in _shortlist_rows(db, user.id)]
     numbers = {cat.offering(i["key"]).lead.number for i in items if cat.offering(i["key"])}
     reports: dict[str, list[dict]] = {}
-    for rep in db.exec(select(BidReport).where(BidReport.course_number.in_(numbers))).all() if numbers else []:
+    for rep in db.exec(select(BidReport).where(BidReport.course_number.in_(numbers), BidReport.source != "sample")).all() if numbers else []:
         reports.setdefault(rep.course_number, []).append(rep.model_dump())
     return {"items": compare_shortlist(profile, rows, cat, items, reports), "max": MAX_SHORTLIST}
 
@@ -1447,7 +1469,7 @@ class BidIn(BaseModel):
 
 @app.get("/api/bids")
 def bids(course: str = "", user: User = Depends(current_user), db: Session = Depends(get_db)):
-    q = select(BidReport)
+    q = select(BidReport).where(BidReport.source != "sample")  # launch: real classmates' reports only, no illustrative rows
     if course:
         q = q.where(BidReport.course_number == course.strip().upper())
     rows = [r.model_dump() for r in db.exec(q.order_by(BidReport.course_number)).all()]
@@ -1504,7 +1526,7 @@ def bid_suggest(body: SuggestIn, user: User = Depends(current_user), db: Session
             continue
         seen.add(s.offering_key)
         bid_secs.append(s)
-        reports = [x.model_dump() for x in db.exec(select(BidReport).where(BidReport.course_number == s.number)).all()]
+        reports = [x.model_dump() for x in db.exec(select(BidReport).where(BidReport.course_number == s.number, BidReport.source != "sample")).all()]
         stats = bid_stats(reports)
         items.append({"number": s.number, "key": s.offering_key, "title": s.title, "term_name": TERM_NAMES.get(s.term),
                       "priority": max(1, min(3, body.priorities.get(s.offering_key, body.priorities.get(s.number, 2)))),
@@ -1818,7 +1840,7 @@ def bestfits(term: Literal["202603", "202701"] = "202701", user: User = Depends(
     profile = (db.get(Profile, user.id) or Profile(user_id=user.id)).as_dict()
     prog = requirement_progress(profile, rows, cat, _globals(db, user.id))
     reports: dict[str, list[dict]] = {}
-    for r in db.exec(select(BidReport)).all():
+    for r in db.exec(select(BidReport).where(BidReport.source != "sample")).all():
         reports.setdefault(r.course_number, []).append(r.model_dump())
     dismissed = [d.course_key for d in db.exec(select(FitDismissal).where(FitDismissal.user_id == user.id)).all()]
     core = core_load(profile, term, cat)
@@ -1862,7 +1884,7 @@ def _rows_for(db: Session, model, user_id: int) -> list[dict]:
 def export_account(user: User = Depends(current_user), db: Session = Depends(get_db)):
     data = {"user": {"email": user.email, "name": user.name, "created_at": user.created_at.isoformat()}}
     for model in (Profile, PlanItem, GlobalChoice, ChatMessage, ChatMemory, RecommendationRun, FitDismissal, ActionLog,
-                  AuditEvent, DeskState, DeskBrief, ShortlistItem, PersonalEvent):
+                  AuditEvent, DeskState, DeskBrief, ShortlistItem, PersonalEvent, OutsideCourse, ActivityDay):
         data[model.__name__] = _rows_for(db, model, user.id)
     data["BidReport"] = _rows_for(db, BidReport, user.id)
     data["UsageLog"] = _rows_for(db, UsageLog, user.id)

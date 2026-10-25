@@ -11,13 +11,14 @@ import { termName as baseTermName } from '../lib/format'
 import './yale-courses.css'
 
 const SHORT: Record<string, string> = {
-  'Graduate School (GSAS)': 'Yale GSAS', 'Jackson School of Global Affairs': 'Jackson School', 'School of the Environment': 'Yale Environment',
-  'School of Public Health': 'Yale Public Health',
+  'Graduate School (GSAS)': 'Graduate School', 'Jackson School of Global Affairs': 'Jackson School', 'School of the Environment': 'School of the Environment',
+  'School of Public Health': 'School of Public Health',
 }
+const sameAsSchool = (dept: string) => ['Environment', 'Global Affairs'].includes(dept)
 
 /** The one label for a non-SOM course, used in the explorer, Course picks and anywhere else it shows. */
 export function YaleBadge({ c }: { c: Pick<YaleCourse, 'school' | 'dept'> }) {
-  return <span className="badge yc-badge" title={`${c.school} · ${c.dept}. Not an SOM course: you need the instructor's permission.`}><GraduationCap className="icon xs" aria-hidden="true" />{SHORT[c.school] ?? c.school} · {c.dept}</span>
+  return <span className="badge yc-badge" title={`${c.school} · ${c.dept}. Not an SOM course: you need the instructor's permission.`}><GraduationCap className="icon xs" aria-hidden="true" />{SHORT[c.school] ?? c.school}{sameAsSchool(c.dept) ? '' : ` · ${c.dept}`}</span>
 }
 
 /** "Add to my plan" for a non-SOM course: the outside-course form, prefilled. */
@@ -62,7 +63,7 @@ export default function YaleCourses() {
           <input value={q} onChange={(e) => { setQ(e.target.value); setOpen(null) }} placeholder="Try “Shakespeare”, “climate policy”, “ENGL 5709” or an instructor" /></label>
         <div className="row yc-filters">
           <div className="tabs" role="group" aria-label="Term">
-            {[['', 'Both terms'], ['202603', 'Fall 2026'], ['202701', 'Spring 2027']].map(([v, l]) => (
+            {[['', 'Both terms'], ['202701', 'Spring 2027'], ['202603', 'Fall 2026']].map(([v, l]) => (
               <button key={v} type="button" className={term === v ? 'on' : ''} aria-pressed={term === v} onClick={() => { setTerm(v); setOpen(null) }}>{l}</button>
             ))}
           </div>

@@ -704,7 +704,7 @@ function PageHead() {
       <div className="page-head">
         <div>
           <h1>Requirements</h1>
-          <p>{mba ? 'Global Studies and Leadership: plan your global experience around your 10 funded travel days, and pick up a leadership elective. Units per term are on My plan & timetable.'
+          <p>{mba ? 'Global Studies and Leadership, plus your Pass/Fail budget: plan your global experience around your 10 funded travel days, pick up a leadership elective, and log grades to see how many Pass units you have left. Units per term are on My plan & timetable.'
             : 'Your program’s global travel rule, with the full-time MBA Global Studies and Leadership requirements for reference.'}</p>
         </div>
       </div>

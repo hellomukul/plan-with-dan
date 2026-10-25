@@ -362,7 +362,7 @@
 .ws-bar { position: static; backdrop-filter: none; background: transparent; }
 @media (max-width: 520px) {
   .ws-tabs { gap: 2px; }
-  .ws-tabs button { padding: 7px 9px; font-size: 13px; gap: 4px; }
+  .ws-tabs button { padding: 7px 7px; font-size: 13px; gap: 4px; }
   .ws-tabs button .icon { display: none; }
 }
 .wb-picked li.wb-empty { border-style: dashed; padding: 14px 12px; }

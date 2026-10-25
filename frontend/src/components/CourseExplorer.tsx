@@ -51,7 +51,7 @@ const EXTRAS: { value: Extra; label: string; hint: string }[] = [
   { value: 'cross', label: 'Taught with another Yale school', hint: 'Cross-listed with Law, Jackson, Environment, Yale College and more' },
   { value: 'late', label: 'Starts 10am or later', hint: 'A section that starts at 10:00 AM or later (or time TBA)' },
   { value: 'fri', label: 'Fridays free', hint: 'A section with no Friday meetings' },
-  { value: 'bid', label: 'Bid only', hint: 'Enrollment is through the course auction' },
+  { value: 'bid', label: 'Through the auction', hint: 'Enrollment is through the course auction (you bid points)' },
 ]
 
 interface Props {
@@ -362,8 +362,10 @@ export default function CourseExplorer({ who, week: weekIn, autoIds, onAdd, onEn
                         : r.inWeek ? <span className="cx-pill in"><Check className="icon xs" />In your week</span>
                         : !r.open.length && r.secs.some((x) => autoIds.includes(x.id)) ? <span className="cx-pill in">Your core</span>
                         : !r.open.length ? <span className="cx-pill no">{r.tag === 'closed' ? 'Add/drop closed' : r.tag === 'ended' ? 'Ended' : 'Not for you'}</span>
+                          : isTrip(r.lead) ? <span className="cx-pill plain" title="A Global Studies experience: you apply on its timeline (see Requirements)">By application</span>
+                          : r.lead.start_min == null ? <span className="cx-pill plain">Time TBA</span>
                           : r.fits ? <span className="cx-pill ok">Fits your week</span> : <span className="cx-pill warn">Clashes</span>}
-                      <span className="cx-pill plain">{r.lead.units} units</span>
+                      <span className="cx-pill plain">{r.lead.units} {r.lead.units === 1 ? "unit" : "units"}</span>
                       <TaughtWith schools={r.lead.taught_with} calendar={r.lead.partner_calendar} className="cx-pill" />
                       {nextYear.has(r.lead.number) && <span className="cx-pill in" title={`Planned for ${nextYear.get(r.lead.number)} (expected, times TBA)`}><CalendarClock className="icon xs" />{nextYear.get(r.lead.number)}</span>}
                     </span>
@@ -438,7 +440,7 @@ function Detail({ secs, row, who, autoIds, clashesFor, onAdd, onEnroll, inWeek, 
           <div className="cx-card-kicker"><span className="course-num">{lead.number}</span><QuarterPill session={lead.session} term={lead.term} year /></div>
           <h4>{lead.title}</h4>
           <div className="cx-meta small muted">
-            <span>{lead.units} units</span>
+            <span>{lead.units} {lead.units === 1 ? "unit" : "units"}</span>
             <span className="cx-people">{faculty.length ? faculty.map((n, i) => (
               <Fragment key={n}>{i ? ', ' : ''}<button type="button" className="link-btn" title={`Meet ${displayName(n)}`} onClick={() => onPerson(n)}>{displayName(n)}</button></Fragment>
             )) : 'Faculty TBA'}</span>

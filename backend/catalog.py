@@ -49,12 +49,12 @@ def quarter_label(session: str, term: str) -> str:
 
 
 SESSION_NAMES = {
-    "fall": "Fall (full term)",
-    "fall-1": "Fall 1",
-    "fall-2": "Fall 2",
-    "spring": "Spring (full term)",
-    "spring-1": "Spring 1",
-    "spring-2": "Spring 2",
+    "fall": "Fall full term",
+    "fall-1": "Fall-1",
+    "fall-2": "Fall-2",
+    "spring": "Spring full term",
+    "spring-1": "Spring-1",
+    "spring-2": "Spring-2",
 }
 DAY_ORDER = ["M", "T", "W", "Th", "F"]
 DAY_ICS = {"M": "MO", "T": "TU", "W": "WE", "Th": "TH", "F": "FR"}

@@ -65,18 +65,18 @@ export default function Explore() {
   const elihuSlot = useCallback(({ selectedKey }: { selectedKey: string | null }) => {
     const keys = [...(selectedKey ? [selectedKey] : []), ...shortlist.keys()].filter((k, i, a) => a.indexOf(k) === i).slice(0, 4)
     const sel = selectedKey ? leadByKey.get(selectedKey) : undefined
-    const sub = sel ? `He’ll weigh ${sel.number}${keys.length > 1 ? ` and ${keys.length - 1} starred` : ''} against your goals`
-      : keys.length ? `He’ll weigh your ${keys.length} starred course${keys.length === 1 ? '' : 's'} against your goals`
-        : 'He reads your goals and picks a shortlist'
+    const sub = sel ? `Elihu weighs ${sel.number}${keys.length > 1 ? ` and ${keys.length - 1} starred` : ''} against your goal`
+      : keys.length ? `Elihu weighs your ${keys.length} starred course${keys.length === 1 ? '' : 's'} against your goal`
+        : 'Course picks ranks courses for your goal'
     return (
       <button type="button" className="xp-elihu elihu-host" onClick={() => { setElihuContext(keys); go('find') }}
-        aria-label="Stuck between two electives? Ask Elihu">
+        aria-label="Not sure what to take? Get course picks">
         <Elihu size={30} />
         <span className="xp-elihu-text">
-          <span className="xp-elihu-q">Stuck between two electives?</span>
+          <span className="xp-elihu-q">Not sure what to take?</span>
           <span className="faint small xp-elihu-sub">{sub}</span>
         </span>
-        <span className="xp-elihu-go">Ask Elihu</span>
+        <span className="xp-elihu-go">Get course picks</span>
       </button>
     )
   }, [shortlist, leadByKey, go])

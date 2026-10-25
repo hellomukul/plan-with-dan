@@ -22,9 +22,9 @@ const COHORTS = ['Gold', 'Silver', 'Blue', 'Green', 'Red']
 const TWO_YEAR = new Set(['MBA', 'MBA-JOINT', 'EMBA'])
 type Tab = 'plan' | 'dates' | 'tools' | 'reqs'
 const TABS: { id: Tab; label: string; icon: typeof Compass }[] = [
-  { id: 'plan', label: 'My plan', icon: Compass },
+  { id: 'plan', label: 'Your week', icon: Compass },
   { id: 'dates', label: 'Dates', icon: CalendarDays },
-  { id: 'tools', label: 'Tools', icon: Wrench },
+  { id: 'tools', label: 'Get help', icon: Wrench },
   { id: 'reqs', label: 'Requirements', icon: GraduationCap },
 ]
 
@@ -202,7 +202,7 @@ export default function Workspace({ t, setT, info, onSave, onSignup }: Props) {
               {p.required.length > 0 && (
                 <div>
                   <div className="section-label"><span>Required courses</span></div>
-                  <ul className="lp-req">{p.required.map((r) => <li key={r.number + r.term}><span className="course-num">{r.number}</span> {r.title} <span className="faint">· {r.term === '202603' ? 'Fall' : 'Spring'} · {r.units} units</span></li>)}</ul>
+                  <ul className="lp-req">{p.required.map((r) => <li key={r.number + r.term}><span className="course-num">{r.number}</span> {r.title} <span className="faint">· {r.term === '202603' ? 'Fall' : 'Spring'} · {r.units} {r.units === 1 ? "unit" : "units"}</span></li>)}</ul>
                 </div>
               )}
               <dl className="lp-kv small"><dt>Global</dt><dd>{p.global}</dd><dt>Calendar</dt><dd>{p.calendar}</dd></dl>

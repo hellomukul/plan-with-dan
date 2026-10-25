@@ -71,12 +71,12 @@ export default function DatesTab({ t, info }: { t: Tryout; info: ProgramsInfo | 
           <div className="dt-foot">
             <label className="dt-toggle">
               <input type="checkbox" checked={showClasses} onChange={(e) => setShowClasses(e.target.checked)} />
-              Show my classes from My plan{t.ids.length ? ` (${t.ids.length})` : ''}
+              Show my classes from Your week{t.ids.length ? ` (${t.ids.length})` : ''}
             </label>
             {quarters.length > 0 && <p className="small dt-quarters" title="Each term has two quarters; half-term courses run in one, full-term courses in both. Dates are the usual first and last class days.">
               <span className="faint">Quarters</span> {quarters.join(' · ')}</p>}
             <p className="faint small">
-              {t.ids.length ? 'Classes follow your week in My plan, including holidays and make-up days.' : 'Add courses in My plan and their classes show up here.'}{' '}
+              {t.ids.length ? 'Classes follow Your week, including holidays and make-up days.' : 'Add courses in Your week and their classes show up here.'}{' '}
               Dates from the 2026–27 SOM academic calendar (MBA, MAM and MMS){auctionApplies(t.program, t.year) ? ', plus the course auction dates from the registrar' : ''}.
             </p>
           </div>

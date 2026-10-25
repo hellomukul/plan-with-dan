@@ -1,6 +1,6 @@
 /* Course picks: three-step header, goal box, example preview, working state, ranked list with ticks, by-quarter view,
    per-term units, and a sticky footer that becomes the success state. */
-.pk { display: grid; gap: 0; }
+.pk { display: grid; gap: 0; grid-template-columns: minmax(0, 1fr); }
 .pk-num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 .amber-text { color: var(--amber); }
 
@@ -51,7 +51,7 @@
 .pk-working li.done .pk-working-dot { background: var(--green-soft); border-color: rgba(61, 214, 140, 0.45); color: var(--green); }
 
 /* step 2: results */
-.pk-result { display: grid; gap: 14px; scroll-margin-top: 16px; }
+.pk-result { display: grid; gap: 14px; scroll-margin-top: 16px; grid-template-columns: minmax(0, 1fr); }
 .pk-result-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .pk-result-head h3 { margin: 0; font-size: 17px; }
 .pk-for { margin: 2px 0 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 640px; }
@@ -63,7 +63,7 @@
 .pk-term { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg-2); }
 .pk-term-units .pk-num { font-size: 18px; color: var(--text); }
 
-.pk-list { list-style: none; margin: 0; padding: 0; display: grid; }
+.pk-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); }
 .pk-item { display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 12px; padding: 14px 0; border-top: 1px solid var(--line); align-items: start; }
 .pk-list > .pk-item:first-child { border-top: 0; }
 .pk-item:not(.on):not(.done) .pk-main { opacity: 0.72; }
@@ -126,3 +126,4 @@
 .pk-beyond li:first-child { border-top: 0; padding-top: 0; }
 .pk-beyond-main { display: grid; gap: 3px; min-width: 0; }
 .pk-beyond-desc { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.tw-badge { white-space: normal; max-width: 100%; }

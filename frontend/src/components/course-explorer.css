@@ -83,7 +83,7 @@
 .cx-count-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cx-ava { display: inline-grid; place-items: center; flex: none; border-radius: 50%; background: var(--pink-soft); border: 1px solid var(--pink-line);
   color: var(--pink-2); font-weight: 600; letter-spacing: 0.02em; line-height: 1; user-select: none; }
-.cx-ava.sm { width: 20px; height: 20px; font-size: 9px; }
+.cx-ava.sm { width: 20px; height: 20px; font-size: 11px; }
 .cx-ava.md { width: 32px; height: 32px; font-size: 12px; }
 .cx-ava.lg { width: 56px; height: 56px; font-size: 19px; }
 
@@ -215,7 +215,7 @@
 
 /* ---- Quarters: one small mono pill everywhere a course is browsed (QuarterPill) ---- */
 .q-pill { display: inline-flex; align-items: center; height: 18px; box-sizing: border-box; padding: 0 7px; border-radius: 999px; border: 1px solid var(--line-2);
-  background: var(--bg-2); color: var(--muted); font-family: var(--mono); font-size: 10.5px; font-weight: 500; letter-spacing: 0; line-height: 1; white-space: nowrap;
+  background: var(--bg-2); color: var(--muted); font-family: var(--mono); font-size: 11px; font-weight: 500; letter-spacing: 0; line-height: 1; white-space: nowrap;
   vertical-align: 1px; }
 .q-pill.full { border-style: dashed; }  /* full term: runs through both quarters */
 .cx-card-kicker { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }

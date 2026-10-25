@@ -291,7 +291,7 @@ function NextStep({ go }: { go: (r: Route) => void }) {
     const profileGoal = [profile?.goal_short, profile?.goal_long].map((g) => g?.trim() ?? '').filter(Boolean).map(sentence).join(' ')
     const goal = pendingGoal || profileGoal
     pick = {
-      kind: 'package', title: 'Build your course package', button: 'Build my course package',
+      kind: 'package', title: 'Get course picks for your goal', button: 'Get course picks',
       detail: goal ? `Elihu ranks courses across every quarter you have left, for your goal: “${goal}”`
         : 'Tell Elihu your goal in your own words. He ranks courses across every quarter you have left.',
       run: () => {
@@ -433,7 +433,7 @@ export default function Home() {
 
         <section className="card dk-week" aria-label="This week">
           <div className="dk-head">
-            <h2>This week</h2>
+            <h2>Coming up</h2>
             {rest.length > 0 && (
               <button type="button" className="link-btn small" aria-expanded={showAll} aria-controls="dk-week-list"
                 onClick={() => { if (!showAll) setListH(listRef.current?.offsetHeight ?? null); setShowAll((v) => !v) }}>

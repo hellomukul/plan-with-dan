@@ -166,7 +166,7 @@ COHORT_SECTIONS = {
 
 # kind: deadline | exam | break | classes | grades | holiday | global | milestone
 CALENDAR = [
-    ("2026-10-26", "Session-2 classes begin (Fall)", "classes"),
+    ("2026-10-26", "Fall-2 classes begin", "classes"),
     ("2026-11-02", "Add/drop ends, Fall session-2 electives (5 p.m.)", "deadline"),
     ("2026-11-06", "Fall session-1 grades due", "grades"),
     ("2026-11-20", "Late drop / audit deadline, Fall session-2 (5 p.m.)", "deadline"),

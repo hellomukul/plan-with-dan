@@ -1546,3 +1546,23 @@ def test_other_yale_courses_search_and_labels(client):
     by_code = client.get("/api/yale-courses?q=" + (c["also"][0] if c["also"] else c["number"]).replace(" ", "%20")).json()["courses"]
     assert by_code and by_code[0]["id"] == c["id"]
     assert all("202603" in x["terms"] for x in client.get("/api/yale-courses?term=202603&limit=20").json()["courses"])
+
+
+def test_qa_fixes_core_clashes_export_outside_swap_catalog(client):
+    c = client.__class__(client.app)
+    c.post("/api/auth/signup", json={"email": "qa.fixes@yale.edu", "password": "a long enough phrase"})
+    c.put("/api/profile", json={"program": "MBA", "year": "1", "cohort": "Gold", "onboarded": True})
+    secs = c.get("/api/catalog").json()["sections"]
+    core = next(s for s in secs if s["core"] and s["term"] == "202701")
+    assert c.post("/api/plan", json={"course_id": core["id"]}).status_code == 400  # core is assigned, not added
+    # an elective that overlaps the Gold core: the add response says so
+    gold = [s for s in c.get("/api/calendar/events").json()["classes"] if s["status"] == "core"]
+    assert gold is not None
+    o = {"school": "Law School", "number": "LAW 100", "title": "Contracts", "units": 3, "term": "202701"}
+    assert c.post("/api/outside", json=o).status_code == 200
+    assert c.post("/api/outside", json=o).status_code == 400  # duplicate
+    exported = c.get("/api/account/export").json()
+    assert exported["OutsideCourse"] and "ActivityDay" in exported
+    assert c.post("/api/swap/check", json={"give_item_id": 10**30, "want": "MGT 523"}).status_code == 422
+    r = c.get("/api/catalog", headers={"Accept-Encoding": "gzip"})
+    assert r.status_code == 200 and r.json()["sections"]

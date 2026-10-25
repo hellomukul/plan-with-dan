@@ -287,6 +287,7 @@ export interface ProgramInfo {
 export interface ProgramsInfo {
   programs: ProgramInfo[]
   upcoming: { date: string; end: string; title: string; kind: string }[]
+  dates?: { date: string; end: string; title: string; kind: string }[]
   today: string
   calendar_note: string
   data_as_of?: string
@@ -358,8 +359,8 @@ export const api = {
   reportBid: (b: { course_number: string; term_code: string; points_bid: number; got_seat: boolean; clearing_points: number | null }) => request<{ ok: boolean }>('POST', '/api/bids', b),
   suggestBids: (budget: number, priorities: Record<string, number>) => request<{ split: BidSplit[]; note: string; warnings?: string[] }>('POST', '/api/bids/suggest', { budget, priorities }),
 
-  publicChat: (message: string, history: { role: 'user' | 'assistant'; content: string }[]) =>
-    request<ChatResult & { remaining_today?: number; limited?: boolean }>('POST', '/api/chat/public', { message, history }),
+  publicChat: (message: string, history: { role: 'user' | 'assistant'; content: string }[], context?: { program: string; year: string; cohort: string }) =>
+    request<ChatResult & { remaining_today?: number | null; limited?: boolean; cached?: boolean }>('POST', '/api/chat/public', { message, history, context }),
   chatHistory: (mode: 'dan' | 'news') => request<{ messages: ChatMsg[] }>('GET', `/api/chat/history?mode=${mode}`),
   clearChat: (mode: 'dan' | 'news') => request<{ ok: boolean }>('DELETE', `/api/chat/history?mode=${mode}`),
   importPlan: (courseIds: string[]) => request<{ added: number }>('POST', '/api/plan/import', { course_ids: courseIds }),

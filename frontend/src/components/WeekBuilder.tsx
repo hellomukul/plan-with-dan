@@ -18,9 +18,11 @@ interface Props {
   programs: ProgramInfo[]
   dataAsOf?: string
   onSave: () => void
+  showWho?: boolean // false when a sentence picker above already asks program / year / cohort
+  wide?: boolean // grid left, list right (the My plan tab); otherwise one stacked column
 }
 
-export default function WeekBuilder({ t, setT, programs, dataAsOf, onSave }: Props) {
+export default function WeekBuilder({ t, setT, programs, dataAsOf, onSave, showWho = true, wide = false }: Props) {
   const { sections } = useApp()
   const [q, setQ] = useState('')
   const [note, setNote] = useState('')
@@ -100,8 +102,8 @@ export default function WeekBuilder({ t, setT, programs, dataAsOf, onSave }: Pro
   }
 
   return (
-    <div className="card wb" aria-label="Build your week">
-      <div className="wb-who">
+    <div className={`card wb ${wide ? 'wide' : ''}`} aria-label="Build your week">
+      {showWho && <div className="wb-who">
         <label className="sr-only" htmlFor="wb-program">Program</label>
         <select id="wb-program" className="lp-select" value={t.program}
           onChange={(e) => setT((v) => ({ ...v, program: e.target.value, year: TWO_YEAR.has(e.target.value) ? v.year : '', cohort: '' }))}>
@@ -125,8 +127,9 @@ export default function WeekBuilder({ t, setT, programs, dataAsOf, onSave }: Pro
             </select>
           </>
         )}
-      </div>
+      </div>}
 
+      <div className="wb-main"><div className="wb-left">
       <div className="row between wb-term">
         {t.year === 'admit'
           ? <span className="small faint">Example week · Fall 2026</span>
@@ -141,8 +144,9 @@ export default function WeekBuilder({ t, setT, programs, dataAsOf, onSave }: Pro
       </div>
       {note && <p className={`small wb-note ${example ? 'example' : ''}`}>{note}</p>}
 
-      <Timetable sections={picked} clashIds={clashIds} compact />
+      <Timetable sections={picked} clashIds={clashIds} compact={!wide} />
       {tba.length > 0 && <p className="small faint wb-tba">No published time: {tba.map((s) => s.number).join(', ')}</p>}
+      </div><div className="wb-right">
 
       <div className="wb-search">
         <Search className="icon sm faint" aria-hidden />
@@ -193,6 +197,7 @@ export default function WeekBuilder({ t, setT, programs, dataAsOf, onSave }: Pro
         <button type="button" className="btn ghost sm" onClick={download} disabled={!picked.length}><Download className="icon sm" />Calendar file</button>
       </div>
       <p className="faint wb-fine">Course data from SOM’s public directory{dataAsOf ? `, as of ${prettyDate(dataAsOf)}` : ''}. Nothing is stored until you sign up.</p>
+      </div></div>
     </div>
   )
 }

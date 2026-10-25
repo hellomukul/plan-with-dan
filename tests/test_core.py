@@ -567,9 +567,16 @@ def test_visitor_chat_needs_no_login_and_is_capped(client):
     fresh = client.__class__(client.app)
     r = fresh.post("/api/chat/public", json={"message": "What does the MAM program require?", "history": []})
     assert r.status_code == 200 and "remaining_today" in r.json()
-    app_main._visitor_counts["testclient"] = (date.today().isoformat(), app_main.PUBLIC_MESSAGES_PER_DAY)
+    app_main._visitor_counts["ip:testclient"] = (date.today().isoformat(), app_main.VISITOR_IP_CAP)
     limited = fresh.post("/api/chat/public", json={"message": "one more?", "history": []}).json()
     assert limited["limited"] is True
+    app_main._visitor_counts.clear()
+    # per device: a fresh device on the same IP still gets its own allowance
+    other = client.__class__(client.app)
+    for _ in range(app_main.PUBLIC_MESSAGES_PER_DAY):
+        other.post("/api/chat/public", json={"message": "hi", "history": [{"role": "user", "content": "x"}]})
+    assert other.post("/api/chat/public", json={"message": "hi", "history": [{"role": "user", "content": "x"}]}).json().get("limited")
+    assert not client.__class__(client.app).post("/api/chat/public", json={"message": "hi", "history": []}).json().get("limited")
     app_main._visitor_counts.clear()
     import knowledge
     assert knowledge.search("What does the MAM program require?", None)[0]["id"] == "program-mam"

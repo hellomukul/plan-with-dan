@@ -145,9 +145,9 @@ def programs_public():
             "required": p.get("required", []), "global": p["global"], "calendar": p["calendar"],
             "sources": p["sources"], "unconfirmed": p.get("unconfirmed", []),
         })
-    upcoming = [{"date": d, "end": CALENDAR_ENDS.get(d, d), "title": label, "kind": kind}
-                for d, label, kind in CALENDAR if CALENDAR_ENDS.get(d, d) >= today][:6]
-    return {"programs": progs, "upcoming": upcoming, "today": today, "data_as_of": _data_as_of(),
+    remaining = [{"date": d, "end": CALENDAR_ENDS.get(d, d), "title": label, "kind": kind}
+                 for d, label, kind in CALENDAR if CALENDAR_ENDS.get(d, d) >= today]
+    return {"programs": progs, "upcoming": remaining[:6], "dates": remaining, "today": today, "data_as_of": _data_as_of(),
             "calendar_note": "Dates are the shared MBA, MAM and MMS calendar. The MBA for Executives and MMS-PEM run on their own calendars."}
 
 
@@ -769,29 +769,70 @@ class VisitorTurn(BaseModel):
     content: str = Field(max_length=4000)
 
 
+class VisitorContext(BaseModel):
+    program: str = Field("", max_length=12)
+    year: str = Field("", max_length=6)
+    cohort: str = Field("", max_length=10)
+
+
 class PublicChatIn(BaseModel):
     message: str = Field(max_length=2000)
     history: list[VisitorTurn] = Field(default_factory=list, max_length=12)
+    context: VisitorContext = Field(default_factory=VisitorContext)
 
 
-_visitor_counts: dict[str, tuple[str, int]] = {}  # ip -> (day, questions); per process, which is fine for one instance
+# Visitor caps: per device (a random cookie) and a looser per-IP cap, because classmates on campus Wi-Fi share an IP.
+_visitor_counts: dict[str, tuple[str, int]] = {}
+VISITOR_IP_CAP = PUBLIC_MESSAGES_PER_DAY * 4
+# Repeated first questions (the starter chips) are answered from a short-lived cache: instant, free, uncapped.
+_answer_cache: dict[str, tuple[float, dict]] = {}
+ANSWER_CACHE_SECONDS = 6 * 3600
+
+
+def _bump(key: str, cap: int) -> int | None:
+    """Count one question for `key` today; None when it's over `cap`."""
+    day = date.today().isoformat()
+    seen_day, count = _visitor_counts.get(key, (day, 0))
+    count = count if seen_day == day else 0
+    if count >= cap:
+        return None
+    _visitor_counts[key] = (day, count + 1)
+    return cap - count - 1
 
 
 @app.post("/api/chat/public")
-@limiter.limit("6/minute")
-async def chat_public(request: Request, body: PublicChatIn, db: Session = Depends(get_db)):
+@limiter.limit("8/minute")
+async def chat_public(request: Request, response: Response, body: PublicChatIn, db: Session = Depends(get_db)):
     """Dan for visitors who aren't signed in: no stored data, a few questions per day, a shared budget."""
+    import time
+    ctx = body.context
+    program = ctx.program if ctx.program in PROGRAM_CODES else ""
+    cache_key = ""
+    if not body.history:  # a first question, e.g. a starter chip: shareable across visitors
+        cache_key = f"{program}|{ctx.year}|{ctx.cohort}|{' '.join(body.message.lower().split())}"
+        hit = _answer_cache.get(cache_key)
+        if hit and time.time() - hit[0] < ANSWER_CACHE_SECONDS:
+            return {**hit[1], "cached": True, "remaining_today": None}
+
+    device = request.cookies.get("pwd_vid")
+    if not device or len(device) > 64:
+        device = secrets.token_urlsafe(16)
+        response.set_cookie("pwd_vid", device, max_age=86400 * 30, httponly=True, samesite="lax")
     ip = request.client.host if request.client else "unknown"
-    day = date.today().isoformat()
-    seen_day, count = _visitor_counts.get(ip, (day, 0))
-    count = count if seen_day == day else 0
-    if count >= PUBLIC_MESSAGES_PER_DAY:
-        return {"answer": f"That's {PUBLIC_MESSAGES_PER_DAY} questions today, the limit for visitors. Create a free "
-                          "account to keep going: Dan will also remember your goals and check courses against your plan.",
+    left = _bump(f"d:{device}", PUBLIC_MESSAGES_PER_DAY)
+    if left is None or _bump(f"ip:{ip}", VISITOR_IP_CAP) is None:
+        return {"answer": f"That's today's {PUBLIC_MESSAGES_PER_DAY} visitor questions. Dan resets at midnight, and the "
+                          "week builder, dates and requirements on this page have no limit. A free account gets its "
+                          "own daily budget.",
                 "agent": None, "proposals": [], "blocked": False, "safety": ["visitor_limit"], "limited": True}
-    _visitor_counts[ip] = (day, count + 1)
-    result = await run_turn(db, None, body.message, "dan", visitor_history=[t.model_dump() for t in body.history])
-    return {**result, "remaining_today": PUBLIC_MESSAGES_PER_DAY - count - 1}
+    who = [p for p in (PROGRAMS.get(program, {}).get("label") if program else "",
+                       {"1": "first year", "2": "second year", "admit": "admitted, not yet enrolled"}.get(ctx.year, ""),
+                       f"{ctx.cohort} cohort" if ctx.cohort else "") if p]
+    message = body.message if not who else f"[I'm a {', '.join(who)} student.] {body.message}"
+    result = await run_turn(db, None, message, "dan", visitor_history=[t.model_dump() for t in body.history])
+    if cache_key and result.get("agent") and not result.get("blocked") and not result.get("safety"):
+        _answer_cache[cache_key] = (time.time(), {k: result[k] for k in ("answer", "agent", "proposals", "blocked", "safety")})
+    return {**result, "remaining_today": left}
 
 
 @app.post("/api/chat/stream")

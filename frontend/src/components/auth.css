@@ -1,0 +1,74 @@
+/* Sign up / log in dialog, the "Link your calendar" sheet, and the Google / Microsoft buttons (also used on
+   Privacy and data). Quiet Yale: flat 1px borders, one blue accent, no gradients or glows. */
+
+/* The shared modal is capped at 76vh and starts 12vh down; this dialog gets the room it needs so it never
+   scrolls on a laptop or a 375x812 phone. */
+.overlay.center:has(> .modal > .auth-dialog) { padding-top: max(16px, 8vh); }
+.modal:has(> .auth-dialog) { width: min(420px, 100%); max-height: calc(100dvh - 32px); padding: 18px 20px 16px; }
+
+.auth-dialog { display: flex; flex-direction: column; gap: 12px; }
+.auth-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: -4px -6px -2px 0; }
+.auth-brand { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; font-size: 13.5px; color: var(--muted); }
+.auth-brand .icon { color: var(--pink); }
+
+/* Full-width toggle: two equal halves and a pill that slides between them. */
+.auth-toggle { position: relative; display: grid; grid-template-columns: 1fr 1fr; padding: 3px; border: 1px solid var(--line);
+  border-radius: 10px; background: var(--bg-2); isolation: isolate; }
+.auth-toggle button { position: relative; z-index: 1; height: 38px; min-width: 0; border: 0; background: none; border-radius: 7px;
+  color: var(--muted); font: inherit; font-size: 13.5px; font-weight: 500; cursor: pointer; white-space: nowrap;
+  transition: color 0.18s var(--ease); }
+.auth-toggle button[aria-selected='true'] { color: var(--text); }
+.auth-toggle button:focus-visible { outline: 2px solid var(--pink); outline-offset: -2px; }
+.auth-pill { position: absolute; z-index: 0; top: 3px; bottom: 3px; left: 3px; width: calc(50% - 3px); border-radius: 7px;
+  background: var(--card-2); border: 1px solid var(--line-2); transition: transform 0.22s var(--ease); }
+.auth-toggle[data-mode='login'] .auth-pill { transform: translateX(100%); }
+@media (prefers-reduced-motion: reduce) { .auth-pill, .auth-toggle button { transition: none; } }
+
+.auth-head h2 { margin: 0 0 2px; font-size: 18px; }
+.auth-head p { margin: 0; color: var(--muted); font-size: 13.5px; line-height: 1.45; }
+.auth-tagline { margin: 0; font-size: 13.5px; font-weight: 500; color: var(--text); }
+.auth-note { color: var(--amber); }
+.auth-fine { margin: 0; font-size: 12px; line-height: 1.45; color: var(--faint); }
+.auth-privacy { display: flex; gap: 6px; }
+.auth-privacy .icon { flex: none; margin-top: 2px; }
+
+/* Google / Microsoft: each brand's dark neutral sign-in button, logo left of the words, full width, 44px tall. */
+.auth-oauth { display: grid; gap: 8px; }
+.auth-oauth-skeleton { height: 96px; }  /* holds the buttons' space while we ask which providers are on */
+.oauth-btn { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 44px; padding: 0 16px;
+  border-radius: 8px; font-size: 14px; font-weight: 500; text-decoration: none; white-space: nowrap; cursor: pointer;
+  transition: filter 0.12s var(--ease); }
+.oauth-btn:hover { text-decoration: none; filter: brightness(1.15); }
+.oauth-btn:focus-visible { outline: 2px solid var(--pink); outline-offset: 2px; }
+.oauth-btn svg { flex: none; }
+.oauth-btn.google { background: #131314; border: 1px solid #8e918f; color: #e3e3e3; font-family: Roboto, var(--font); }
+.oauth-btn.microsoft { background: #2f2f2f; border: 1px solid #2f2f2f; color: #ffffff; font-family: 'Segoe UI', var(--font); font-weight: 600; }
+
+.auth-email { display: flex; flex-direction: column; gap: 10px; }
+.auth-or { display: flex; align-items: center; gap: 10px; color: var(--faint); font-size: 12px; }
+.auth-or::before, .auth-or::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+.auth-mini-toggle { color: var(--muted); }
+.auth-submit, .auth-email-open { width: 100%; min-height: 44px; }
+
+/* Phones: a bottom sheet with 44px targets. */
+@media (max-width: 640px) {
+  .overlay.center:has(> .modal > .auth-dialog) { align-items: flex-end; padding: 0; }
+  .modal:has(> .auth-dialog) { width: 100%; max-height: calc(100dvh - 8px); border-radius: 16px 16px 0 0; border-bottom: 0;
+    padding: 14px 16px calc(14px + env(safe-area-inset-bottom)); }
+  .auth-dialog { gap: 10px; }
+  .auth-toggle button { height: 44px; }
+  .auth-dialog .btn.auth-close { width: 44px; height: 44px; margin: -8px -10px -8px 0; }
+  .auth-dialog .field input { min-height: 44px; font-size: 16px; }  /* 16px stops iOS zooming into the field */
+  .auth-head h2 { font-size: 17px; }
+}
+
+/* Privacy and data: linked sign-ins */
+.linked-list { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 8px; }
+.linked-list li { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 6px 6px 6px 12px; border: 1px solid var(--line);
+  border-radius: 8px; font-size: 13.5px; }
+.linked-list li > span:first-of-type { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.linked-list .btn { min-height: 34px; }
+@media (max-width: 640px) { .linked-list .btn { min-height: 44px; } }
+.linked-add { display: grid; gap: 8px; }
+.pv-k { color: var(--text); font-weight: 500; }
+@media (max-width: 640px) { .pv .card .btn { min-height: 44px; } }  /* Privacy page: phone-sized buttons */

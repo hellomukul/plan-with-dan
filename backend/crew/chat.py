@@ -17,6 +17,7 @@ several reports.
 from __future__ import annotations
 
 import asyncio
+import re
 import json
 from datetime import date
 from typing import AsyncIterator
@@ -32,7 +33,7 @@ from crew.context import load_context
 from crew.runtime import Run
 from crew.tools import student_card
 from db import ChatMessage
-from safety import REFUSAL, BudgetExceeded, SpendGuard, check_output, fence, screen_input
+from safety import REFUSAL, SUPPORT_CARD, BudgetExceeded, SpendGuard, check_output, fence, screen_input, support_signal
 
 _background: set[asyncio.Task] = set()  # keep references so memory folds aren't garbage-collected mid-run
 
@@ -77,7 +78,7 @@ async def run_turn(db: Session, user_id: int | None, message: str, mode: str = "
     run = Run(db=db, user_id=user_id, feature="public" if visitor else "news" if mode == "news" else "chat",
               guard=SpendGuard.for_public(db) if visitor else SpendGuard.for_user(db, user_id), queue=queue)
     known = {s.number.upper() for s in get_catalog().sections}
-    result = {"answer": "", "agent": None, "proposals": [], "blocked": False, "safety": []}
+    result = {"answer": "", "agent": None, "proposals": [], "blocked": False, "safety": [], "support": None}
 
     screen = screen_input(message)
     if not screen.allowed and screen.benign:
@@ -92,6 +93,11 @@ async def run_turn(db: Session, user_id: int | None, message: str, mode: str = "
         _save(db, user_id, mode, "assistant", result["answer"], {"blocked": True})
         return _finish(run, result)
 
+    if support_signal(screen.text):
+        # Dan still answers normally; the reply also carries the "Need someone right now?" card.
+        result["support"] = SUPPORT_CARD
+        run.audit("support_shown", shown=True)  # a yes/no only, never the message text
+
     if not ai_available():
         result["answer"] = ("Dan's AI brain isn't connected (no PORTKEY_API_KEY or OPENAI_API_KEY found). "
                             "Everything else (search, planner, calendar, bids) still works.")
@@ -103,13 +109,17 @@ async def run_turn(db: Session, user_id: int | None, message: str, mode: str = "
     history = memory.context_block(db, user_id, mode, exclude_id=user_msg.id if user_msg else None)
     card = f"STUDENT:\n{student_card(ctx)}\n" if user_id else ""
     if visitor:
-        turns = [t for t in visitor_history[-8:] if t.get("role") in ("user", "assistant")]
+        # Earlier visitor turns come from the browser, so they get the same screen as the new message.
+        # (assistant turns too: the browser could plant a fake "assistant" message carrying instructions)
+        turns = [t for t in visitor_history[-8:] if t.get("role") in ("user", "assistant")
+                 and screen_input(str(t.get("content", ""))[:1000]).allowed]
         lines = [f"{t['role']}: {str(t.get('content', ''))[:1000]}" for t in turns]
         history = ("RECENT MESSAGES (from the visitor's browser, oldest first):\n"
                    + fence("\n".join(lines), "recent_chat", limit=9000)) if lines else ""
-        card = ("STUDENT: a visitor who is NOT signed in. You don't know their program, year or plan; ask if it "
-                "matters, and mention that a free account lets Dan save a plan and check it against their rules. "
-                "Don't call suggest_add.\n")
+        card = ("STUDENT: a visitor who is NOT signed in. If their message starts with \"[I'm a ... student.]\", that is "
+                "the program/year/cohort they picked on the home page: use it and don't say you can't tell. Otherwise "
+                "you don't know their program, year or plan; ask if it matters. A free account lets Dan save a plan and "
+                "check it against their rules. Don't call suggest_add.\n")
     today = date.today().isoformat()
 
     try:
@@ -161,7 +171,25 @@ async def run_turn(db: Session, user_id: int | None, message: str, mode: str = "
     return _wrap_up(run, result, known, user_id, mode)
 
 
+_FOLLOWUPS = re.compile(r"(?:^|\n)[ \t>*_`]*FOLLOWUPS[*_`]*[ \t]*:[ \t*_`]*([^\n]+?)[ \t*_`]*\s*$")
+
+
+def _split_followups(answer: str) -> tuple[str, list[str]]:
+    """Pull the model's FOLLOWUPS line off the answer and turn it into up to 3 short, screened questions."""
+    m = _FOLLOWUPS.search(answer or "")
+    if not m:
+        return answer, []
+    questions = []
+    for q in re.split(r"\s*\|\s*", m.group(1).strip().strip("`")):
+        q = " ".join(q.strip(" -*`\"").split())[:90]
+        if 3 <= len(q) and screen_input(q).allowed and q.lower() not in {x.lower() for x in questions}:
+            questions.append(q if q.endswith("?") else q + "?")
+    return answer[: m.start()].rstrip(), questions[:3]
+
+
 def _wrap_up(run: Run, result: dict, known: set[str], user_id: int | None, mode: str) -> dict:
+    result["answer"], followups = _split_followups(result["answer"])
+    result["followups"] = followups if not result.get("blocked") else []
     safe, issues = check_output(result["answer"], known)
     if issues:
         run.audit("output_checked", issues=issues)
@@ -170,6 +198,8 @@ def _wrap_up(run: Run, result: dict, known: set[str], user_id: int | None, mode:
     meta = {"agent": result.get("agent"), "cost_usd": run.totals()["cost_usd"], "run_id": run.run_id}
     if result.get("blocked"):
         meta["blocked"] = True  # keep the refusal out of later prompts too
+    if result.get("support"):
+        meta["support"] = True  # so the card comes back when the chat history reloads
     _save(run.db, user_id, mode, "assistant", safe, meta)
     if not result.get("blocked"):
         _schedule_fold(run.db, user_id, mode)

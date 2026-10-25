@@ -15,6 +15,7 @@ computed here.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 from dataclasses import dataclass, field
@@ -28,14 +29,14 @@ from crew.runtime import Run
 from db import DeskBrief, DeskState, aware, utcnow
 import programs
 from planning import PlanRow, conflicts, core_load, max_units, mba_rules_apply, min_units, requirement_progress
-from rules import CALENDAR, DEGREE, GSA_DAYS, GSR_OPTIONS
+from rules import AUCTION, CALENDAR, DEGREE, GSA_DAYS, GSR_OPTIONS, auction_applies, calendar_for
 from safety import BudgetExceeded, SpendGuard, fence
 
 PLANNING_TERM = "202701"
 ADD_DROP = {"202603": ("2026-11-02", "Fall session-2 add/drop"), "202701": ("2027-01-26", "Spring add/drop")}
 SEVERITY = {"high": 0, "medium": 1, "low": 2}
 TOP_N = 3
-MAX_BRIEFS_PER_DAY = 3  # model-written briefs per student per day; after that, plain-code wording
+MAX_BRIEFS_PER_DAY = 1  # one model-written brief per student per day (the rest of the day uses plain-code wording, free)
 
 
 @dataclass
@@ -93,8 +94,8 @@ def scan(profile: dict, plan: list[PlanRow], catalog, global_choices: list[dict]
             kind="units_low", key=PLANNING_TERM, severity="high" if term_units else "medium",
             due=ADD_DROP[PLANNING_TERM][0],
             title=f"Add {short:g} more unit{'s' if short != 1 else ''} to Spring 2027",
-            detail=f"You have {term_units:g} of the {minimum:g}-unit minimum{core_note}. Your best fits below all fit your timetable.",
-            action={"type": "scroll", "target": "fits", "label": "See best fits"},
+            detail=f"You have {term_units:g} of the {minimum:g}-unit minimum{core_note}. Dan can suggest courses that fit your timetable.",
+            action={"type": "go", "route": "find", "label": "Find courses"},
             source=f"programs.{profile.get('program') or 'MBA'} min_units (Yale Bulletin 2026-27)",
             why=(f"{prog_info['label']}: at least {minimum:g} units "
                  + ("in each of the first three terms; a heavy term doesn't make up for a light one." if mba
@@ -138,6 +139,22 @@ def scan(profile: dict, plan: list[PlanRow], catalog, global_choices: list[dict]
 
     soon = [(d, label, kind) for d, label, kind in CALENDAR
             if kind == "deadline" and 0 <= (date.fromisoformat(d) - today).days <= 14 and relevant(label)]
+
+    # 3b. The course auction (registrar email, first-year MBAs only): the next auction date within 14 days.
+    if auction_applies(profile.get("program"), profile.get("year")):
+        from rules import AUCTION_DATES
+        nxt = [(d, label) for d, label, kind in AUCTION_DATES
+               if kind == "deadline" and 0 <= (date.fromisoformat(d) - today).days <= 14]
+        for d, label in nxt[:1]:
+            cards.append(Card(
+                kind="deadline", key=f"auction-{d}", severity="medium", due=d,
+                title=label.split(" (")[0],
+                detail=("First-years bid on IE, GNW and SNOC in rounds 1–2 and on electives in rounds 2–3. "
+                        f"The auction runs Nov 9 to Jan 4 ({AUCTION['opens_time']})."),
+                action={"type": "go", "route": "bids", "label": "Open bid coach"},
+                source=f"rules.AUCTION_DATES ({AUCTION['source']})",
+                why="From the registrar's auction email to first-year MBAs.",
+            ))
     for d, label, _ in soon[:1]:
         cards.append(Card(
             kind="deadline", key=d, severity="medium", due=d,
@@ -193,8 +210,8 @@ def scan(profile: dict, plan: list[PlanRow], catalog, global_choices: list[dict]
         cards.append(Card(
             kind="ldr", key="ldr", severity="low", due=None,
             title="Plan a Leadership (LDR) course",
-            detail="You need one approved leadership elective before graduation. Best fits marks courses that count.",
-            action={"type": "scroll", "target": "fits", "label": "Show LDR courses"},
+            detail="You need one approved leadership elective before graduation. The catalog marks courses that count.",
+            action={"type": "go", "route": "explore", "label": "Browse LDR courses"},
             source="rules.LDR (MGLD flag, inferred)",
             why="Required to graduate.",
         ))
@@ -271,8 +288,18 @@ def _fallback_brief(cards: list[Card], name: str) -> str:
     return f"{first.title}. " + (f"{rest} more decision{'s' if rest > 1 else ''} below." if rest else "")
 
 
+_brief_locks: dict[int, asyncio.Lock] = {}
+
+
 async def brief(db: Session, user_id: int, name: str, profile: dict, cards: list[Card], today: date) -> dict:
-    """The day's brief, from cache when the cards haven't changed."""
+    """The day's brief, from cache when the cards haven't changed. One brief at a time per student, so two tabs
+    (or a page reload racing its own refresh) can't both miss the cache and pay for two model calls."""
+    lock = _brief_locks.setdefault(user_id, asyncio.Lock())
+    async with lock:
+        return await _brief(db, user_id, name, profile, cards, today)
+
+
+async def _brief(db: Session, user_id: int, name: str, profile: dict, cards: list[Card], today: date) -> dict:
     top = cards[:TOP_N]
     payload = [{"title": c.title, "detail": c.detail, "due": c.due} for c in top]
     digest = hashlib.sha1(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:16]
@@ -302,6 +329,8 @@ async def brief(db: Session, user_id: int, name: str, profile: dict, cards: list
     try:
         result = await run.call(chief, prompt, name="Chief of Staff", requests=2)
         text = result.output.text.strip()
+        from crew.chat import _split_followups  # the shared primer asks for a FOLLOWUPS line; a brief never shows it
+        text = _split_followups(text)[0].strip() or _fallback_brief(top, name)
     except BudgetExceeded:
         text = _fallback_brief(top, name)
     except Exception as exc:  # the desk still works without a brief

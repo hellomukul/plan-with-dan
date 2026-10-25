@@ -1,6 +1,9 @@
 /** Typed client for the Plan with Dan API. Same origin, cookie session. */
 
-export interface User { id: number; email: string; name: string }
+export interface User { id: number; email: string; name: string; providers?: OAuthProvider[]; has_password?: boolean }
+export type OAuthProvider = 'google' | 'microsoft'
+/** Full-page link that starts "Continue with Google / Microsoft" (a redirect, not a fetch). */
+export const oauthStartUrl = (p: OAuthProvider, intent: 'signup' | 'login' | 'calendar' | 'link') => `/api/auth/oauth/${p}/start?intent=${intent}`
 
 export interface Section {
   id: string
@@ -145,6 +148,8 @@ export interface ChatResult {
   answer: string
   agent: string | null
   proposals: Proposal[]
+  followups?: string[]
+  support?: Record<string, string> | null // set when the message sounded like distress: show the support card
   blocked: boolean
   safety: string[]
   run_id: string
@@ -192,6 +197,7 @@ export interface RecResult {
   shortlist_size: number
   schedule?: { units_added: number; units_term_total: number; core_units?: number; notes: Note[]; days_on_campus: string[]; has_ldr: boolean; has_gsr: boolean }
   critique?: { verdict: string; watch_outs: string[] }
+  followups?: string[]  // suggested next questions (the backend strips the FOLLOWUPS line from summary)
   trace: TraceStep[]
   usage: Usage
 }
@@ -214,10 +220,11 @@ export interface BidCourse {
 
 export interface BidSplit { number: string; key?: string; title: string; term_name: string; priority: number; seats: number | null; median_winning_bid: number | null; sample_only: boolean; suggested_points: number; share: number }
 
-export interface CalendarLinks { feed_url: string; webcal_url: string; google_subscribe: string; outlook_subscribe: string; is_local: boolean }
+export interface CalendarLinks { feed_url: string; webcal_url: string; google_subscribe: string; outlook_subscribe: string; outlook_yale_subscribe: string; is_local: boolean }
 export interface CalendarEvents {
   classes: { date: string; start_min: number; end_min: number; title: string; room: string; course_id: string; status?: string }[]
   deadlines: { date: string; end?: string; title: string; kind: string }[]
+  personal?: PersonalEvent[]
   today: string
   calendar_note?: string | null
 }
@@ -286,14 +293,49 @@ export interface ProgramInfo {
   required: { number: string; title: string; term: string; units: number }[]
   global: string; calendar: string; sources: string[]; unconfirmed: string[]
 }
+export interface ReqCourse { key: string; number: string; title: string; term: string; units: number }
+export interface MbaRules {
+  ldr: { summary: string; focus: string; how_flagged: string; petition: string; examples: string[]; source: string; focus_source: string; courses: ReqCourse[] }
+  gsr: { key: string; name: string; units: number | null; gsa_days: number; timing: string; enrol: string; cost: string; is_course: boolean; courses: ReqCourse[] }[]
+  gsa_days: number; gsr_source: string; gsr_funding_source: string
+  grading: { grade: string; share: string; transcript: boolean }[]
+  pass_fail_cap: Record<string, number>; grading_source: string
+}
+export interface AuctionInfo {
+  opens: string; opens_time: string; closes: string; closes_time: string
+  rounds: string[]; global: string[]; add_drop: string; exchange: string
+  sessions: { date: string; title: string; time: string; where: string }[]
+  policies: string[]; audience: string; source: string
+  dates: { date: string; end: string; title: string; kind: string }[]
+}
+/** The registrar's auction email went to first-year MBAs (Class of 2028) only. */
+export const auctionApplies = (program?: string | null, year?: string | null) =>
+  (program === 'MBA' || program === 'MBA-JOINT' || !program) && year === '1'
 export interface ProgramsInfo {
   programs: ProgramInfo[]
+  mba?: MbaRules
   upcoming: { date: string; end: string; title: string; kind: string }[]
   dates?: { date: string; end: string; title: string; kind: string }[]
+  calendar?: { date: string; end: string; title: string; kind: string }[]  // the whole 2026-27 calendar, past dates too
+  /** registrar's 2026-27 course auction (email to first-year MBAs): show to first-year MBA / joint-degree only */
+  auction?: AuctionInfo
   today: string
   calendar_note: string
   data_as_of?: string
 }
+
+export interface ShortlistCol {
+  id: number; key: string; note: string; rank: number; missing: boolean
+  number: string; title: string; term: string; term_name: string; session: string; units: number; faculty: string[]
+  enrollment: string; sections: { id: string; section: string; time: string; room: string }[]
+  fit: { status: 'fits' | 'clash' | 'not_open'; text: string; section_id?: string }
+  counts: string[]
+  goal: { matched: string[]; topics: string[]; level: 'Strong' | 'Some' | 'None found' }
+  demand: { level: string; seats: number | null; median_winning_bid: number | null; reports: number }
+  description: string; syllabus: string; in_plan: boolean; completed: boolean
+}
+
+export interface PersonalEvent { id: number; title: string; date: string; start_min: number; end_min: number; location: string; note: string }
 
 export class ApiError extends Error {
   status: number
@@ -303,22 +345,69 @@ export class ApiError extends Error {
   }
 }
 
+const OFFLINE = 'Can’t reach Plan with Dan. Check your connection and try again.'
+
+/** A plain-English fallback when the server's reply has no readable message (e.g. an HTML error page from a proxy). */
+function fallbackMessage(status: number): string {
+  if (status === 401) return 'Please log in again.'
+  if (status === 403) return 'That isn’t allowed from here. Reload the page and try again.'
+  if (status === 404) return 'We couldn’t find that. It may have been removed.'
+  if (status === 413) return 'That’s too long to send. Shorten it and try again.'
+  if (status === 429) return 'Too many requests. Wait a minute and try again.'
+  if (status >= 500) return `Something went wrong on our side (${status}). Try again in a moment.`
+  return `Something went wrong (${status}). Try again.`
+}
+
+// Field names in validation errors, in the words the forms use.
+const FIELD_LABEL: Record<string, string> = {
+  background: 'Background', goal_short: 'Short-term goal', goal_long: 'Long-term goal', completed: 'Courses taken',
+  interests: 'Interests', gsa_days_used: 'Global Studies days', message: 'Message', title: 'Title', note: 'Note',
+  email: 'Email', password: 'Password', name: 'First name', program: 'Program',
+}
+
+/** The server's message for a failed response, or a friendly fallback. Never empty. */
+async function errorMessage(res: Response): Promise<string> {
+  try {
+    const j = await res.json()
+    if (typeof j.detail === 'string' && j.detail.trim()) return j.detail
+    if (Array.isArray(j.detail) && j.detail.length) {
+      return j.detail.map((d: { msg?: string; loc?: (string | number)[] }) => {
+        const field = [...(d.loc ?? [])].reverse().find((x) => typeof x === 'string' && x !== 'body') as string | undefined
+        const msg = (d.msg ?? '').replace(/^Value error, /, '')
+        return field ? `${FIELD_LABEL[field] ?? field.replace(/_/g, ' ')}: ${msg}` : msg
+      }).filter(Boolean).join('; ') || fallbackMessage(res.status)
+    }
+  } catch { /* not json */ }
+  return fallbackMessage(res.status)
+}
+
+// 401s from these are answers to what was typed (wrong password), not a lost session.
+const AUTH_FORMS = ['/api/auth/login', '/api/auth/signup', '/api/auth/me', '/api/account/delete']
+function noteUnauthorized(path: string, status: number) {
+  if (status === 401 && !AUTH_FORMS.some((p) => path.startsWith(p))) window.dispatchEvent(new Event('pwd:unauthorized'))
+}
+
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const res = await fetch(path, {
-    method,
-    credentials: 'same-origin',
-    headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  })
-  if (!res.ok) {
-    let msg = res.statusText
-    try {
-      const j = await res.json()
-      msg = typeof j.detail === 'string' ? j.detail : Array.isArray(j.detail) ? j.detail.map((d: { msg: string }) => d.msg).join('; ') : msg
-    } catch { /* not json */ }
-    throw new ApiError(res.status, msg)
+  let res: Response
+  try {
+    res = await fetch(path, {
+      method,
+      credentials: 'same-origin',
+      headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    })
+  } catch {
+    throw new ApiError(0, OFFLINE)
   }
-  return res.json() as Promise<T>
+  if (!res.ok) {
+    noteUnauthorized(path, res.status)
+    throw new ApiError(res.status, await errorMessage(res))
+  }
+  try {
+    return (await res.json()) as T
+  } catch {
+    throw new ApiError(res.status, 'The server sent back something unexpected. Reload the page and try again.')
+  }
 }
 
 export const api = {
@@ -327,15 +416,18 @@ export const api = {
   signup: (email: string, password: string, name: string) => request<{ user: User | null; message?: string }>('POST', '/api/auth/signup', { email, password, name }),
   login: (email: string, password: string) => request<{ user: User }>('POST', '/api/auth/login', { email, password }),
   logout: () => request<{ ok: boolean }>('POST', '/api/auth/logout', {}),
+  logoutAll: () => request<{ ok: boolean }>('POST', '/api/auth/logout-all', {}),
+  providers: () => request<Record<OAuthProvider, boolean>>('GET', '/api/auth/providers'),
+  unlinkProvider: (p: OAuthProvider) => request<{ ok: boolean }>('POST', `/api/auth/oauth/${p}/unlink`, {}),
 
   catalog: () => request<{ terms: Record<string, string>; topics: string[]; sections: Section[] }>('GET', '/api/catalog'),
 
-  profile: () => request<{ profile: Profile; user: User }>('GET', '/api/profile'),
+  profile: () => request<{ profile: Profile; user: User; updated_at?: string | null }>('GET', '/api/profile'),
   saveProfile: (p: Profile) => request<{ profile: Profile }>('PUT', '/api/profile', p),
 
   plan: () => request<PlanResponse>('GET', '/api/plan'),
-  addToPlan: (course_id: string, added_by: 'student' | 'dan' = 'student') =>
-    request<{ ok: boolean; id: number; clashes?: Clash[]; switched?: boolean; action_id?: number }>('POST', '/api/plan', { course_id, added_by }),
+  addToPlan: (course_id: string, added_by: 'student' | 'dan' = 'student', status?: 'planned' | 'bidding' | 'enrolled' | 'completed') =>
+    request<{ ok: boolean; id: number; clashes?: Clash[]; switched?: boolean; action_id?: number }>('POST', '/api/plan', { course_id, added_by, ...(status ? { status } : {}) }),
   updatePlan: (id: number, patch: { status?: PlanItem['status']; bid_points?: number; course_id?: string }) =>
     request<{ ok: boolean; action_id?: number }>('PATCH', `/api/plan/${id}`, patch),
   removeFromPlan: (id: number) => request<{ ok: boolean; action_id?: number }>('DELETE', `/api/plan/${id}`),
@@ -347,7 +439,7 @@ export const api = {
   bestFits: (term = '202701') => request<BestFits>('GET', `/api/bestfits?term=${term}`),
   dismissFit: (key: string, reason = '') => request<{ ok: boolean }>('POST', '/api/bestfits/dismiss', { key, reason }),
   undismissFit: (key: string) => request<{ ok: boolean }>('DELETE', `/api/bestfits/dismiss?key=${encodeURIComponent(key)}`),
-  deleteAccount: (password: string) => request<{ ok: boolean }>('POST', '/api/account/delete', { password }),
+  deleteAccount: (password: string, confirm = '') => request<{ ok: boolean }>('POST', '/api/account/delete', { password, confirm }),
 
   requirements: () => request<RequirementsResponse>('GET', '/api/requirements'),
   saveGlobal: (c: GlobalChoice) => request<{ ok: boolean }>('POST', '/api/global', c),
@@ -365,8 +457,17 @@ export const api = {
     request<ChatResult & { remaining_today?: number | null; limited?: boolean; cached?: boolean }>('POST', '/api/chat/public', { message, history, context }),
   chatHistory: (mode: 'dan' | 'news') => request<{ messages: ChatMsg[] }>('GET', `/api/chat/history?mode=${mode}`),
   clearChat: (mode: 'dan' | 'news') => request<{ ok: boolean }>('DELETE', `/api/chat/history?mode=${mode}`),
+  personalEvents: () => request<{ events: PersonalEvent[] }>('GET', '/api/personal-events'),
+  personalEventAdd: (e: Omit<PersonalEvent, 'id'>) => request<{ event: PersonalEvent; clashes: string[]; action_id?: number }>('POST', '/api/personal-events', e),
+  personalEventRemove: (id: number) => request<{ ok: boolean; action_id?: number }>('DELETE', `/api/personal-events/${id}`),
+  shortlist: () => request<{ items: ShortlistCol[]; max: number }>('GET', '/api/shortlist'),
+  shortlistAdd: (key: string) => request<{ ok: boolean; already?: boolean; count: number }>('POST', '/api/shortlist', { key }),
+  shortlistRemove: (id: number) => request<{ ok: boolean }>('DELETE', `/api/shortlist/${id}`),
+  shortlistNote: (id: number, note: string) => request<{ ok: boolean }>('PATCH', `/api/shortlist/${id}`, { note }),
+  shortlistOrder: (order: number[]) => request<{ ok: boolean }>('PATCH', '/api/shortlist', { order }),
   importPlan: (courseIds: string[]) => request<{ added: number }>('POST', '/api/plan/import', { course_ids: courseIds }),
   programs: () => request<ProgramsInfo>('GET', '/api/programs'),
+  calendarPreview: (course_ids: string[]) => request<{ classes: CalendarEvents['classes'] }>('POST', '/api/calendar/preview', { course_ids }),
   starterWeek: (q: { program: string; year: string; cohort: string; term: string }) =>
     request<{ program: string; term: string; ids: string[]; notes: string[]; example?: boolean; untimed_units?: number;
       done_units?: number; done?: { number: string; title: string; units: number }[] }>('GET',
@@ -383,16 +484,20 @@ export const api = {
 
 /** Stream a chat turn: onStep for each agent/tool step, resolves with the final result. */
 export async function streamChat(message: string, mode: 'dan' | 'news', onStep: (s: TraceStep) => void): Promise<ChatResult> {
-  const res = await fetch('/api/chat/stream', {
-    method: 'POST',
-    credentials: 'same-origin',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message, mode }),
-  })
+  let res: Response
+  try {
+    res = await fetch('/api/chat/stream', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message, mode }),
+    })
+  } catch {
+    throw new ApiError(0, OFFLINE)
+  }
   if (!res.ok || !res.body) {
-    let msg = res.statusText
-    try { msg = (await res.json()).detail ?? msg } catch { /* ignore */ }
-    throw new ApiError(res.status, msg)
+    noteUnauthorized('/api/chat/stream', res.status)
+    throw new ApiError(res.status, await errorMessage(res))
   }
   const reader = res.body.getReader()
   const decoder = new TextDecoder()

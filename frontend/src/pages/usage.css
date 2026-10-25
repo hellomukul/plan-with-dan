@@ -1,0 +1,19 @@
+/* Cost and safety: page-specific layout (shared styles live in pages-b.css). */
+/* The safety log and "The 5 defenses" are the same height: the log fills its card and scrolls inside it. */
+.us-safety-row { align-items: stretch; }
+.us-safety { display: flex; flex-direction: column; }
+.us-safety-body { flex: 1 1 0; min-height: 220px; overflow-y: auto; overscroll-behavior: contain; }
+div.us-safety-body { display: flex; align-items: center; justify-content: center; }
+@media (max-width: 900px) { .us-safety-body { flex: none; max-height: 420px; min-height: 0; } }
+/* Loading skeleton, roughly the loaded page's shape */
+.us-skel { display: block; border-radius: var(--radius); }
+.us-skel-hero { height: 330px; }
+.us-skel-runs { height: 218px; }
+.us-skel-all { height: 502px; }
+.us-skel-safety { height: 541px; }
+/* Phones: every control on this page is at least 44px tall */
+@media (max-width: 640px) {
+  .us-head .btn, .pb-est .tabs button, .pb-est .chip { min-height: 44px; }
+  .pb-est input[type='range'] { min-height: 44px; }
+}
+@media (max-width: 1100px) { .us-skel-safety { height: 702px; } }

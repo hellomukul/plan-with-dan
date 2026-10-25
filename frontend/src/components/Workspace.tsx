@@ -1,12 +1,15 @@
 /* The no-account workspace on the home page, modelled on the original class app:
    a sentence picker ("I'm an MBA first year in Blue") that drives four tabs:
    My plan (build your week) · Dates · Tools · Requirements. Choices are remembered in this browser. */
-import { useEffect, useState } from 'react'
-import { CalendarDays, Download, ExternalLink, Wrench, GraduationCap, Compass, Lock } from 'lucide-react'
+import { useEffect, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { CalendarDays, ExternalLink, Wrench, GraduationCap, Compass, Lock } from 'lucide-react'
 import type { ProgramsInfo } from '../api'
 import WeekBuilder from './WeekBuilder'
-import { prettyDate, relDays, daysUntil } from '../lib/format'
-import { DEFAULT_WHO, type Tryout } from '../lib/tryout'
+import HelpGuide from './HelpGuide'
+import MbaRequirements from './MbaRequirements'
+import DatesTab from './DatesTab'
+import { resetTryout, type Tryout } from '../lib/tryout'
+import { useApp } from '../state'
 
 const SHORT: Record<string, { label: string; article: string }> = {
   MBA: { label: 'MBA', article: 'an' }, 'MBA-JOINT': { label: 'MBA joint-degree', article: 'an' },
@@ -17,7 +20,6 @@ const SHORT: Record<string, { label: string; article: string }> = {
 }
 const COHORTS = ['Gold', 'Silver', 'Blue', 'Green', 'Red']
 const TWO_YEAR = new Set(['MBA', 'MBA-JOINT', 'EMBA'])
-const OWN_CALENDAR = new Set(['EMBA', 'MMS-PEM'])
 type Tab = 'plan' | 'dates' | 'tools' | 'reqs'
 const TABS: { id: Tab; label: string; icon: typeof Compass }[] = [
   { id: 'plan', label: 'My plan', icon: Compass },
@@ -30,6 +32,18 @@ const TABS: { id: Tab; label: string; icon: typeof Compass }[] = [
 export function whoLabel(t: Tryout): string {
   const year = { '1': '1st year', '2': '2nd year', admit: 'admitted' }[t.year] ?? ''
   return [SHORT[t.program]?.label ?? t.program, TWO_YEAR.has(t.program) ? year : '', t.cohort].filter(Boolean).join(' · ')
+}
+
+/** A readable name for an official source link (never "Source 2" or a raw URL). */
+function sourceLabel(url: string): string {
+  const where = url.includes('catalog.yale.edu') ? 'Yale Bulletin' : 'SOM website'
+  const rules: [RegExp, string][] = [
+    [/calendar/, 'Academic calendar'], [/required-course/, 'Required courses'], [/degree-requirements/, 'Degree requirements'],
+    [/joint-degree/, 'Joint degrees'], [/course-policies/, 'Course policies'], [/global-studies/, 'Global studies funding'],
+    [/curriculum/, 'Curriculum'], [/non-som-students/, 'Courses for non-SOM students'], [/\/phd/, 'PhD program'],
+  ]
+  const hit = rules.find(([re]) => re.test(url))
+  return `${hit ? hit[1] : 'Program page'} (${where})`
 }
 
 const LINKS: [string, string, string][] = [
@@ -59,6 +73,11 @@ interface Props {
   onSignup: () => void
 }
 
+function Pane({ id, tab, children }: { id: Tab; tab: Tab; children: ReactNode }) {
+  const on = id === tab
+  return <div id={`ws-pane-${id}`} className={`ws-pane ${on ? 'on' : ''}`} role="tabpanel" aria-labelledby={`ws-tab-${id}`} aria-hidden={!on} inert={!on}>{children}</div>
+}
+
 export default function Workspace({ t, setT, info, onSave, onSignup }: Props) {
   const [tab, setTab] = useState<Tab>(() => (localStorage.getItem('pwd-tab') as Tab) || 'plan')
   useEffect(() => { localStorage.setItem('pwd-tab', tab) }, [tab])
@@ -66,48 +85,62 @@ export default function Workspace({ t, setT, info, onSave, onSignup }: Props) {
   const p = programs.find((x) => x.code === t.program)
   const isMba = t.program === 'MBA' || t.program === 'MBA-JOINT'
   const art = SHORT[t.program]?.article ?? 'a'
-  const today = info ? new Date(info.today + 'T00:00:00') : new Date()
   const count = t.ids.length
-
-  const downloadDates = async () => {
-    const res = await fetch('/api/ics/preview', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ course_ids: [] }) })
-    const url = URL.createObjectURL(await res.blob())
-    Object.assign(document.createElement('a'), { href: url, download: 'som-key-dates.ics' }).click()
-    URL.revokeObjectURL(url)
+  const { toast } = useApp()
+  // Arrow keys (and Home / End) move between the workspace tabs, as in any tab list.
+  const onTabKey = (e: KeyboardEvent<HTMLButtonElement>) => {
+    const i = TABS.findIndex((x) => x.id === tab)
+    const next = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: TABS.length - 1 }[e.key]
+    if (next === undefined) return
+    e.preventDefault()
+    const to = TABS[(next + TABS.length) % TABS.length].id
+    setTab(to)
+    document.getElementById(`ws-tab-${to}`)?.focus()
   }
+  // "reset" starts over: default visitor, empty week (the core refills on its own). Undo puts everything back.
+  const reset = () => {
+    const before = t
+    setT((v) => ({ ...resetTryout(), term: v.term }))
+    if (before.ids.length) toast('Started over: the courses you added are cleared.', undefined, { label: 'Undo', run: () => setT(() => before) })
+  }
+
 
   return (
     <div className="ws">
       <div className="ws-bar">
         <div className="ws-picker" role="group" aria-label="About you">
-          <span>I’m {art}</span>
-          <select className="ws-pill" value={t.program} aria-label="Program"
+          <span className="ws-lead">I’m {art}</span>
+          <select className="ws-pill ws-prog" value={t.program} aria-label="Program"
             onChange={(e) => setT((v) => ({ ...v, program: e.target.value, year: TWO_YEAR.has(e.target.value) ? v.year : '', cohort: '' }))}>
             {Object.entries(SHORT).map(([code, s]) => <option key={code} value={code}>{s.label}</option>)}
           </select>
-          {TWO_YEAR.has(t.program) && (
-            <select className="ws-pill" value={t.year} aria-label="Year" onChange={(e) => setT((v) => ({ ...v, year: e.target.value, cohort: e.target.value === '2' ? '' : v.cohort }))}>
-              <option value="">student (pick year)</option>
-              <option value="1">first year</option>
-              <option value="2">second year</option>
-              {isMba && <option value="admit">admit (starting 2027)</option>}
-            </select>
-          )}
-          {!TWO_YEAR.has(t.program) && <span>student</span>}
-          {isMba && (t.year === '1' || t.year === 'admit') && (
-            <>
-              <span>in</span>
-              <select className="ws-pill" value={t.cohort} aria-label="Cohort" onChange={(e) => setT((v) => ({ ...v, cohort: e.target.value }))}>
-                <option value="">{t.year === 'admit' ? 'any cohort' : 'my cohort'}</option>
-                {COHORTS.map((c) => <option key={c} value={c}>{c}</option>)}
+          {/* year and cohort: inline on wide screens, one fixed second row on phones (so the bar's height never changes) */}
+          <span className="ws-more">
+            {TWO_YEAR.has(t.program) && (
+              <select className="ws-pill" value={t.year} aria-label="Year" onChange={(e) => setT((v) => ({ ...v, year: e.target.value, cohort: e.target.value === '2' ? '' : v.cohort }))}>
+                <option value="">student (pick year)</option>
+                <option value="1">first year</option>
+                <option value="2">second year</option>
+                {isMba && <option value="admit">admit (starting 2027)</option>}
               </select>
-            </>
-          )}
-          <button type="button" className="link-btn small" onClick={() => setT((v) => ({ ...v, ...DEFAULT_WHO, ids: v.ids.filter((id) => !v.auto.includes(id)), auto: [] }))}>reset</button>
+            )}
+            {!TWO_YEAR.has(t.program) && <span>student</span>}
+            {isMba && (t.year === '1' || t.year === 'admit') && (
+              <>
+                <span>in</span>
+                <select className="ws-pill" value={t.cohort} aria-label="Cohort" onChange={(e) => setT((v) => ({ ...v, cohort: e.target.value }))}>
+                  <option value="">{t.year === 'admit' ? 'any cohort' : 'my cohort'}</option>
+                  {COHORTS.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </>
+            )}
+          </span>
+          <button type="button" className="link-btn small ws-reset" onClick={reset}>reset</button>
         </div>
         <div className="ws-tabs" role="tablist" aria-label="Workspace">
           {TABS.map((x) => (
-            <button key={x.id} type="button" role="tab" aria-selected={tab === x.id} className={tab === x.id ? 'on' : ''} onClick={() => setTab(x.id)}>
+            <button key={x.id} id={`ws-tab-${x.id}`} type="button" role="tab" aria-selected={tab === x.id} aria-controls={`ws-pane-${x.id}`}
+              tabIndex={tab === x.id ? 0 : -1} className={tab === x.id ? 'on' : ''} onClick={() => setTab(x.id)} onKeyDown={onTabKey}>
               <x.icon className="icon sm" />{x.label}
               {x.id === 'plan' && count > 0 && <span className="ws-badge">{count}</span>}
             </button>
@@ -115,66 +148,49 @@ export default function Workspace({ t, setT, info, onSave, onSignup }: Props) {
         </div>
       </div>
 
-      <div className="ws-panel" role="tabpanel">
-        {tab === 'plan' && (
+      {/* All four tabs stay mounted in one grid cell and only the active one shows (desktop), so the workspace
+          is always as tall as its tallest tab and switching tabs never moves the rest of the page. */}
+      <div className="ws-panel">
+        <Pane id="plan" tab={tab}>
           <WeekBuilder t={t} setT={setT} programs={programs} dataAsOf={info?.data_as_of} onSave={onSave} showWho={false} wide={typeof window === 'undefined' || window.innerWidth > 900} />
-        )}
+        </Pane>
 
-        {tab === 'dates' && (
-          <div className="card ws-card">
-            {p && OWN_CALENDAR.has(p.code) ? (
-              <p className="muted" style={{ margin: 0 }}>The {p.label} runs on its own calendar ({p.calendar.replace(/^Own calendar:?\s*/i, '')}), which Plan with Dan doesn’t model yet.{' '}
-                <a href={p.sources[p.sources.length - 1]} target="_blank" rel="noreferrer">Open the official calendar<ExternalLink className="icon sm" /></a></p>
-            ) : (
-              <>
-                <div className="row between" style={{ flexWrap: 'wrap', gap: 8 }}>
-                  <div className="section-label" style={{ margin: 0 }}><span>Coming up · MBA, MAM and MMS calendar</span></div>
-                  <button type="button" className="btn sm" onClick={downloadDates}><Download className="icon sm" />Add these to my calendar</button>
-                </div>
-                <ul className="ws-dates">
-                  {(info?.dates ?? info?.upcoming ?? []).map((d) => (
-                    <li key={d.date + d.title} className={`k-${d.kind}`}>
-                      <span className="mono">{prettyDate(d.date)}{d.end !== d.date ? ` – ${prettyDate(d.end)}` : ''}</span>
-                      <span>{d.title}</span>
-                      <span className="faint small">{relDays(daysUntil(d.date, today))}</span>
-                    </li>
-                  ))}
-                </ul>
-                <p className="faint small" style={{ marginBottom: 0 }}>From the 2026–27 SOM academic calendar. Auction dates are announced on the SOM portal.</p>
-              </>
-            )}
-          </div>
-        )}
+        <Pane id="dates" tab={tab}>
+          <DatesTab t={t} info={info} />
+        </Pane>
 
-        {tab === 'tools' && (
+        <Pane id="tools" tab={tab}>
+          <HelpGuide />
           <div className="ws-tools">
             <div className="card ws-card">
               <div className="section-label"><span>Links you need</span></div>
               <ul className="ws-links">
                 {LINKS.map(([name, sub, url]) => (
-                  <li key={url}><a href={url} target="_blank" rel="noreferrer"><b>{name}</b><ExternalLink className="icon sm" /></a><span className="faint small">{sub}</span></li>
+                  <li key={url}><a href={url} target="_blank" rel="noreferrer"><span className="ws-link-name"><b>{name}</b><ExternalLink className="icon sm" /></span><span className="faint small">{sub}</span></a></li>
                 ))}
               </ul>
             </div>
-            <div className="stack" style={{ gap: 16 }}>
-              <div className="card ws-card">
+            <div className="card ws-card">
+              <div className="section-label"><span>SOM words, in plain English</span></div>
+              <dl className="ws-gloss">{GLOSSARY.map(([w, d]) => <div key={w}><dt>{w}</dt><dd>{d}</dd></div>)}</dl>
+            </div>
+            {/* full width last row: it absorbs the space left by the taller Plan tab, so no column ends early */}
+            <div className="card ws-card ws-tools-wide">
+              <div className="ws-tools-head">
                 <div className="section-label"><span>Dan’s tools · free account</span></div>
-                <ul className="ws-links">
-                  {[['Bid coach', 'Spread your auction points by priority and seat demand'], ['Global Studies planner', 'IE, GNW or SNOC against your funded days (MBA)'], ['Calendar sync', 'One private link for Google, Outlook or Apple'], ['Weekly deadline cards', 'The 3 things due this week, with real dates']].map(([n, s]) => (
-                    <li key={n}><button type="button" className="link-btn" onClick={onSignup}><Lock className="icon sm" /><b>{n}</b></button><span className="faint small">{s}</span></li>
-                  ))}
-                </ul>
+                <button type="button" className="btn primary sm ws-tools-cta" onClick={onSignup}>Create a free account</button>
               </div>
-              <div className="card ws-card">
-                <div className="section-label"><span>SOM words, in plain English</span></div>
-                <dl className="ws-gloss">{GLOSSARY.map(([w, d]) => <div key={w}><dt>{w}</dt><dd>{d}</dd></div>)}</dl>
-              </div>
+              <ul className="ws-links two">
+                {[['Bid coach', 'Spread your auction points by priority and seat demand'], ['Global Studies planner', 'IE, GNW or SNOC against your funded days (MBA)'], ['Calendar sync', 'One private link for Google, Outlook or Apple'], ['Weekly deadline cards', 'The 3 things due this week, with real dates']].map(([n, s]) => (
+                  <li key={n}><button type="button" className="link-btn" onClick={onSignup}><span className="ws-link-name"><Lock className="icon sm" /><b>{n}</b></span><span className="faint small">{s}</span></button></li>
+                ))}
+              </ul>
             </div>
           </div>
-        )}
+        </Pane>
 
-        {tab === 'reqs' && (
-          !p ? <div className="card ws-card faint small">Loading program rules…</div> : (
+        <Pane id="reqs" tab={tab}>
+          {!p ? <div className="card ws-card faint small">Loading program rules…</div> : (
             <div className="card ws-card stack" style={{ gap: 12 }}>
               <h3 style={{ margin: 0 }}>{p.label}</h3>
               <div className="lp-stats">
@@ -192,11 +208,12 @@ export default function Workspace({ t, setT, info, onSave, onSignup }: Props) {
               <dl className="lp-kv small"><dt>Global</dt><dd>{p.global}</dd><dt>Calendar</dt><dd>{p.calendar}</dd></dl>
               {p.unconfirmed.length > 0 && <p className="small" style={{ margin: 0, color: 'var(--amber)' }}>Not in official sources yet: {p.unconfirmed.join('; ')}.</p>}
               <div className="row small" style={{ gap: 12, flexWrap: 'wrap' }}>
-                {p.sources.slice(0, 3).map((u, i) => <a key={u} href={u} target="_blank" rel="noreferrer">{i === 0 ? 'Official requirements (Yale Bulletin)' : `Source ${i + 1}`}<ExternalLink className="icon sm" /></a>)}
+                {p.sources.slice(0, 3).map((u) => <a key={u} href={u} target="_blank" rel="noreferrer">{sourceLabel(u)}<ExternalLink className="icon sm" /></a>)}
               </div>
             </div>
-          )
-        )}
+          )}
+          {p && isMba && info?.mba && <MbaRequirements rules={info.mba} program={t.program} />}
+        </Pane>
       </div>
     </div>
   )

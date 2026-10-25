@@ -58,7 +58,7 @@ PROGRAMS: dict[str, dict] = {
                    "approval). Five funded travel days for a Global Network Week or a Global Social Entrepreneurship course.",
         "required": [{"number": "MGT 633", "title": "Topics in Advanced Management for Business and Society", "term": "202603", "units": 2},
                      {"number": "MGT 636", "title": "Managing Groups and Teams (MAM)", "term": "202603", "units": 2}],
-        "global": "No Global Network Week requirement is stated; 5 subsidised travel days for a GNW or GSE course.",
+        "global": "No Global Network Week requirement is stated; 5 subsidized travel days for a GNW or GSE course.",
         "calendar": "MBA calendar (orientation Aug 17-28).",
         "sources": [f"{B26}/mam/", f"{B26}/courses/fall-term-mam-required-courses/", GS_FUNDING, POLICIES],
         "unconfirmed": ["Whether a Global Network Week is required"],
@@ -85,10 +85,10 @@ PROGRAMS: dict[str, dict] = {
         "min_note": "each term", "max_units": 24, "terms": 2,
         "summary": "36 units in two terms: the required global-perspectives course (MGT 627), at least 16 units from the "
                    "GBS course list, and electives, including some elsewhere at Yale. At least 18 units each term. "
-                   "Global Network Week travel is subsidised.",
+                   "Global Network Week travel is subsidized.",
         "required": [{"number": "MGT 627", "title": "Business and Government after Communism", "term": "202603", "units": 2}],
         "list_tag": "GBS", "list_units": 16, "list_label": "GBS course list",
-        "global": "No requirement stated; GNW travel is subsidised for GBS students.",
+        "global": "No requirement stated; GNW travel is subsidized for GBS students.",
         "calendar": "MBA calendar (orientation Aug 17-28).",
         "sources": [f"{B26}/mms/mms-global-business-society/",
                     f"{B26}/courses/fall-term-mms-global-business-society-required-course/", GS_FUNDING],

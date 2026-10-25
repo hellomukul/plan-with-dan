@@ -21,3 +21,15 @@ services:
       - key: DATABASE_URL
         sync: false        # REQUIRED for real users: a Neon Postgres URL. Render's disk is wiped on every deploy/restart,
                            # so without this every account and plan is lost. The app logs a warning if it's missing.
+      # "Continue with Google / Microsoft" (step-by-step: docs/oauth_setup.md). Leave a pair empty and that
+      # button is simply hidden; email + password keeps working.
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false        # secret: paste in the dashboard only
+      - key: MICROSOFT_CLIENT_ID
+        sync: false
+      - key: MICROSOFT_CLIENT_SECRET
+        sync: false        # secret: paste in the dashboard only
+      - key: PUBLIC_BASE_URL
+        sync: false        # e.g. https://plan-with-dan.onrender.com (no trailing slash); pins the OAuth redirect URIs

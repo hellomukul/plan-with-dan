@@ -1,0 +1,26 @@
+/* Calendar page: the "Sync to your calendar app" card. Four equal one-click buttons (Apple, Google, Outlook for
+   Yale / Microsoft 365, Outlook.com), 2x2 on phones. */
+.cal-sync.is-new { border-color: var(--pink-line); }
+.cal-sync-hello { display: flex; gap: 8px; align-items: flex-start; margin: 0 0 14px; padding: 10px 12px; border-radius: var(--radius-sm);
+  background: var(--pink-soft); color: var(--muted); font-size: 13.5px; line-height: 1.45; }
+.cal-sync-hello b { color: var(--text); font-weight: 600; }
+.cal-sync-hello .icon { flex: none; margin-top: 2px; color: var(--pink); }
+.cal-sync-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.cal-sync-btn { display: flex; align-items: center; gap: 10px; min-height: 56px; min-width: 0; padding: 8px 12px; border: 1px solid var(--line-2);
+  border-radius: 10px; background: var(--card-2); color: var(--text); text-decoration: none; transition: border-color 0.12s var(--ease), background 0.12s var(--ease); }
+.cal-sync-btn:hover { border-color: var(--pink-line); background: #202024; text-decoration: none; }
+.cal-sync-btn:focus-visible { outline: 2px solid var(--pink); outline-offset: 2px; }
+.cal-sync-btn .icon { flex: none; color: var(--pink); }
+.cal-sync-btn > span { display: grid; min-width: 0; line-height: 1.3; }
+.cal-sync-btn b { font-weight: 600; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cal-sync-btn small { font-size: 11.5px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cal-sync-more { gap: 10px; }
+@media (max-width: 1100px) { .cal-sync-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 640px) {
+  /* 2x2 at phone width: no icon, the second line may wrap, and every row is as tall as the tallest */
+  .cal-sync-grid { gap: 8px; grid-auto-rows: 1fr; }
+  .cal-sync-btn { padding: 8px 12px; }
+  .cal-sync-btn .icon { display: none; }
+  .cal-sync-btn b, .cal-sync-btn small { white-space: normal; }
+  .cal-sync-more .btn { min-height: 44px; }
+}

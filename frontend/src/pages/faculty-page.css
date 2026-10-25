@@ -1,0 +1,97 @@
+/* Faculty page: a daily spotlight band and a fixed-height directory (list + card), so the page never moves while
+   you search, filter or pick someone. Reuses the explorer's avatar, pill, search and card styles. */
+.fp .page-head { margin-bottom: 16px; }
+
+/* Today's spotlight */
+.fp-spot { display: grid; gap: 14px; margin-bottom: 16px; }
+.fp-spot-head { display: flex; align-items: center; gap: 12px; min-height: 48px; }
+.fp-spot-head svg { flex: none; }
+.fp-spot-head h2 { margin: 0 0 2px; font-size: 16px; }
+.fp-spot-head p { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fp-spot-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.fp-spot-card { width: 100%; height: 132px; box-sizing: border-box; display: grid; grid-template-rows: 56px auto auto; justify-items: center; align-content: center; gap: 6px;
+  padding: 12px 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg-2); color: var(--text); font: inherit; text-align: center; cursor: pointer;
+  transition: border-color 0.15s var(--ease), transform 0.15s var(--ease); }
+.fp-spot-card:hover { border-color: var(--pink-line); transform: translateY(-2px); }
+.fp-spot-card.on { border-color: var(--pink-line); background: var(--pink-soft); }
+.fp-spot-card.skel { display: block; cursor: default; }
+.fp-spot-card:hover .cx-ava { transform: rotate(-6deg); }
+.fp-spot-card .cx-ava { transition: transform 0.2s var(--ease); }
+.fp-spot-name, .fp-spot-sub { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fp-spot-name { font-weight: 500; font-size: 14px; }
+
+/* Directory: list on the left, the person on the right */
+.fp-dir { padding: 0; overflow: hidden; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); height: 680px; }
+.fp-dir-list { container-type: inline-size; display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--line); }
+.fp-controls { display: grid; gap: 10px; padding: 14px; border-bottom: 1px solid var(--line); flex: none; }
+.fp-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.fp-dir-list .cx-count { flex: none; }
+.fp-az { flex: none; display: flex; gap: 2px; height: 32px; box-sizing: border-box; padding: 3px 10px; border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; }
+.fp-az::-webkit-scrollbar { display: none; }
+.fp-az button { flex: none; min-width: 22px; height: 24px; padding: 0 4px; border: 0; border-radius: 6px; background: none; color: var(--muted); font: inherit; font-size: 12px; font-weight: 500; cursor: pointer; }
+.fp-az button:hover { background: var(--card-2); color: var(--text); }
+.fp-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 6px 8px 10px; }
+.fp-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
+@container (min-width: 460px) { .fp-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.fp-letter { display: block; padding: 8px 4px 2px; font-size: 11.5px; font-weight: 600; color: var(--faint); letter-spacing: 0.04em; }
+.fp-grid > li.fp-first { display: contents; }  /* the letter sits on its own row; tiles stay aligned */
+.fp-grid > li.fp-first > .fp-letter { grid-column: 1 / -1; }
+.fp-tile { width: 100%; height: 78px; box-sizing: border-box; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px;
+  padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.fp-tile:hover { border-color: var(--pink-line); background: var(--bg-2); }
+.fp-tile .cx-ava { transition: transform 0.2s var(--ease); }
+.fp-tile:hover .cx-ava { transform: rotate(-6deg) scale(1.05); }
+.fp-tile.on { border-color: var(--pink-line); background: var(--pink-soft); }
+.fp-tile-text { display: grid; gap: 2px; min-width: 0; }
+.fp-tile-name, .fp-tile-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fp-tile-name { font-weight: 500; font-size: 14px; line-height: 1.3; }
+.fp-tile-tags { display: flex; gap: 4px; height: 18px; overflow: hidden; flex-wrap: nowrap; min-width: 0; }
+/* one theme (ellipsis if long) plus "+N" for the rest, so nothing is silently clipped */
+.fp-tag { display: block; min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; line-height: 16px; }
+.fp-tag-more { flex: none; }
+.fp-dir-detail { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.fp-welcome { min-height: 100%; box-sizing: border-box; display: grid; align-content: center; justify-items: center; gap: 8px; padding: 28px; text-align: center; max-width: 420px; margin: 0 auto; }
+.fp-welcome h3 { margin: 6px 0 0; font-size: 16px; }
+.fp-welcome p { margin: 0; }
+
+@media (max-width: 1100px) {
+  /* two columns: avatar beside the name, so the cards stay short and nothing clips */
+  .fp-spot-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fp-spot-card { height: 80px; grid-template-columns: 56px minmax(0, 1fr); grid-template-rows: auto auto; justify-items: start; align-content: center;
+    column-gap: 12px; row-gap: 2px; text-align: left; padding: 10px 12px; }
+  .fp-spot-card .cx-ava { grid-row: 1 / 3; }
+  .fp-spot-name { align-self: end; }
+  .fp-spot-sub { align-self: start; }
+}
+@media (max-width: 900px) {
+  /* phones: one fixed-height pane; the list until you pick someone, then their card with "Back to all faculty" */
+  .fp-dir { display: block; height: 680px; }
+  .fp-dir-list { height: 100%; border-right: 0; }
+  .fp-dir-detail { height: 100%; }
+  .fp-dir.has-detail .fp-dir-list { display: none; }
+  .fp-dir:not(.has-detail) .fp-dir-detail { display: none; }
+  .fp-az { display: none; }
+  /* phones: 44px targets */
+  .fp .cx-search .btn.icon { width: 44px; height: 44px; margin-right: -8px; }
+  .fp .cx-search { padding-top: 0; padding-bottom: 0; }
+  .fp .cx-search input { align-self: stretch; height: 100%; }
+  .fp .cx-seg button { min-height: 44px; }
+  .fp-filters > .chip { min-height: 44px; }
+  .fp .cx-topic { min-height: 46px; }
+  .fp .cx-topic select { min-height: 44px; }
+  .fp .cx-count { height: 46px; }
+  .fp .cx-count .link-btn { min-height: 44px; }
+  .fp .cx-fac-team .chip, .fp .cx-fac-link { min-height: 44px; }
+  .fp-spot-head p { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; height: 2lh; }
+}
+@media (max-width: 560px) {
+  .fp-spot-grid { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .fp-spot-card { height: 72px; grid-template-columns: 44px minmax(0, 1fr); }
+  .fp-spot-card .cx-ava.lg { width: 44px; height: 44px; font-size: 15px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fp-spot-card, .fp-spot-card .cx-ava { transition: none; }
+  .fp-spot-card:hover { transform: none; }
+  .fp-spot-card:hover .cx-ava, .fp-tile:hover .cx-ava { transform: none; }
+  .fp-tile .cx-ava { transition: none; }
+}

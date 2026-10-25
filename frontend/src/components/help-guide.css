@@ -1,0 +1,131 @@
+/* "Get help" guide. Everything is scoped under .hg and uses only the existing Quiet Yale variables:
+   flat 1px borders, one blue accent (the --pink* variables are blue), no gradients, glows or new colours. */
+/* margins instead of gap, so the collapsed directory (0px tall) adds no second 16px gap */
+.hg { display: flex; flex-direction: column; }
+.hg > * + * { margin-top: 16px; }
+.hg > .overlay { margin-top: 0; }  /* the booking overlay renders in here but is fixed to the viewport */
+.hg-card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 24px; position: relative; }
+
+/* bento: doors and recommendation side by side, equal widths (a wider card keeps the recommendation short) */
+.hg-top { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: stretch; }
+.hg-picker { display: flex; flex-direction: column; }
+.hg-picker-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 18px; }
+.hg-picker h2 { margin: 0; font-size: 27px; font-weight: 600; letter-spacing: -0.03em; line-height: 1.15; color: var(--text); }
+.hg-sub { margin: 6px 0 0; color: var(--muted); font-size: 14px; display: grid; }
+.hg-sub > span { grid-area: 1 / 1; visibility: hidden; }
+.hg-sub > span.on { visibility: visible; }
+.hg-mascot { flex: none; opacity: 0.9; pointer-events: none; }
+.hg-mascot.off { visibility: hidden; }  /* space kept, so the heading never re-wraps */
+/* Doors: one column that fills the rest of the picker, so the last door lines up with the button in the
+   recommendation card. Every door is the same height (1fr rows) and at least 64px tall. */
+.hg-pills { display: grid; grid-template-columns: minmax(0, 1fr); grid-auto-rows: minmax(64px, 1fr); gap: 8px; flex: 1 1 auto; position: relative; z-index: 1; }
+.hg-pill { min-height: 44px; display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-radius: 14px; border: 1px solid var(--line-2);
+  background: transparent; color: var(--muted); font: inherit; font-size: 14.5px; line-height: 1.35; text-align: left; cursor: pointer;
+  transition: border-color 0.12s var(--ease), color 0.12s var(--ease), background 0.12s var(--ease), transform 0.12s var(--ease); }
+.hg-pill:hover { color: var(--text); border-color: var(--pink-line); }
+.hg-pill:active { transform: scale(0.99); }
+.hg-pill.on { background: var(--pink-soft); border-color: var(--pink-line); color: var(--text); }
+.hg-pill.on .icon { color: var(--pink); }
+.hg-door-icon { flex: none; width: 36px; height: 36px; display: grid; place-items: center; border-radius: 10px; border: 1px solid var(--line); background: var(--card-2); color: var(--muted); }
+.hg-door-text { display: grid; gap: 2px; min-width: 0; flex: 1; }
+.hg-door-text b { font-weight: 600; font-size: 15px; color: var(--text); }
+.hg-door-hint { font-size: 13px; color: var(--muted); }
+.hg-check { visibility: hidden; margin-left: auto; flex: none; }  /* space always reserved, so picking a door never re-wraps it */
+.hg-pill.on .hg-check { visibility: visible; }
+.hg-pill:focus-visible, .hg-tile-btn:focus-visible, .hg a:focus-visible { outline: 2px solid var(--pink); outline-offset: 2px; }
+
+/* recommendation: all doors share one subgrid (body with its links / button) */
+.hg-rec { display: flex; }
+.hg-rec-stack { display: grid; grid-template-rows: 1fr auto; row-gap: 16px; width: 100%; }
+.hg-rec-inner { grid-column: 1; grid-row: 1 / -1; display: grid; grid-template-rows: subgrid; min-width: 0; visibility: hidden; }
+.hg-rec-inner.on { visibility: visible; animation: hg-in 180ms var(--ease) both; }
+@keyframes hg-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.hg-rec-body { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.hg-rec h3 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
+.hg-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.hg-tag { font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; color: var(--muted); border: 1px solid var(--line-2); border-radius: 6px; padding: 2px 7px; }
+.hg-text { margin: 0; color: var(--text); font-size: 14.5px; line-height: 1.55; }
+.hg-go { width: 100%; justify-content: center; min-height: 44px; border-radius: 10px; text-decoration: none; }
+/* what else is behind the door: one bordered list of 44px+ rows, each with its note */
+.hg-secondary { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: 10px; }
+.hg-secondary li + li { border-top: 1px solid var(--line); }
+.hg-secondary a { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 44px; padding: 8px 12px; color: var(--text); text-decoration: none; }
+.hg-secondary a .icon { flex: none; color: var(--muted); }
+.hg-secondary a:hover { background: var(--card-2); }
+.hg-secondary li:first-child a { border-radius: 9px 9px 0 0; }
+.hg-secondary li:last-child a { border-radius: 0 0 9px 9px; }
+.hg-secondary li:only-child a { border-radius: 9px; }
+
+/* urgent line: calm and plain */
+.hg-urgent { display: flex; gap: 8px; align-items: flex-start; margin: 0; font-size: 14px; line-height: 1.5; color: var(--text); }
+.hg-urgent .icon { flex: none; margin-top: 3px; color: var(--green); }
+.hg-urgent a, .hg-tile-sub a { color: var(--text); font-weight: 600; text-decoration: underline; text-underline-offset: 2px; white-space: nowrap; }
+.hg-urgent.compact { font-size: 13.5px; }
+.hg-rec .hg-urgent { padding: 10px 12px; border: 1px solid var(--line-2); border-radius: 10px; }
+
+/* tiles: label / main line / note on the same rows in all three */
+.hg-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.hg-tile { display: grid; gap: 8px; align-content: start; text-align: left; transition: border-color 0.12s var(--ease), transform 0.12s var(--ease); }
+.hg-tile-btn { font: inherit; color: var(--text); cursor: pointer; }
+.hg-tile-btn:hover { border-color: var(--line-2); transform: translateY(-1px); }
+.hg-tile-label { font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; color: var(--muted); line-height: 1.5; }
+.hg-tile-main { display: inline-flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 600; line-height: 1.5; }
+.hg-tile-main .icon { color: var(--pink); transition: transform 0.2s var(--ease); }
+.hg-tel { justify-self: start; color: var(--text); text-decoration: none; white-space: nowrap; padding: 10px 0; margin: -10px 0; }  /* 44px tap target, 24px of layout */
+.hg-tel .icon { color: var(--green); }
+.hg-tel:hover { text-decoration: underline; text-underline-offset: 3px; }
+.hg-rot { transform: rotate(180deg); }
+.hg-tile-sub { color: var(--muted); font-size: 13.5px; line-height: 1.5; }
+
+/* directory: expands in place. Its 16px top gap is the card's margin, inside the collapsing area, so a
+   closed directory adds no extra gap between the tiles and the privacy line. */
+.hg > .hg-dir { margin-top: 0; }
+.hg-dir { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.25s var(--ease); }
+.hg-dir.open { grid-template-rows: 1fr; }
+.hg-dir-inner { overflow: hidden; min-height: 0; }
+.hg-dir-card { margin-top: 16px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; align-items: start; }
+.hg-dir-col { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
+.hg-group { display: grid; gap: 8px; align-content: start; }
+.hg-group-head { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 14.5px; }
+.hg-gicon { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; }
+.g-career { background: var(--pink-soft); color: var(--pink); }
+.g-academic { background: var(--blue-soft); color: var(--blue); }
+.g-wellbeing { background: var(--green-soft); color: var(--green); }
+.g-more { background: var(--amber-soft); color: var(--amber); }
+.hg-group ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.hg-group li a { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; border-radius: 8px; color: var(--text); text-decoration: none; min-height: 44px; }
+.hg-group li a:hover { background: var(--card-2); }
+.hg-row-text { display: grid; gap: 1px; min-width: 0; }
+.hg-row-text b { font-weight: 500; font-size: 14px; }
+.hg-row-note { color: var(--muted); font-size: 12.5px; line-height: 1.45; }  /* wraps rather than cut off: the notes carry facts (hours, logins) */
+.hg-row-pill { flex: none; min-width: 64px; text-align: center; font-size: 11.5px; border-radius: 999px; padding: 2px 9px; border: 1px solid var(--line-2); color: var(--muted); }
+.hg-row-pill.book { border-color: var(--pink-line); color: var(--text); background: var(--pink-soft); }
+.hg-group .hg-urgent { padding: 10px 12px; border: 1px solid var(--line-2); border-radius: 10px; margin-top: 4px; }
+
+.hg-privacy { margin-bottom: 0; color: var(--muted); font-size: 13px; }
+.hg > .hg-checked { margin-top: 8px; }
+.hg-checked { margin-bottom: 0; color: var(--faint); font-size: 12px; font-family: var(--mono); }
+
+/* booking form: every control 44px tall, one 12px rhythm */
+.hg-form { display: grid; gap: 12px; }
+.hg-form-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: -7px -7px -7px 0; }  /* the 44px close button keeps the row at 30px */
+.hg-form-head .btn.icon { width: 44px; height: 44px; }
+.hg-form input { height: 44px; }
+.hg-form .btn.primary { min-height: 44px; }
+.hg-form-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.hg-form .hg-warn { display: flex; gap: 8px; align-items: flex-start; padding: 10px 12px; border-radius: 10px; background: var(--amber-soft); border: 1px solid var(--line-2); font-size: 13.5px; }
+.hg-form .hg-warn .icon { color: var(--amber); flex: none; margin-top: 2px; }
+
+@media (max-width: 900px) {
+  .hg-top, .hg-tiles { grid-template-columns: minmax(0, 1fr); }
+  .hg-card { padding: 20px; }
+  .hg-picker h2 { font-size: 24px; }
+  .hg-dir-card { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+  .hg-dir-col { display: contents; }
+}
+@media (max-width: 520px) {
+  .hg-card { padding: 16px; }
+  .hg-pill { padding: 10px 12px; gap: 10px; }
+  .hg-form-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .hg-form-row > :first-child { grid-column: 1 / -1; }  /* date on its own row, start and end side by side */
+}

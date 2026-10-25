@@ -1,12 +1,14 @@
 /* Bid coach: split auction points, browse crowdsourced bid history, report your own result.
    Honesty rule: SOM doesn't publish clearing prices. Rows marked sample_only are illustrative SAMPLE data. */
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import { AlertTriangle, Check, Inbox, Info, Search, Send, ShoppingBag, X } from 'lucide-react'
-import { api, type BidCourse, type BidSplit } from '../api'
+import { AlertTriangle, CalendarClock, Check, Inbox, Info, Search, Send, ShoppingBag, X } from 'lucide-react'
+import { api, auctionApplies, type AuctionInfo, type BidCourse, type BidSplit } from '../api'
 import { Bar, Empty, SampleBanner, Spinner } from '../components/ui'
-import { TERM_NAMES } from '../lib/format'
+import { daysUntil, relDays, TERM_NAMES } from '../lib/format'
+import HandsomeDan from '../mascots/HandsomeDan'
 import { useApp } from '../state'
 import './pages-b.css'
+import './bids.css'
 
 type Mine = Awaited<ReturnType<typeof api.bids>>['mine'][number]
 
@@ -26,29 +28,85 @@ const SampleTag = () => <span className="badge amber" title="Illustrative sample
 
 export default function Bids() {
   return (
-    <>
+    <div className="bd-page">
       <div className="page-head">
         <div>
           <h1>Bid coach</h1>
           <p>SOM doesn't publish past clearing prices, so we split your points with a clear rule of thumb and pool real results from classmates.</p>
         </div>
       </div>
+      <AuctionSection />
       <SplitSection />
       <HistoryAndReport />
-    </>
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ this year's auction (registrar email) */
+const monthDay = (iso: string) => { const [y, m, d] = iso.split('-').map(Number); return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) }
+
+/** The registrar's 2026-27 auction email went to first-year MBAs (Class of 2028) only, so only they see it.
+    Everything here comes from GET /api/programs (backend/rules.py AUCTION); exact round dates are never guessed. */
+function AuctionSection() {
+  const { profile } = useApp()
+  const [auction, setAuction] = useState<AuctionInfo | null>(null)
+  const show = auctionApplies(profile?.program, profile?.year)
+  useEffect(() => { if (show) api.programs().then((p) => setAuction(p.auction ?? null)).catch(() => undefined) }, [show])
+  if (!show || !auction) return null
+
+  const toOpen = daysUntil(auction.opens), toClose = daysUntil(auction.closes)
+  const status = toOpen > 0 ? `Opens ${relDays(toOpen)}` : toClose >= 0 ? `Open now, closes ${relDays(toClose)}` : 'Closed'
+  const sessions = auction.sessions.filter((x) => daysUntil(x.date) >= 0)
+  return (
+    <section className="card pad-lg bd-auction" aria-labelledby="auction-h">
+      <div className="bd-auction-head">
+        <div>
+          <h2 id="auction-h" className="pb-h2"><CalendarClock className="icon" aria-hidden="true" />The 2026–27 course auction</h2>
+          <p className="bd-window">
+            <span>{monthDay(auction.opens)}, {auction.opens_time}</span>
+            <span aria-hidden="true">→</span>
+            <span>{monthDay(auction.closes)}, {auction.closes_time}</span>
+          </p>
+        </div>
+        <span className={`badge ${toOpen > 0 ? 'pink' : toClose >= 0 ? 'green' : 'gray'} bd-status`}>{status}</span>
+      </div>
+
+      <div className="bd-auction-grid">
+        <div>
+          <h3>Rounds</h3>
+          <ul className="pb-list small">{auction.rounds.map((r) => <li key={r}>{r}</li>)}</ul>
+        </div>
+        <div>
+          <h3>After the auction</h3>
+          <ul className="pb-list small"><li>{auction.add_drop}</li><li>{auction.exchange}</li></ul>
+        </div>
+        <div>
+          <h3>Good to know</h3>
+          <ul className="pb-list small">{auction.policies.map((r) => <li key={r}>{r}</li>)}</ul>
+        </div>
+      </div>
+
+      {sessions.length > 0 && (
+        <ul className="bd-sessions" aria-label="Questions? Sessions from the registrar">
+          {sessions.map((x) => (
+            <li key={x.date + x.title}><span className="bd-session-date">{monthDay(x.date)}</span><span><b>{x.title}</b> <span className="muted">· {x.time} · {x.where}</span></span></li>
+          ))}
+        </ul>
+      )}
+      <p className="small faint" style={{ margin: '12px 0 0' }}>Source: {auction.source}. Shown to first-year MBAs, who got this email.</p>
+    </section>
   )
 }
 
 /* ------------------------------------------------------------------ A. split my points */
 function SplitSection() {
-  const { plan, profile, go, toast, celebrate } = useApp()
-  const celebrated = useRef(false)
+  const { plan, profile, go, toast } = useApp()
   const [budget, setBudget] = useState('500')
   const budgetTouched = useRef(false)
   // 2015 YDN figures: 300 points for first-years, 500 for second-years. A starting point, not a rule.
   useEffect(() => { if (!budgetTouched.current && profile?.year === '1') setBudget('300') }, [profile?.year])
   const [prio, setPrio] = useState<Record<string, number>>({})
-  const [result, setResult] = useState<{ split: BidSplit[]; note: string; warnings?: string[] } | null>(null)
+  const [result, setResult] = useState<{ split: BidSplit[]; note: string; warnings?: string[]; budget: number } | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
@@ -66,7 +124,16 @@ function SplitSection() {
   }, [plan])
 
   const budgetNum = Number(budget)
-  const budgetOk = Number.isInteger(budgetNum) && budgetNum >= 1 && budgetNum <= 100000
+  const budgetOk = budget.trim() !== '' && Number.isInteger(budgetNum) && budgetNum >= 1 && budgetNum <= 100000
+  // A split made for another budget is stale: dim it and say so (an invalid budget clears it outright).
+  const stale = Boolean(result && budgetOk && result.budget !== budgetNum)
+  const onBudget = (v: string) => {
+    budgetTouched.current = true
+    setBudget(v)
+    const n = Number(v)
+    const ok = v.trim() !== '' && Number.isInteger(n) && n >= 1 && n <= 100000
+    if (!ok) { setResult(null); setError('Enter a whole number of points between 1 and 100,000.') } else setError('')
+  }
 
   const run = async (e: FormEvent) => {
     e.preventDefault()
@@ -75,12 +142,7 @@ function SplitSection() {
     setBusy(true)
     try {
       const priorities = Object.fromEntries(courses.map((c) => [c.key, prio[c.key] ?? 2]))
-      setResult(await api.suggestBids(budgetNum, priorities))
-      // The one designed delight moment: Dan cheers the first finished bid plan of this visit.
-      if (!celebrated.current) {
-        celebrated.current = true
-        celebrate('Bid plan ready. Go get those seats.')
-      }
+      setResult({ ...(await api.suggestBids(budgetNum, priorities)), budget: budgetNum })
     } catch (err) {
       setError((err as Error).message)
       toast('Could not split your points.', 'bad')
@@ -101,7 +163,7 @@ function SplitSection() {
       ) : courses.length === 0 ? (
         <Empty icon={<ShoppingBag className="icon lg" style={{ color: 'var(--faint)' }} />} title="No bid courses in your plan yet">
           <p className="small" style={{ margin: 0 }}>Add a few auction electives first, then come back to split your points.</p>
-          <button className="btn primary" onClick={() => go('explore')}>Browse the catalog</button>
+          <button className="btn primary" onClick={() => go('explore')}>Open the course explorer</button>
         </Empty>
       ) : (
         <form onSubmit={run} className="stack mt">
@@ -115,7 +177,7 @@ function SplitSection() {
                 step={1}
                 inputMode="numeric"
                 value={budget}
-                onChange={(e) => { budgetTouched.current = true; setBudget(e.target.value) }}
+                onChange={(e) => onBudget(e.target.value)}
                 aria-invalid={!budgetOk}
                 aria-describedby="budget-help"
               />
@@ -156,17 +218,20 @@ function SplitSection() {
             <button className="btn primary" type="submit" disabled={busy || !budgetOk}>
               {busy ? 'Splitting…' : 'Split my points'}
             </button>
-            {error && <span className="error-text" role="alert">{error}</span>}
+            {error ? <span className="error-text" role="alert">{error}</span>
+              : stale ? <span className="small" style={{ color: 'var(--amber)' }} role="status">Budget changed to {pts(budgetNum)}. Split again to update the plan below.</span> : null}
           </div>
         </form>
       )}
 
       {result && (
-        <div className="mt-lg stack" aria-live="polite">
+        <div className={`mt-lg stack ${stale ? 'bd-stale' : ''}`} aria-live="polite">
+          {/* Dan's cheer sits with the result (not a floating pop-up over the history table) */}
+          <div className="bd-ready"><HandsomeDan size={36} furColor="#f4b183" bandanaColor="#00356b" /><b>Bid plan ready for {pts(result.budget)} points.</b><span className="muted small">Go get those seats.</span></div>
           {(result.warnings ?? []).map((w) => <div key={w} className="pb-check warn small" role="alert">{w}</div>)}
           {anySample && <SampleBanner>SAMPLE data feeds some "median winning bid" numbers below: illustrative only, not real SOM results.</SampleBanner>}
           <div className="table-wrap">
-            <table className="table">
+            <table className="table bd-stack">
               <thead>
                 <tr>
                   <th scope="col">Course</th>
@@ -182,20 +247,20 @@ function SplitSection() {
                   const p = PRIORITIES.find((x) => x.value === r.priority)
                   return (
                     <tr key={r.key ?? r.number}>
-                      <td>
+                      <td data-label="Course" className="bd-first">
                         <span className="course-num">{r.number}</span>
                         <div className="small">{r.title}</div>
                         {r.term_name && <div className="small faint">{r.term_name}</div>}
                       </td>
-                      <td><span className={`badge ${PRIO_BADGE[r.priority] ?? 'gray'}`}>{p?.short ?? r.priority}</span></td>
-                      <td className="pb-right pb-num">{r.seats ?? '–'}</td>
-                      <td className="pb-right pb-num">
+                      <td data-label="Priority"><span className={`badge ${PRIO_BADGE[r.priority] ?? 'gray'}`}>{p?.short ?? r.priority}</span></td>
+                      <td data-label="Seats" className="pb-right pb-num">{r.seats ?? '–'}</td>
+                      <td data-label="Median win" className="pb-right pb-num">
                         {r.median_winning_bid == null
                           ? <span className="faint">no reports</span>
                           : <>{pts(r.median_winning_bid)} {r.sample_only && <SampleTag />}</>}
                       </td>
-                      <td className="pb-right"><span className="pb-points">{pts(r.suggested_points)}</span></td>
-                      <td className="pb-share">
+                      <td data-label="Suggested" className="pb-right"><span className="pb-points">{pts(r.suggested_points)}</span></td>
+                      <td data-label="Share" className="pb-share">
                         <Bar pct={r.share * 100} tone={r.priority === 1 ? '' : 'gray'} />
                         <div className="pb-num faint" style={{ marginTop: 2 }}>{Math.round(r.share * 100)}%</div>
                       </td>
@@ -272,17 +337,19 @@ function HistorySection({ courses, error, onRetry }: { courses: BidCourse[] | nu
           <button className="btn" onClick={onRetry}>Try again</button>
         </Empty>
       ) : !courses ? (
-        <Spinner label="Loading bid history…" />
+        <div className="bd-hist-box bd-hist-loading"><Spinner label="Loading bid history…" /></div>
       ) : courses.length === 0 ? (
         <Empty icon={<Inbox className="icon lg" style={{ color: 'var(--faint)' }} />} title="No reports yet">Be the first: report your result below.</Empty>
       ) : (
         <div className="stack">
           {anySample && <SampleBanner />}
+          {/* fixed-height results box: typing in the search never changes the page length */}
+          <div className="bd-hist-box">
           {filtered.length === 0 ? (
-            <p className="muted small">No course matches “{q}”.</p>
+            <p className="muted small bd-hist-empty">No course matches “{q}”.</p>
           ) : (
             <div className="table-wrap">
-              <table className="table">
+              <table className="table bd-stack">
                 <thead>
                   <tr>
                     <th scope="col">Course</th>
@@ -298,32 +365,33 @@ function HistorySection({ courses, error, onRetry }: { courses: BidCourse[] | nu
                 <tbody>
                   {filtered.map((c) => (
                     <tr key={c.course_number}>
-                      <td>
+                      <td data-label="Course" className="bd-first">
                         <div className="row" style={{ gap: 6 }}>
                           <span className="course-num">{c.course_number}</span>
                           {c.sample_only && <SampleTag />}
                         </div>
                         <div className="small">{c.title}</div>
                       </td>
-                      <td className="pb-right pb-num">{c.seats ?? '–'}</td>
-                      <td className="pb-right pb-num">{c.reports}</td>
+                      <td data-label="Seats" className="pb-right pb-num">{c.seats ?? '–'}</td>
+                      <td data-label="Reports" className="pb-right pb-num">{c.reports}</td>
                       {c.too_few ? (
-                        <td colSpan={4} className="small faint">Hidden until 3 students report, so no one's bid can be singled out.</td>
+                        <td data-label="Prices" colSpan={4} className="small faint bd-wide">Hidden until 5 different students report, so no one's bid can be singled out.</td>
                       ) : (
                         <>
-                          <td className="pb-right pb-num"><span className="pb-won">{c.won ?? 0}</span> / <span className="pb-lost">{c.lost ?? 0}</span></td>
-                          <td className="pb-right pb-num">{pts(c.lowest_winning_bid)}</td>
-                          <td className="pb-right pb-num" style={{ color: 'var(--text)', fontWeight: 500 }}>{pts(c.median_winning_bid)}</td>
-                          <td className="pb-right pb-num">{pts(c.highest_losing_bid)}</td>
+                          <td data-label="Won / lost" className="pb-right pb-num"><span className="pb-won">{c.won ?? 0}</span> / <span className="pb-lost">{c.lost ?? 0}</span></td>
+                          <td data-label="Lowest win" className="pb-right pb-num">{pts(c.lowest_winning_bid)}</td>
+                          <td data-label="Median win" className="pb-right pb-num" style={{ color: 'var(--text)', fontWeight: 500 }}>{pts(c.median_winning_bid)}</td>
+                          <td data-label="Highest loss" className="pb-right pb-num">{pts(c.highest_losing_bid)}</td>
                         </>
                       )}
-                      <td className="small muted">{(c.terms ?? []).map((t) => TERM_NAMES[t] ?? t).join(', ') || '–'}</td>
+                      <td data-label="Terms" className="small muted">{(c.terms ?? []).map((t) => TERM_NAMES[t] ?? t).join(', ') || '–'}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
           )}
+          </div>
           <p className="small faint" style={{ margin: 0 }}>
             Lowest win and highest loss bracket the price: if you bid above the highest losing bid, you'd likely have gotten in. A small number of reports is a hint, not a guarantee.
           </p>
@@ -434,7 +502,7 @@ function ReportSection({ mine, onSaved }: { mine: Mine[]; onSaved: () => Promise
               <p className="small muted" style={{ margin: 0 }}>Nothing yet. Your first report shows up here.</p>
             ) : (
               <div className="table-wrap">
-                <table className="table">
+                <table className="table bd-stack">
                   <thead>
                     <tr>
                       <th scope="col">Course</th>
@@ -447,11 +515,11 @@ function ReportSection({ mine, onSaved }: { mine: Mine[]; onSaved: () => Promise
                   <tbody>
                     {mine.map((r) => (
                       <tr key={r.id}>
-                        <td><span className="course-num">{r.course_number}</span> {r.source === 'sample' && <SampleTag />}</td>
-                        <td className="small muted">{TERM_NAMES[r.term_code] ?? (r.term_code || '–')}</td>
-                        <td className="pb-right pb-num">{pts(r.points_bid)}</td>
-                        <td>{r.got_seat ? <span className="badge green"><Check className="icon sm" />Got in</span> : <span className="badge red"><X className="icon sm" />No seat</span>}</td>
-                        <td className="pb-right pb-num">{pts(r.clearing_points)}</td>
+                        <td data-label="Course" className="bd-first"><span className="course-num">{r.course_number}</span> {r.source === 'sample' && <SampleTag />}</td>
+                        <td data-label="Term" className="small muted">{TERM_NAMES[r.term_code] ?? (r.term_code || '–')}</td>
+                        <td data-label="Bid" className="pb-right pb-num">{pts(r.points_bid)}</td>
+                        <td data-label="Result">{r.got_seat ? <span className="badge green"><Check className="icon sm" />Got in</span> : <span className="badge red"><X className="icon sm" />No seat</span>}</td>
+                        <td data-label="Clearing" className="pb-right pb-num">{pts(r.clearing_points)}</td>
                       </tr>
                     ))}
                   </tbody>

@@ -57,7 +57,7 @@ def _gsr_text() -> str:
     lines = []
     for o in GSR_OPTIONS:
         units = f"{o['units']} units" if o["units"] else "units vary"
-        lines.append(f"{o['name']}: {units}, about {o['gsa_days']} GSA days. {o['timing']} Enrol: {o['enrol']} Cost: {o['cost']}")
+        lines.append(f"{o['name']}: {units}, about {o['gsa_days']} GSA days. {o['timing']} Enroll: {o['enrol']} Cost: {o['cost']}")
     return " ".join(lines)
 
 
@@ -102,8 +102,10 @@ KB: list[dict] = [
     {
         "id": "auction", "programs": ["MBA", "MBA-JOINT", "MAM", "MMS", "MMS-AM", "MMS-GBS", "MMS-SR", "MMS-TM"], "title": "How the SOM course auction works",
         "text": ("Most SOM electives are filled through the course auction: students bid points, and seats go to the highest "
-                 "bids. Some courses need instructor permission instead. SOM does not publish clearing prices; auction dates "
-                 "and point budgets are announced on the internal student site. The core is assigned, not bid on."),
+                 "bids. Some courses need instructor permission instead. SOM does not publish clearing prices or point "
+                 "budgets. The core is assigned, not bid on. For the 2026-27 auction (registrar email to first-year MBAs): "
+                 "it runs Nov 9, 8:30 a.m. to Jan 4, 8:30 a.m.; first-years bid on IE, GNW and SNOC in rounds 1-2 and on "
+                 "electives in rounds 2-3; spring add/drop is in Yale Hub from Jan 5, not the auction."),
         "url": SOURCES["policies"], "keywords": "auction bid bidding points clearing price seats register registration",
     },
     {
@@ -186,6 +188,83 @@ KB.extend([
               "documents the bidding app."),
      "url": "https://som.yale.edu/elective-core-courses",
      "keywords": "canvas course search portal registration bidding app syllabus course site where find"},
+])
+
+# Registrar's 2026-27 course auction email (to the MBA Class of 2028, Oct 14). First-year MBAs only.
+from rules import AUCTION  # noqa: E402
+
+KB.append({
+    "id": "auction-2026", "programs": ["MBA", "MBA-JOINT"], "title": "2026-27 course auction dates and rules (first-year MBAs)",
+    "text": (f"The course auction runs {AUCTION['opens']} {AUCTION['opens_time']} to {AUCTION['closes']} {AUCTION['closes_time']}. "
+             + " ".join(AUCTION["rounds"] + AUCTION["global"]) + " " + AUCTION["add_drop"] + " " + AUCTION["exchange"] + " "
+             + " ".join(f"{x['title']}: {x['date']}, {x['time']}, {x['where']}." for x in AUCTION["sessions"]) + " "
+             + " ".join(AUCTION["policies"]) + " Exact round dates aren't in the email; check the course auction rounds file."),
+    "url": "https://portal.som.yale.edu/",
+    "keywords": "auction bid bidding rounds round dates opens closes ie gnw snoc exchange add drop yale hub swap form "
+                "independent study mgt 690 audit law yale college credit units presentation office hours registrar",
+})
+
+# "Get help": who to see for what, behind the guide's four doors (career / CDO, academics, wellbeing, international &
+# more). Same notes and links as the guide (frontend/src/lib/helpGuide.ts), checked 2026-10-25.
+KB.extend([
+    {"id": "help-career-coach", "programs": None, "title": "Career coaching: CDO coach appointments and Open Hours",
+     "text": ("Book a 30-minute appointment with a CDO career coach in CMS (12twenty, Yale login): bring your resume and "
+              "2-3 roles you're eyeing; you can hold one open slot at a time. For a quick question, drop in to coach Open "
+              "Hours, usually Mon-Thu 11:30am-1:00pm, no booking; times and rooms are posted each day in Slack "
+              "#cdo-coaches. The CDO also has guides for case, behavioral and technical interviews: "
+              "https://cdo.som.yale.edu/channels/prepare-for-your-interview/. Book: https://som-yale.12twenty.com/appointments"),
+     "url": "https://cdo.som.yale.edu/faqs/",
+     "keywords": "career coach coaching cdo resume cv appointment open hours drop in interview prep case behavioral job internship"},
+    {"id": "help-employers", "programs": None, "title": "Meeting recruiters and employers",
+     "text": ("See which employers are coming to SOM on the CDO employer channel and sign up for their events in CMS "
+              "(https://som-yale.12twenty.com/events). Read SOM's recruiting policies before reaching out: "
+              "https://cdo.som.yale.edu/resources/yale-som-recruiting-policies/."),
+     "url": "https://cdo.som.yale.edu/channels/employer/",
+     "keywords": "recruiter recruiting employer company event networking coffee chat policies info session"},
+    {"id": "help-interview-rooms", "programs": None, "title": "Booking a room for an interview",
+     "text": ("Reserve an SOM interview room in WebEMS with your Yale login. Book early in recruiting season; rooms go fast."),
+     "url": "https://yalesom.emscloudservice.com/web/",
+     "keywords": "interview room space quiet book reserve webems ems zoom call virtual"},
+    {"id": "help-mentors", "programs": None, "title": "Alumni mentors (Yale Alumni Mentorship on Cross Campus)",
+     "text": ("Log in to Cross Campus, open the Mentorship tab and join a program. Matches are made at the start of each semester."),
+     "url": "https://alumni.yale.edu/connect/yale-alumni-mentorship-program",
+     "keywords": "mentor mentorship alumni alum cross campus advice network"},
+    {"id": "help-tsai-city", "programs": None, "title": "Startups and ventures: Tsai CITY",
+     "text": ("Tsai CITY offers advising, programs and funding for an idea or venture, from first sketch to launch."),
+     "url": "https://city.yale.edu",
+     "keywords": "startup start-up venture entrepreneurship founder idea funding tsai city innovation"},
+    {"id": "help-aasl", "programs": None, "title": "Academic Affairs & Student Life (AASL)",
+     "text": ("AASL handles course planning, workload, leave and anything about your program. Drop-in sessions are "
+              "listed on their site. The Registrar keeps registration records (https://som.yale.edu/about/contact)."),
+     "url": "https://groups.som.yale.edu/aasl/",
+     "keywords": "aasl academic affairs student life workload leave absence course planning program advisor drop-in"},
+    {"id": "help-forms", "programs": None, "title": "Registrar forms: body-to-body swap form and independent study (MGT 690)",
+     "text": ("Two forms from the registrar's auction email. The body-to-body swap form, for trading a seat with a "
+              "classmate, opens Jan 5 on the SOM student portal (Yale login). Independent study is MGT 690: up to 4 "
+              "units and no bid points; you submit a Petition for Independent Study, and the rules are in the Bulletin's "
+              "course policies: https://catalog.yale.edu/management/rights-responsibilities-students/course-policies-residential-masters-degree-programs/. "
+              "AASL can help with either."),
+     "url": "https://portal.som.yale.edu/",
+     "keywords": "form forms swap body-to-body body to body trade seat independent study mgt 690 petition registrar"},
+    {"id": "help-sas", "programs": None, "title": "Accommodations: Student Accessibility Services",
+     "text": ("Student Accessibility Services arranges accommodations for classes and exams. Start early in the term so "
+              "they're in place before exams."),
+     "url": "https://sas.yale.edu",
+     "keywords": "accommodations accommodation accessibility disability sas extra time exam"},
+    {"id": "help-oiss", "programs": None, "title": "Visas and work authorization: OISS",
+     "text": ("Dan doesn't advise on immigration, visas or work authorization (CPT, OPT, F-1, J-1). The Office of "
+              "International Students & Scholars (OISS) does, and they're the office that decides."),
+     "url": "https://oiss.yale.edu",
+     "keywords": "visa immigration work authorization cpt opt f1 f-1 j1 j-1 international student oiss i-20 stem"},
+    {"id": "help-wellbeing", "programs": None, "title": "Wellbeing and someone to talk to",
+     "text": ("SOM has an embedded Yale Mental Health & Counseling clinician: short-term counseling, free for students, "
+              "and you can book it yourself online. Yale Mental Health & Counseling (https://yalehealth.yale.edu/department/mental-health-counseling) "
+              "serves all students; the Good Life Center (https://goodlifecenter.yale.edu) and the Chaplain's Office "
+              "(https://chaplain.yale.edu) also help. Need someone right now? Yale Mental Health & Counseling's on-call "
+              "clinician answers at any hour: 203-432-0290. In the US you can also call or text 988."),
+     "url": "https://groups.som.yale.edu/aasl/yale-mental-health-and-wellness/",
+     "keywords": "stress stressed anxiety anxious counseling counselor therapy therapist mental health wellbeing wellness talk "
+                 "overwhelmed burnout sad lonely chaplain"},
 ])
 
 

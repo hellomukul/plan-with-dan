@@ -92,7 +92,6 @@
 .wb-term { gap: 8px; }
 .wb-note { margin: 0; color: var(--muted); }
 .wb-note.example { color: var(--amber); }
-.wb-tba { margin: 0; }
 .wb-search { position: relative; display: flex; align-items: center; gap: 8px; background: var(--bg-2); border: 1px solid var(--line-2); border-radius: 10px; padding: 7px 10px; }
 .wb-search:focus-within { border-color: var(--pink-line); }
 .wb-search input { flex: 1; min-width: 0; background: none; border: 0; outline: none; color: var(--text); font: inherit; font-size: 13.5px; }
@@ -108,7 +107,6 @@
 .wb-picked li.clash { border-color: rgba(255, 92, 92, 0.5); }
 .wb-picked-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wb-tag { font-size: 11px; color: var(--pink-2); background: var(--pink-soft); border-radius: 999px; padding: 1px 8px; }
-.wb-status { min-height: 20px; }
 .wb-actions { gap: 8px; }
 .wb-fine { margin: 0; font-size: 11.5px; }
 
@@ -154,7 +152,8 @@
 .hc-empty p { margin: 0 0 12px; color: var(--muted); }
 .hc-who { display: inline-flex; gap: 6px; align-items: baseline; background: var(--bg-2); border: 1px solid var(--line-2); border-radius: 999px;
   padding: 5px 12px; color: var(--muted); font: inherit; font-size: 12.5px; cursor: pointer; margin-bottom: 12px; }
-.hc-who b { color: var(--text); font-weight: 500; }
+.hc-who b { color: var(--text); font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.hc-who { max-width: 100%; white-space: nowrap; }  /* one line always: a long program name ends in … instead of growing the card */
 .hc-starters { display: grid; gap: 8px; }
 .hc-starter { text-align: left; background: var(--card-2); border: 1px solid var(--line-2); border-radius: 10px; padding: 10px 12px; color: var(--text);
   font: inherit; font-size: 13.5px; cursor: pointer; transition: border-color 0.12s var(--ease); }
@@ -187,21 +186,41 @@
 .ws-tabs button.on .icon { color: var(--pink); }
 .ws-badge { background: var(--accent-fill); color: #fff; border-radius: 999px; font-size: 11px; padding: 0 7px; line-height: 18px; }
 .ws-card { padding: 16px; }
+.ws-panel { display: grid; }
+.ws-pane { grid-area: 1 / 1; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+.ws-pane:not(.on), .ws-pane:not(.on) * { visibility: hidden !important; }  /* !important: a child's own visibility:visible must not leak through */
+.ws-pane > :last-child { flex: 1; }  /* a shorter tab's last card fills the space instead of leaving a hole */
+@media (max-width: 900px) { .ws-pane:not(.on) { display: none; } }  /* phones: natural height per tab */
 .ws-dates { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 2px; }
 .ws-dates li { display: grid; grid-template-columns: 170px 1fr auto; gap: 12px; padding: 8px 10px; border-radius: 8px; font-size: 13.5px; align-items: baseline; }
 .ws-dates li:nth-child(odd) { background: var(--bg-2); }
 .ws-dates li.k-deadline span:nth-child(2) { color: var(--text); font-weight: 500; }
 .ws-dates .mono { color: var(--faint); white-space: nowrap; }
-.ws-tools { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
-.ws-links { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
-.ws-links li { display: grid; gap: 2px; }
-.ws-links a, .ws-links .link-btn { display: inline-flex; align-items: center; gap: 6px; color: var(--text); text-decoration: none; font-size: 14px; }
-.ws-links a:hover b { color: var(--pink-2); }
+/* Links | glossary share a row (equal heights); Dan's tools runs full width below and takes whatever height
+   the pane adds to match the tallest tab, so every card bottom lines up. */
+.ws-tools { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: auto 1fr; gap: 16px; align-items: stretch; }
+.ws-tools-wide { grid-column: 1 / -1; }
+.ws-tools-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.ws-tools-head { margin-bottom: 8px; }
+.ws-tools-head .section-label { flex: 1; min-width: 0; margin: 0; }
+/* desktop: the button sits in the label's row and its negative margins keep the card exactly as tall as before
+   (on desktop the Tools tab must stay shorter than My plan, which sets every tab's height) */
+.ws-tools-cta { flex: none; margin: -7px 0; }
+@media (max-width: 900px) { .ws-tools-cta { margin: 0; min-height: 44px; } }
+.ws-links { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; align-content: start; }
+.ws-links.two { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 32px; }
+/* the whole row (name and note) is the link: a 44px+ target with the text where it was */
+.ws-links a, .ws-links .link-btn { display: grid; gap: 2px; align-content: center; width: calc(100% + 16px); min-height: 44px; margin: 0 -8px; padding: 5px 8px;
+  border-radius: 8px; color: var(--text); text-decoration: none; text-align: left; font-size: 14px; }
+.ws-links a:hover, .ws-links .link-btn:hover { background: var(--card-2); text-decoration: none; }
+.ws-links a:hover b, .ws-links .link-btn:hover b { color: var(--pink-2); }
+.ws-links a:focus-visible, .ws-links .link-btn:focus-visible { outline: 2px solid var(--pink); outline-offset: 0; }
+.ws-link-name { display: inline-flex; align-items: center; gap: 6px; }
 .ws-gloss { margin: 0; display: grid; gap: 8px; }
 .ws-gloss dt { font-weight: 500; font-size: 13.5px; }
 .ws-gloss dd { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
 
-.lp-account { border: 1px solid var(--pink-line); border-radius: 18px; padding: clamp(20px, 4vw, 36px); background: linear-gradient(180deg, var(--pink-soft), transparent 70%); }
+.lp-account { border: 1px solid var(--pink-line); border-radius: 18px; padding: clamp(20px, 4vw, 36px); background: var(--card); }
 .lp-account-head { max-width: 640px; margin-bottom: 18px; }
 .lp-account-head h2 { margin: 0 0 6px; font-size: clamp(22px, 3vw, 30px); letter-spacing: -0.02em; }
 .lp-account-head p { margin: 0; }
@@ -219,7 +238,7 @@
   .hc.is-active { height: 70vh; }
   .ws-bar { top: 53px; }
   .ws-picker { font-size: 15px; }
-  .ws-tools { grid-template-columns: 1fr; }
+  .ws-tools, .ws-links.two { grid-template-columns: minmax(0, 1fr); }
   .lp-benefits { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .ws-dates li { grid-template-columns: 1fr auto; }
   .ws-dates li .mono { grid-column: 1 / -1; }
@@ -230,4 +249,221 @@
 @media (max-width: 520px) {
   .hc-starter:nth-child(n+3) { display: none; }  /* two starters on phones; the rest is one tap away */
   .lp-hero-copy h1 { font-size: 34px; }
+}
+
+/* ---- v3.1: more room for Dan, header links as buttons, the "Ask Dan" sparkle ---- */
+.lp-hero.v3 { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); gap: 40px; }
+.hc { height: 580px; }
+.lp-nav button { background: none; border: 0; padding: 0; color: var(--muted); font: inherit; font-size: 13.5px; cursor: pointer; }
+.lp-nav button:hover { color: var(--text); }
+.hc.hc-glow { animation: hc-glow 1.4s var(--ease); }
+@keyframes hc-glow {
+  0% { box-shadow: 0 0 0 0 rgba(99, 170, 255, 0); border-color: var(--line); }
+  25% { box-shadow: 0 0 0 6px rgba(99, 170, 255, 0.35), 0 0 40px rgba(99, 170, 255, 0.35); border-color: var(--pink); }
+  100% { box-shadow: 0 0 0 0 rgba(99, 170, 255, 0); border-color: var(--line); }
+}
+#why, #plan, #answers, #ask { scroll-margin-top: 72px; }
+
+/* ---- course explorer (search + course card + eligibility) ---- */
+.cs { display: grid; gap: 10px; position: relative; }
+.cs-results { max-height: 380px; overflow-y: auto; }
+.cs-results button.active { background: var(--card-2); }
+.cs-hit { display: grid; gap: 2px; min-width: 0; }
+.cs-hit > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cs-pill { font-size: 11px; border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+.cs-pill.ok { color: var(--green); background: var(--green-soft); }
+.cs-pill.no { color: var(--faint); background: var(--bg-2); border: 1px solid var(--line); }
+.cs-empty { padding: 10px 12px; font-size: 13px; color: var(--muted); }
+.cs-card { padding: 14px; display: grid; gap: 8px; border-color: var(--line-2); }
+.cs-meta { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.cs-sections { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; color: var(--muted); }
+.cs-desc { margin: 0; }
+.cs-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.cs-blocked { display: flex; gap: 8px; align-items: flex-start; padding: 10px 12px; border-radius: 10px; background: var(--red-soft);
+  border: 1px solid rgba(255, 92, 92, 0.35); color: #ffb3b3; font-size: 13px; }
+.cs-blocked .icon { flex: none; margin-top: 2px; color: var(--red); }
+/* "Meet Dan": the chief of staff gets a face and a name above the headline */
+.lp-meet { display: inline-flex; align-items: center; gap: 12px; align-self: flex-start; padding: 6px 18px 6px 6px; border-radius: 999px;
+  border: 1px solid var(--pink-line); background: var(--pink-soft); }
+.lp-meet-dog { width: 60px; height: 60px; border-radius: 50%; background: var(--card-2); display: grid; place-items: center; border: 1px solid var(--line-2); }
+.lp-meet-text { display: grid; line-height: 1.2; }
+.lp-meet-name { font-weight: 700; font-size: 18px; letter-spacing: -0.01em; }
+.lp-meet-role { color: var(--pink-2); font-size: 13.5px; font-weight: 500; }
+/* Dan's line, before the account pitch (original, not a borrowed famous quote) */
+.lp-quote { margin: 72px auto 0; max-width: 760px; text-align: center; }
+.lp-quote blockquote { margin: 0; font-size: clamp(20px, 2.6vw, 28px); line-height: 1.35; letter-spacing: -0.015em; font-weight: 500; color: var(--text); }
+.lp-quote figcaption { display: inline-flex; align-items: center; gap: 8px; margin-top: 14px; color: var(--pink-2); font-size: 14px; }
+.lp-quote-dog { width: 32px; height: 32px; border-radius: 50%; background: var(--card-2); display: grid; place-items: center; }
+.lp-quote + .lp-account { margin-top: 32px; }
+.cs-bio summary { cursor: pointer; color: var(--pink-2); }
+.cs-bio p { margin: 6px 0 0; }
+
+/* ---- week builder v2 layout: search on top (inline results), grid + "Your courses" below ---- */
+.wb-top { display: grid; gap: 8px; }
+.cs { display: grid; gap: 10px; }
+.cs-bar { display: flex; align-items: center; gap: 8px; background: var(--bg-2); border: 1px solid var(--line-2); border-radius: 10px; padding: 8px 12px; }
+.cs-bar:focus-within { border-color: var(--pink-line); box-shadow: 0 0 0 3px var(--pink-soft); }
+.cs-bar input { flex: 1; min-width: 0; background: none; border: 0; outline: none; color: var(--text); font: inherit; font-size: 14px; padding: 2px 0; width: auto; }
+.cs-panel { border: 1px solid var(--line-2); border-radius: 12px; background: var(--card-2); overflow: hidden; }
+.cs-panel-head { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+.cs-hint { margin: 0; padding: 10px 12px; }
+.cs-list { list-style: none; margin: 0; padding: 0; max-height: 340px; overflow-y: auto; }
+.cs-list button { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 12px; text-align: left; padding: 9px 12px;
+  background: transparent; border: 0; border-top: 1px solid var(--line); color: var(--text); font: inherit; cursor: pointer; }
+.cs-list li:first-child button { border-top: 0; }
+.cs-list button.active, .cs-list button:hover { background: var(--card); }
+.cs-hit { display: grid; gap: 2px; min-width: 0; flex: 1; }
+.cs-hit-title, .cs-hit-meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cs-hit-title { font-size: 13.5px; }
+.cs-pill { flex: none; font-size: 11px; border-radius: 999px; padding: 2px 8px; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; }
+.cs-pill.ok { color: var(--green); background: var(--green-soft); }
+.cs-pill.no { color: var(--faint); background: var(--bg-2); border: 1px solid var(--line); }
+.cs-pill.in { color: var(--pink-2); background: var(--pink-soft); }
+.cs-card { border: 1px solid var(--pink-line); border-radius: 12px; background: var(--card-2); padding: 14px; display: grid; gap: 10px; }
+.cs-card-head { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
+.cs-card-head h4 { margin: 2px 0 4px; font-size: 16px; }
+.cs-meta { display: flex; flex-wrap: wrap; gap: 2px 14px; }
+.cs-verdict { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 10px 12px; border-radius: 10px; font-size: 13px; }
+.cs-verdict > span { flex: 1 1 220px; min-width: 0; }
+.cs-verdict .icon { flex: none; }
+.cs-verdict.ok { background: var(--green-soft); border: 1px solid rgba(61, 214, 140, 0.35); }
+.cs-verdict.ok > .icon { color: var(--green); }
+.cs-verdict.warn { background: var(--amber-soft); border: 1px solid rgba(245, 181, 68, 0.4); }
+.cs-verdict.warn > .icon { color: var(--amber); }
+.cs-verdict.no { background: var(--red-soft); border: 1px solid rgba(255, 92, 92, 0.35); color: #ffc2c2; }
+.cs-verdict.no > .icon { color: var(--red); }
+.cs-sections { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; color: var(--muted); }
+.cs-desc { margin: 0; }
+
+.wb.wide .wb-main { grid-template-columns: minmax(0, 1.6fr) minmax(280px, 1fr); }
+.wb-list-head { margin: 0; }
+.wb-picked { max-height: none; overflow: visible; gap: 6px; }
+.wb-picked li { display: grid; gap: 2px; padding: 8px 6px 8px 12px; border: 1px solid var(--line); border-radius: 10px; font-size: 13px; min-width: 0; }
+.wb-picked li.clash { border-color: rgba(255, 92, 92, 0.5); background: var(--red-soft); }
+.wb-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.wb-row .course-num { flex: none; }
+.wb-row-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.wb-row .wb-tag, .wb-row .btn { flex: none; }
+.wb-row-meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 8px; }
+.wb-picked .lp-select.wb-row-section { width: 100%; max-width: 100%; margin-top: 4px; }
+
+/* ---- week card: fixed heights so adding or removing courses never changes the page length ---- */
+.wb-top .wb-note { min-height: 2lh; }  /* room for a two-line note (whole lines, not ems), so the grid never shifts */
+.wb.wide .wb-main { height: 640px; align-items: stretch; }
+.wb.wide .wb-left { overflow: hidden; }
+.wb.wide .wb-right { display: flex; flex-direction: column; min-height: 0; gap: 10px; }
+.wb.wide .wb-picked { flex: 1 1 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-right: 2px; align-content: start; }
+.wb.wide .wb-right > :not(.wb-picked) { flex: none; }
+/* phones: the week card's list and status keep a constant size as courses come and go */
+@media (max-width: 900px) {
+  .wb .wb-picked { height: 300px; max-height: none; overflow-y: auto; overscroll-behavior: contain; align-content: start; }
+}
+/* The picker + tabs bar no longer sticks: pinned, it covered ~110px of the week and the explorer. */
+.ws-bar { position: static; backdrop-filter: none; background: transparent; }
+@media (max-width: 520px) {
+  .ws-tabs { gap: 2px; }
+  .ws-tabs button { padding: 7px 9px; font-size: 13px; gap: 4px; }
+  .ws-tabs button .icon { display: none; }
+}
+.wb-picked li.wb-empty { border-style: dashed; padding: 14px 12px; }
+@media (max-width: 900px) {
+  .wb-top .wb-note { min-height: 4lh; }  /* the longest note is four lines on a phone */
+}
+.wb-term { min-height: 44px; align-items: center; }
+
+/* ---- hero alignment: Dan's card is exactly as tall as the left column (top and bottom edges line up),
+   with no dead space; a long conversation scrolls inside the card instead of growing the page ---- */
+@media (min-width: 901px) {
+  .lp-hero.v3 { align-items: stretch; min-height: 0; padding-top: 32px; }
+  .lp-hero.v3 .lp-hero-copy { padding-top: 0; justify-content: space-between; gap: 20px; }
+  .lp-hero.v3 .lp-hero-chat { position: relative; min-height: 500px; }
+  .lp-hero.v3 .hc { position: absolute; inset: 0; height: auto; }
+  .hc.is-empty .hc-body { justify-content: space-between; }
+}
+@media (min-width: 901px) {
+  .hc.is-empty .hc-body { justify-content: flex-start; }
+  .hc.is-empty .hc-empty { display: flex; flex-direction: column; flex: 1; }
+  .hc.is-empty .hc-empty .hc-who { align-self: flex-start; }
+  .hc.is-empty .hc-starters { margin-top: auto; }  /* starters sit just above the input; any spare room goes above them */
+}
+/* Phones and small tablets: one column. Must come after every desktop .lp-hero.v3 rule, or those win. */
+@media (max-width: 900px) {
+  .lp-hero.v3 { grid-template-columns: 1fr; gap: 20px; min-height: 0; padding-top: 8px; }
+  .lp-hero.v3 .lp-hero-copy { padding-top: 0; }
+}
+
+/* "I'm an MBA first year in Gold": inline sentence on wide screens; on phones a fixed two-row grid, so changing
+   program, year or cohort never changes the bar's height (native selects size to their longest option). */
+.ws-more { display: contents; }
+@media (max-width: 640px) {
+  .ws-picker { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "lead prog reset" "more more more"; gap: 8px; }
+  .ws-lead { grid-area: lead; }
+  .ws-prog { grid-area: prog; width: 100%; min-width: 0; }
+  .ws-reset { grid-area: reset; }
+  .ws-more { grid-area: more; display: flex; align-items: center; gap: 8px; min-width: 0; min-height: 40px; }
+  .ws-more select { flex: 1 1 0; min-width: 0; }
+}
+
+/* MBA rules on the Requirements tab (components/MbaRequirements.tsx) */
+.mr { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: stretch; }
+.mr-col { display: flex; flex-direction: column; gap: 16px; min-height: 0; }
+.mr-col > .mr-card:first-child { flex: 1; }  /* both columns end on the same line */
+.mr-card { display: flex; flex-direction: column; gap: 10px; }
+.mr-card .section-label { margin: 0; }
+.mr-card p { margin: 0; }
+.mr-lead { font-size: 15px; line-height: 1.5; color: var(--text); }
+.mr-sub { font-size: 12.5px; color: var(--muted); font-weight: 500; }
+.mr-courses { list-style: none; margin: 0; padding: 4px; display: grid; gap: 2px; align-content: start; flex: 1 1 196px; min-height: 196px; overflow-y: auto;
+  overscroll-behavior: contain; border: 1px solid var(--line); border-radius: 10px; }
+.mr-courses li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: baseline; padding: 6px 8px; border-radius: 6px; font-size: 13px; }
+.mr-courses li:nth-child(odd) { background: var(--bg-2); }
+.mr-ctitle { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mr-empty { flex: 1 1 196px; min-height: 196px; display: grid; place-items: center; text-align: center; border: 1px dashed var(--line-2); border-radius: 10px; padding: 0 16px; }
+.mr-src { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: auto; }
+.mr-src a { display: inline-flex; align-items: center; gap: 4px; }
+.mr-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.mr-table th { text-align: left; font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); font-weight: 500;
+  padding: 0 8px 8px; border-bottom: 1px solid var(--line-2); }
+.mr-table td { padding: 9px 8px; border-bottom: 1px solid var(--line); }
+.mr-table td b { font-weight: 500; }
+.mr-table td.yes { color: var(--green); }
+.mr-opts { display: grid; gap: 6px; }
+.mr-opt { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 52px; padding: 8px 12px; border-radius: 10px;
+  border: 1px solid var(--line-2); background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.mr-opt:hover { border-color: var(--pink-line); }
+.mr-opt.on { background: var(--pink-soft); border-color: var(--pink-line); }
+.mr-opt:focus-visible { outline: 2px solid var(--pink); outline-offset: 2px; }
+.mr-opt-text { display: grid; gap: 1px; min-width: 0; }
+.mr-opt-text b { font-weight: 500; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mr-count { flex: none; font-size: 12px; border-radius: 999px; padding: 2px 9px; border: 1px solid var(--line-2); color: var(--muted); }
+.mr-opt.on .mr-count { color: var(--text); }
+.mr-count.none { border-style: dashed; color: var(--faint); }
+.mr-detail { display: flex; flex-direction: column; gap: 10px; flex: 1; min-height: 0; }
+.mr-kv { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 6px 12px; margin: 0; height: 132px; flex: none; overflow-y: auto; align-content: start; }
+.mr-kv dt { color: var(--faint); }
+.mr-kv dd { margin: 0; color: var(--text); }
+@media (max-width: 900px) {
+  .mr { grid-template-columns: 1fr; }
+  .mr-kv { grid-template-columns: 1fr; gap: 2px; height: 220px; }
+  .mr-kv dd { margin-bottom: 6px; }
+}
+
+/* Phones and tablets: every home-page control is at least a 44px tap target (design QA, Oct 25), and text inputs
+   are 16px so iOS Safari doesn't zoom in on focus. Static sizes only: nothing here changes as you interact. */
+@media (max-width: 900px) {
+  .lp-header .brand, .lp-header .btn { min-height: 44px; }
+  .lp-header .brand { display: inline-flex; align-items: center; gap: 8px; }
+  .hc-who { min-height: 44px; align-items: center; }
+  .hc-input .btn.icon { width: 44px; height: 44px; flex: none; }
+  .hc-input textarea { font-size: 16px; min-height: 44px; }
+  .ws-pill { min-height: 44px; font-size: 16px; }
+  .ws-reset { min-height: 44px; min-width: 44px; padding: 0 6px; }
+  .ws-tabs button { min-height: 44px; }
+  .wb-tabs button { min-height: 44px; }
+  .wb-row .btn.icon { width: 44px; height: 44px; margin: -6px -2px -6px 0; }  /* bigger target, same row height */
+  .lp-account .link-btn { min-height: 44px; min-width: 44px; display: inline-flex; align-items: center; justify-content: center; }
+  .lp-faq details { padding: 0 16px; }
+  .lp-faq summary { min-height: 52px; display: flex; align-items: center; }
+  .lp-faq details[open] { padding-bottom: 14px; }
+  .lp-footer a { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; min-width: 44px; }
 }

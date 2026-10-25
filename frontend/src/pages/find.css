@@ -1,0 +1,35 @@
+/* Find courses with Elihu: the owl in the page head, and the "you were weighing up" comparison from the Course explorer. */
+.fd-head { justify-content: flex-start; align-items: center; flex-wrap: nowrap; }
+.fd-head .elihu { margin: -6px 0 -10px -4px; }
+.fd-weigh { display: grid; gap: 12px; }
+.fd-weigh-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 30px; }
+.fd-weigh-head h3 { display: flex; align-items: center; gap: 8px; margin: 0; min-width: 0; font-size: 15px; }
+.fd-weigh-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+.fd-weigh-card { width: 100%; height: 100%; display: grid; grid-template-rows: auto 2lh auto auto; gap: 4px; align-content: start; text-align: left;
+  padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg-2); color: var(--text); font: inherit; cursor: pointer; }
+.fd-weigh-card:hover { border-color: var(--pink-line); }
+.fd-weigh-title { font-weight: 500; line-height: 1.35; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.fd-weigh-meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fd-weigh-pills { display: flex; gap: 6px; }
+.fd-weigh-foot { margin: 0; }
+@media (max-width: 640px) {
+  .fd-head { align-items: flex-start; }
+  .fd-head .elihu { --size: 48px !important; margin-top: 2px; }
+  .fd-weigh-head .btn.icon { width: 44px; height: 44px; margin: -7px -7px -7px 0; }
+  .fd-weigh-foot .link-btn { min-height: 44px; display: inline-flex; align-items: center; gap: 4px; }
+}
+@media (max-width: 500px) { .fd-weigh-card { grid-template-rows: auto auto auto auto; } }  /* one column: no sibling to align with */
+
+/* Pipeline legend / current step: one fixed line, so starting a run never moves the page */
+.fd-legend { margin: 0; min-height: 1lh; display: flex; align-items: center; gap: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fd-legend-ai { color: var(--pink-2); flex: none; }
+.pipe-node .icon.xs { width: 12px; height: 12px; }
+/* Follow-up questions from Elihu's summary, sent to Dan */
+.fd-followups { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.fd-followups > span { width: 100%; }
+.fd-followup { display: inline-flex; align-items: center; gap: 6px; text-align: left; max-width: 100%; white-space: normal; }
+@media (max-width: 640px) { .fd-followup { min-height: 44px; } }
+@media (max-width: 640px) {
+  /* phones: 44px tap targets for the page's own controls */
+  .fd .tabs button, .fd .btn { min-height: 44px; }
+}

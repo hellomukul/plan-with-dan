@@ -1,4 +1,4 @@
-"""Email + password accounts with server-side sessions.
+"""Email + password accounts with server-side sessions (Google / Microsoft sign-in lives in oauth.py).
 
 - Passwords: Argon2id via pwdlib (the hashing FastAPI's own docs recommend).
 - Sessions: a random token in an HttpOnly, SameSite=Lax cookie. Only the
@@ -14,6 +14,8 @@ from __future__ import annotations
 
 import hashlib
 import secrets
+import time
+import threading
 from datetime import timedelta
 
 from email_validator import EmailNotValidError, validate_email
@@ -24,6 +26,7 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlmodel import Session, select
 
+import config
 from config import SECURE_COOKIES, SESSION_DAYS
 from db import AuthSession, Profile, User, aware, get_db, log_audit, utcnow
 from safety import screen_input
@@ -38,9 +41,25 @@ COMMON = {
     "000000000000", "111111111111", "abc123456789", "password123!", "yaleuniversity",
 }
 
+# Same failed-login message for every account (no enumeration); the hint only shows when a provider is on.
+ANY_PROVIDER = bool((config.GOOGLE_CLIENT_ID and config.GOOGLE_CLIENT_SECRET)
+                    or (config.MICROSOFT_CLIENT_ID and config.MICROSOFT_CLIENT_SECRET))
 hasher = PasswordHash.recommended()
 DUMMY_HASH = hasher.hash("timing-equaliser-not-a-real-password")
-limiter = Limiter(key_func=get_remote_address)
+def client_ip(request) -> str:
+    """The visitor's real IP for rate limits. On Render (behind Cloudflare) Cloudflare sets CF-Connecting-IP and clients
+    can't forge it; Render only appends to X-Forwarded-For, so its left end is whatever the client sent and is never
+    trusted. Fall back to the right-most hop (added by the proxy), then the socket address."""
+    cf = request.headers.get("cf-connecting-ip", "").strip() if config.ON_HOSTED_PLATFORM else ""
+    if cf:  # only on Render, where Cloudflare sets it; locally anyone could send it
+        return cf
+    xff = request.headers.get("x-forwarded-for", "")
+    if xff.strip():
+        return xff.split(",")[-1].strip()
+    return get_remote_address(request)
+
+
+limiter = Limiter(key_func=client_ip)
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
@@ -94,7 +113,12 @@ def _set_cookie(request: Request, response: Response, token: str) -> None:
 
 
 def public_user(user: User) -> dict:
-    return {"id": user.id, "email": user.email, "name": user.name}
+    from sqlalchemy.orm import object_session
+    from db import OAuthIdentity
+    db = object_session(user)
+    providers = sorted({i.provider for i in db.exec(select(OAuthIdentity).where(OAuthIdentity.user_id == user.id))}) if db else []
+    return {"id": user.id, "email": user.email, "name": user.name, "providers": providers,
+            "has_password": bool(user.password_hash)}
 
 
 def current_user(request: Request, response: Response, db: Session = Depends(get_db)) -> User:
@@ -124,7 +148,7 @@ def optional_user(request: Request, response: Response, db: Session = Depends(ge
 
 
 @router.post("/signup")
-@limiter.limit("5/minute")
+@limiter.limit("40/minute")  # a whole class can share one campus Wi-Fi address; per-IP limits stay generous
 def signup(request: Request, response: Response, body: SignupIn, db: Session = Depends(get_db)):
     email = normalise_email(body.email)
     problem = password_problem(body.password, email)
@@ -152,18 +176,50 @@ def signup(request: Request, response: Response, body: SignupIn, db: Session = D
     return {"user": public_user(user)}
 
 
+# Password-guessing throttle: 10 failed logins for one email from one IP within 15 minutes pauses that pair.
+# Keyed on email + IP so nobody can lock a classmate out from elsewhere; a successful login resets it.
+_FAILS: dict[str, list[float]] = {}
+_FAIL_WINDOW, _FAIL_MAX = 15 * 60, 10
+_fails_lock = threading.Lock()
+
+
+def _too_many_failures(email: str) -> bool:
+    now = time.time()
+    with _fails_lock:
+        recent = [t for t in _FAILS.get(email, []) if now - t < _FAIL_WINDOW]
+        _FAILS[email] = recent
+        return len(recent) >= _FAIL_MAX
+
+
+def _record_failure(email: str) -> None:
+    with _fails_lock:
+        _FAILS.setdefault(email, []).append(time.time())
+        if len(_FAILS) > 50_000:  # bound memory under a spray of random emails
+            _FAILS.clear()
+
+
 @router.post("/login")
-@limiter.limit("5/minute")
+@limiter.limit("40/minute")  # per IP (shared campus Wi-Fi); password guessing is throttled per account below
 def login(request: Request, response: Response, body: LoginIn, db: Session = Depends(get_db)):
     try:
         email = normalise_email(body.email)
     except HTTPException:
         email = body.email.strip().lower()
+    fail_key = f"{email}|{client_ip(request)}"
+    if _too_many_failures(fail_key):
+        # Same wording whether or not the account exists, so this can't be used to find accounts.
+        raise HTTPException(429, "Too many attempts for this email. Wait 15 minutes and try again.")
     user = db.exec(select(User).where(User.email == email)).first()
-    ok = hasher.verify(body.password, user.password_hash if user else DUMMY_HASH)
+    # Accounts made with Google/Microsoft have no password: check the dummy hash so timing matches, then fail.
+    has_pw = bool(user and user.password_hash)
+    ok = hasher.verify(body.password, user.password_hash if has_pw else DUMMY_HASH) and has_pw
     if not (user and ok):
+        _record_failure(fail_key)
         log_audit(db, "login_failed", email_domain=email.split("@")[-1][:60])
-        raise HTTPException(401, "Invalid email or password.")
+        raise HTTPException(401, "Invalid email or password." + (" Joined with Google or Microsoft? Use that button instead."
+                                                                 if ANY_PROVIDER else ""))
+    with _fails_lock:
+        _FAILS.pop(fail_key, None)  # a successful login clears that device's count
     _start_session(db, user, request, response)
     return {"user": public_user(user)}
 
@@ -187,6 +243,16 @@ def logout(request: Request, response: Response, db: Session = Depends(get_db)):
         if session:
             db.delete(session)
             db.commit()
+    response.delete_cookie(COOKIE, path="/")
+    return {"ok": True}
+
+
+@router.post("/logout-all")
+def logout_all(response: Response, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Sign out on every device (e.g. a lost laptop): deletes all of this student's sessions, including this one."""
+    for s in db.exec(select(AuthSession).where(AuthSession.user_id == user.id)).all():
+        db.delete(s)
+    db.commit()
     response.delete_cookie(COOKIE, path="/")
     return {"ok": True}
 

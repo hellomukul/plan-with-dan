@@ -1,9 +1,9 @@
 /* One conversation with Dan, shared by every place that shows it (the home page hero chat and the
    floating Dan panel), so a question asked in one shows up in the other. */
 import { useSyncExternalStore } from 'react'
-import { api, streamChat, type Proposal } from '../api'
+import { api, streamChat, type Proposal, type Usage } from '../api'
 
-export interface Msg { role: 'user' | 'assistant'; content: string; agent?: string | null; proposals?: Proposal[] }
+export interface Msg { role: 'user' | 'assistant'; content: string; agent?: string | null; proposals?: Proposal[]; followups?: string[]; support?: boolean; usage?: Usage | null; cached?: boolean }
 
 interface State {
   member: boolean
@@ -44,13 +44,20 @@ export function setMember(member: boolean) {
   set({ member, msgs: member ? [] : visitorMsgs(), loaded: false, remaining: null, limited: false })
 }
 
+/** Forget the visitor transcript kept in this tab (on log-out, account deletion, or a different account signing in),
+    so the next person at a shared computer doesn't see it. */
+export function forgetVisitorChat() {
+  try { sessionStorage.removeItem(VISITOR_KEY) } catch { /* storage off */ }
+  if (!state.member) set({ msgs: [], remaining: null, limited: false })
+}
+
 /** Members pick up their saved conversation the first time Dan is opened. */
 export async function loadHistory() {
   if (!state.member || state.loaded) return
   set({ loaded: true })
   try {
     const r = await api.chatHistory('dan')
-    set({ msgs: r.messages.slice(-20).map((m) => ({ role: m.role, content: m.content, agent: (m.meta?.agent as string) ?? null })) })
+    set({ msgs: r.messages.slice(-20).map((m) => ({ role: m.role, content: m.content, agent: (m.meta?.agent as string) ?? null, support: Boolean(m.meta?.support) })) })
   } catch { /* the chat still works without history */ }
 }
 
@@ -64,11 +71,11 @@ export async function sendToDan(text: string) {
       const r = await streamChat(msg, 'dan', (s) => {
         if (s.kind === 'route' || s.kind === 'agent_start') set({ step: String(s.agent ?? s.specialist ?? '') })
       })
-      set({ msgs: [...state.msgs, { role: 'assistant', content: r.answer, agent: r.agent, proposals: r.proposals }] })
+      set({ msgs: [...state.msgs, { role: 'assistant', content: r.answer, agent: r.agent, proposals: r.proposals, followups: r.followups, support: Boolean(r.support), usage: r.usage }] })
     } else {
       const r = await api.publicChat(msg, history, context)
       set({
-        msgs: [...state.msgs, { role: 'assistant', content: r.answer, agent: r.agent }],
+        msgs: [...state.msgs, { role: 'assistant', content: r.answer, agent: r.agent, followups: r.followups, support: Boolean(r.support), usage: r.usage ?? null, cached: Boolean(r.cached) }],
         remaining: typeof r.remaining_today === 'number' ? r.remaining_today : state.remaining,
         limited: Boolean(r.limited),
       })

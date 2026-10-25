@@ -1,0 +1,137 @@
+/* Global studies & Leadership page. Quiet Yale: flat 1px borders, one blue accent (--pink* is blue), no gradients.
+   Prefixed gl- so nothing leaks into other pages. Anything that changes while you interact keeps a fixed box. */
+
+/* the two requirements, side by side */
+.gl-reqs-head h2 { margin: 0; font-size: 16px; }
+.gl-reqs-head p { margin: 4px 0 0; color: var(--muted); font-size: 13.5px; }
+.gl-req-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 14px; }
+.gl-req { display: grid; grid-template-rows: auto auto 1fr auto; gap: 6px; text-align: left; font: inherit; color: var(--text); cursor: pointer;
+  padding: 14px 16px; border-radius: var(--radius-sm); border: 1px solid var(--line); background: var(--bg-2); transition: border-color 0.12s var(--ease); }
+.gl-req:hover { border-color: var(--line-2); }
+.gl-req:focus-visible { outline: 2px solid var(--pink); outline-offset: 2px; }
+.gl-req-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.gl-code { font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; color: var(--muted); border: 1px solid var(--line-2); border-radius: 6px; padding: 1px 7px; }
+.gl-req > b { font-size: 15px; font-weight: 600; }
+.gl-req-text { color: var(--muted); font-size: 13.5px; line-height: 1.5; }
+.gl-req-go { display: inline-flex; align-items: center; gap: 4px; color: var(--pink-2); font-size: 12.5px; min-height: 24px; }
+
+/* progress pills: same height in every state */
+.gl-pill { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 10px; border-radius: 999px; font-size: 12px; font-weight: 500;
+  white-space: nowrap; border: 1px solid var(--line-2); color: var(--muted); }
+.gl-pill.done { background: var(--green-soft); border-color: transparent; color: var(--green); }
+.gl-pill.progress { background: var(--pink-soft); border-color: var(--pink-line); color: var(--pink-2); }
+.gl-pill.todo { color: var(--amber); border-color: rgba(245, 181, 68, 0.35); }
+
+.gl-section { scroll-margin-top: 16px; }
+#gsr { margin-top: 28px; }
+
+/* 3-step strip: pick -> bid -> travel */
+.gl-steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; counter-reset: none; }
+.gl-step { position: relative; display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--card); }
+.gl-step + .gl-step::before { content: '→'; position: absolute; left: -12px; top: 50%; width: 12px; text-align: center; transform: translateY(-50%); color: var(--faint); font-size: 12px; }
+.gl-step-n { flex: none; width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center; background: var(--card-2); border: 1px solid var(--line-2);
+  font-family: var(--mono); font-size: 11.5px; color: var(--text); }
+.gl-step-body { display: grid; gap: 2px; min-width: 0; }
+.gl-step-body b { font-weight: 600; font-size: 14px; }
+.gl-step-body span { color: var(--muted); font-size: 12.5px; line-height: 1.45; }
+
+/* registrar: global options in the auction (first-year MBAs) */
+.gl-auction-grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.gl-sessions { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.gl-sessions li { display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--bg-2); }
+.gl-session-date { font-family: var(--mono); font-size: 12px; color: var(--text); padding-top: 1px; }
+.gl-session-main { display: grid; gap: 1px; min-width: 0; font-size: 13px; }
+.gl-session-main b { font-weight: 500; }
+.gl-session-main span { color: var(--muted); font-size: 12.5px; }
+
+/* GSA: the note and the error share one grid cell */
+.gl-swap { display: grid; margin: 8px 0 0; }
+.gl-swap > span { grid-area: 1 / 1; visibility: hidden; }
+.gl-swap > span.on { visibility: visible; }
+.gl-save { min-width: 64px; }
+/* "In your plan" / "Tracking": two lines reserved, longer lists end in an ellipsis */
+.gl-where dd { min-height: 2lh; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+
+/* fit helper: the box fills the card and always has room for four one-line matches */
+.gl-fit-card { display: flex; flex-direction: column; }
+.gl-fit { flex: 1; margin-top: 10px; min-height: calc(4lh + 28px); font-size: 13px; line-height: 1.5; padding: 10px 12px; border: 1px dashed var(--line-2); border-radius: var(--radius-sm); }
+.gl-fit p { margin: 0; }
+.gl-fit ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.gl-fit li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gl-fit b { font-weight: 600; color: var(--text); }
+
+/* key dates: the name wraps, the badge never leaves its row */
+.gl-week { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; align-items: start; }
+.gl-week b { min-width: 0; }
+.gl-week .badge { justify-self: end; margin-top: 1px; }
+.gl-week .pb-date { grid-column: 1 / -1; }
+
+/* options */
+.gl-opt-title { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.gl-fit-tag { visibility: hidden; flex: none; }
+.gl-fit-tag.on { visibility: visible; }
+.gl-course-act { flex-wrap: nowrap; }
+.gl-add, .gl-inplan { min-width: 72px; justify-content: center; }
+.gl-done-check { color: var(--faint); }  /* always shown, so marking Done never re-wraps the row */
+.tabs button.on .gl-done-check { color: var(--green); }
+.gl-term:disabled { opacity: 0.5; cursor: not-allowed; }
+.gl-busy { display: inline-flex; width: 16px; visibility: hidden; }
+.gl-busy.on { visibility: visible; }
+
+.gl-ldr-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 6px; }
+
+@media (max-width: 900px) {
+  .gl-steps { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .gl-step + .gl-step::before { content: '↓'; left: 24px; top: -8px; width: 12px; height: 8px; line-height: 8px; transform: translateX(-50%); }
+  .gl-auction-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 640px) {
+  .gl-reqs.card.pad-lg { padding: 16px; }
+  .gl-req-grid { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .gl-req { padding: 12px 14px; }
+  .gl-step { padding: 10px 12px; }
+  .pb-track .tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
+  .pb-track .tabs button { justify-content: center; }
+  .pb-track { gap: 8px; }
+  .gl-term { flex: 1; }
+  .pb-hero .pb-inline-num { height: 44px; }
+  .gl-ldr-head { align-items: flex-start; }
+  /* 44px tap targets on phones */
+  .pb-track .tabs button, .gl-term, .gl-more, .gl-course-act .btn, .gl-save { min-height: 44px; }
+  .pb-switch { min-height: 44px; }
+}
+
+/* Phones: an option's details and course list fold behind one 44px toggle (opening adds height only below it). */
+.gl-opt-toggle { display: none; }
+@media (max-width: 640px) {
+  .gl-opt-toggle { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; min-height: 44px; padding: 0 12px;
+    border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--bg-2); color: var(--text); font: inherit; font-size: 13.5px; cursor: pointer; text-align: left; }
+  .gl-opt-toggle .icon { flex: none; color: var(--muted); }
+  .pb-opt.open .gl-opt-toggle .icon { transform: rotate(180deg); }
+  .pb-opt:not(.open) .pb-opt-body { display: none; }
+}
+
+/* Courses that can't be added say why, in the same slot as Add */
+.gl-why { max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; }
+
+/* Non-MBA programs: their own travel rule in place of the MBA GSA budget */
+.gl-prog { display: grid; gap: 8px; }
+.gl-prog-text { margin: 0; font-size: 15px; line-height: 1.5; }
+
+/* Loading skeleton: roughly the final page's blocks, so the page doesn't jump when data arrives */
+.gl-skel { display: grid; gap: 0; }
+.gl-skel-reqs { height: 264px; display: grid; place-items: center; }
+.gl-skel-steps { height: 86px; margin-top: 28px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--card); }
+.gl-skel-gsa { height: 254px; margin-top: 16px; }
+.gl-skel-half { height: 469px; }
+.gl-skel .pb-opts { border: 0; background: none; display: grid; gap: 12px; overflow: visible; }
+.gl-skel-opt { height: 420px; }
+@media (max-width: 900px) {
+  .gl-skel-steps { height: 244px; }
+  .gl-skel-half { height: 430px; }
+}
+@media (max-width: 640px) {
+  .gl-skel-reqs { height: 453px; }
+  .gl-skel-gsa { height: 402px; }
+  .gl-skel-opt { height: 380px; }
+}

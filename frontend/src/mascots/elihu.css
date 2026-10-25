@@ -1,0 +1,112 @@
+/* Elihu the owl: pure HTML/CSS. Every length is a multiple of --u (1/100 of his width), so he scales cleanly.
+   Flat fills only, like Handsome Dan; motion is slow and rare, and stops entirely under prefers-reduced-motion. */
+.elihu {
+  --u: calc(var(--size, 64px) / 100);
+  --el-feather: #8b735b;
+  --el-feather-dk: #6a5442;
+  --el-belly: #d9c6a7;
+  --el-disc: #ecdfc6;
+  --el-iris: #f0b443;
+  --el-brass: #d8b45c;
+  --el-beak: #e39b35;
+  --el-paper: #f4ebd7;
+  --el-roll: #dccaa1;
+  position: relative; display: inline-block; flex: none; vertical-align: middle;
+  width: calc(var(--u) * 100); height: calc(var(--u) * 120);
+}
+.elihu > span, .elihu span span { position: absolute; display: block; }
+
+/* body and belly */
+.el-body { left: calc(var(--u) * 14); top: calc(var(--u) * 22); width: calc(var(--u) * 72); height: calc(var(--u) * 90);
+  background: var(--el-feather); border-radius: 50% 50% 45% 45% / 55% 55% 45% 45%; }
+.el-belly { left: calc(var(--u) * 14); top: calc(var(--u) * 38); width: calc(var(--u) * 44); height: calc(var(--u) * 48);
+  background: var(--el-belly); border-radius: 50% 50% 46% 46% / 40% 40% 60% 60%; }
+.el-speckle { left: calc(var(--u) * 9); top: calc(var(--u) * 10); width: calc(var(--u) * 3.4); height: calc(var(--u) * 3.4); border-radius: 50%;
+  background: rgba(106, 84, 66, 0.55);
+  box-shadow:
+    calc(var(--u) * 12) 0 0 0 rgba(106, 84, 66, 0.55), calc(var(--u) * 24) 0 0 0 rgba(106, 84, 66, 0.55),
+    calc(var(--u) * 6) calc(var(--u) * 8) 0 0 rgba(106, 84, 66, 0.5), calc(var(--u) * 18) calc(var(--u) * 8) 0 0 rgba(106, 84, 66, 0.5),
+    calc(var(--u) * 12) calc(var(--u) * 16) 0 0 rgba(106, 84, 66, 0.45); }
+
+/* wings: the left one peeks out behind the body, the right one grips the scroll */
+.el-wing { width: calc(var(--u) * 20); height: calc(var(--u) * 42); background: var(--el-feather-dk); border-radius: 50%; }
+.el-wing.l { left: calc(var(--u) * 7); top: calc(var(--u) * 58); transform: rotate(14deg); }
+.el-wing.r { left: calc(var(--u) * 74); top: calc(var(--u) * 66); width: calc(var(--u) * 17); height: calc(var(--u) * 32); transform: rotate(-30deg); }
+
+/* head: tufts, a quill tucked behind one, heart-shaped face discs */
+.el-head { left: 0; top: 0; width: calc(var(--u) * 100); height: calc(var(--u) * 70); transform-origin: 50% 85%;
+  animation: el-tilt 11s ease-in-out infinite; }
+.el-quill { left: calc(var(--u) * 9); top: calc(var(--u) * -1); width: calc(var(--u) * 8); height: calc(var(--u) * 30); background: #f6f1e6;
+  border-radius: 50% 50% 45% 45% / 85% 85% 15% 15%; transform: rotate(-24deg); transform-origin: 50% 100%; }
+.el-quill::after { content: ''; position: absolute; left: calc(var(--u) * 3.5); top: calc(var(--u) * 5); width: calc(var(--u) * 1); height: calc(var(--u) * 27);
+  background: #c2ad85; border-radius: 1px; }
+.el-tuft { top: calc(var(--u) * 9); width: calc(var(--u) * 20); height: calc(var(--u) * 24); background: var(--el-feather-dk); }
+.el-tuft.l { left: calc(var(--u) * 17); clip-path: polygon(0 100%, 22% 0, 100% 100%); }
+.el-tuft.r { left: calc(var(--u) * 63); clip-path: polygon(0 100%, 78% 0, 100% 100%); }
+.el-crown { left: calc(var(--u) * 15); top: calc(var(--u) * 18); width: calc(var(--u) * 70); height: calc(var(--u) * 44); background: var(--el-feather);
+  border-radius: 50% 50% 46% 46% / 58% 58% 42% 42%; }
+.el-disc { top: calc(var(--u) * 26); width: calc(var(--u) * 31); height: calc(var(--u) * 31); background: var(--el-disc); border-radius: 50%; }
+.el-disc.l { left: calc(var(--u) * 20); }
+.el-disc.r { left: calc(var(--u) * 49); }
+.el-eye { top: calc(var(--u) * 33); width: calc(var(--u) * 17); height: calc(var(--u) * 17); background: var(--el-iris); border-radius: 50%; overflow: hidden; }
+.el-eye.l { left: calc(var(--u) * 27); }
+.el-eye.r { left: calc(var(--u) * 56); }
+.el-pupil { left: calc(var(--u) * 4); top: calc(var(--u) * 4); width: calc(var(--u) * 9); height: calc(var(--u) * 9); background: #1a1410; border-radius: 50%;
+  box-shadow: inset calc(var(--u) * 2) calc(var(--u) * 2) 0 calc(var(--u) * -0.6) #1a1410; }
+.el-pupil::after { content: ''; position: absolute; left: calc(var(--u) * 1.6); top: calc(var(--u) * 1.4); width: calc(var(--u) * 3); height: calc(var(--u) * 3);
+  border-radius: 50%; background: #fff; }
+.el-lid { inset: 0; background: var(--el-feather); transform: scaleY(0); transform-origin: top; animation: el-blink 6.5s infinite; }
+
+/* brass spectacles: round lenses, a bridge, little arms, and a glint that sweeps across now and then */
+.el-specs { left: 0; top: 0; width: 100%; height: 100%; }
+.el-lens { top: calc(var(--u) * 30); width: calc(var(--u) * 23); height: calc(var(--u) * 23); border: calc(var(--u) * 2.4) solid var(--el-brass);
+  border-radius: 50%; background: rgba(255, 255, 255, 0.07); box-sizing: border-box; overflow: hidden; }
+.el-lens.l { left: calc(var(--u) * 24); }
+.el-lens.r { left: calc(var(--u) * 53); }
+.el-bridge { left: calc(var(--u) * 45.5); top: calc(var(--u) * 36); width: calc(var(--u) * 9); height: calc(var(--u) * 5);
+  border-top: calc(var(--u) * 2.2) solid var(--el-brass); border-radius: 50% 50% 0 0 / 100% 100% 0 0; box-sizing: border-box; }
+.el-specs::before, .el-specs::after { content: ''; position: absolute; top: calc(var(--u) * 39.5); width: calc(var(--u) * 6); height: calc(var(--u) * 2);
+  background: var(--el-brass); border-radius: 2px; }
+.el-specs::before { left: calc(var(--u) * 19); }
+.el-specs::after { left: calc(var(--u) * 75); }
+.el-glint { top: calc(var(--u) * -4); left: 0; width: calc(var(--u) * 3.2); height: calc(var(--u) * 28); background: rgba(255, 255, 255, 0.75);
+  opacity: 0; transform: translateX(calc(var(--u) * -8)) rotate(28deg); animation: el-glint 8s ease-in-out infinite; }
+.el-lens.r .el-glint { animation-delay: 0.12s; }
+.el-beak { left: calc(var(--u) * 46); top: calc(var(--u) * 50); width: calc(var(--u) * 8); height: calc(var(--u) * 9); background: var(--el-beak);
+  clip-path: polygon(0 0, 100% 0, 55% 100%, 45% 100%); border-radius: 2px; }
+
+.el-feet { left: calc(var(--u) * 33); top: calc(var(--u) * 108); width: calc(var(--u) * 34); height: calc(var(--u) * 8); }
+.el-feet > span { top: 0; width: calc(var(--u) * 12); height: calc(var(--u) * 7); background: var(--el-beak);
+  border-radius: calc(var(--u) * 3) calc(var(--u) * 3) calc(var(--u) * 6) calc(var(--u) * 6); }
+.el-feet > span:first-child { left: 0; }
+.el-feet > span:last-child { right: 0; }
+
+/* the scroll: half-rolled at rest, unrolls when you hover whatever Elihu sits in */
+.el-scroll { left: calc(var(--u) * 44); top: calc(var(--u) * 72); width: calc(var(--u) * 38); height: calc(var(--u) * 32); transform: rotate(-10deg); }
+.el-paper { left: calc(var(--u) * 3); top: calc(var(--u) * 3); width: calc(var(--u) * 32); height: calc(var(--u) * 25); background: var(--el-paper);
+  transform-origin: top; transform: scaleY(0.78); transition: transform 0.5s var(--ease, ease); }
+.el-lines { left: calc(var(--u) * 5); top: calc(var(--u) * 6); width: calc(var(--u) * 20); height: calc(var(--u) * 1.8); border-radius: 2px; background: #b6a27a;
+  box-shadow: 0 calc(var(--u) * 4.5) 0 0 #b6a27a, 0 calc(var(--u) * 9) 0 calc(var(--u) * -0.4) #b6a27a, calc(var(--u) * -3) calc(var(--u) * 13.5) 0 calc(var(--u) * -0.4) #b6a27a; }
+.el-roll { left: 0; width: calc(var(--u) * 38); height: calc(var(--u) * 6); background: var(--el-roll); border-radius: calc(var(--u) * 3);
+  box-shadow: inset 0 calc(var(--u) * -1.2) 0 rgba(120, 96, 60, 0.35); }
+.el-roll.t { top: 0; }
+.el-roll.b { top: calc(var(--u) * 25); transform: translateY(calc(var(--u) * -5.5)); transition: transform 0.5s var(--ease, ease); }
+.el-seal { left: calc(var(--u) * 27); top: calc(var(--u) * 28); width: calc(var(--u) * 7); height: calc(var(--u) * 7); border-radius: 50%; background: #00356b;
+  border: calc(var(--u) * 1) solid #63aaff; box-sizing: border-box; transform: translateY(calc(var(--u) * -5.5)); transition: transform 0.5s var(--ease, ease); }
+.elihu-host:hover .el-paper, .elihu-host:focus-visible .el-paper, .elihu-host:focus-within .el-paper, .elihu.open .el-paper { transform: scaleY(1); }
+.elihu-host:hover .el-roll.b, .elihu-host:hover .el-seal, .elihu-host:focus-visible .el-roll.b, .elihu-host:focus-visible .el-seal,
+.elihu-host:focus-within .el-roll.b, .elihu-host:focus-within .el-seal, .elihu.open .el-roll.b, .elihu.open .el-seal { transform: none; }
+
+@keyframes el-blink { 0%, 92%, 100% { transform: scaleY(0); } 94.5% { transform: scaleY(1); } }
+@keyframes el-tilt { 0%, 55%, 100% { transform: rotate(0); } 64%, 74% { transform: rotate(-7deg); } 82% { transform: rotate(3deg); } 88% { transform: rotate(0); } }
+@keyframes el-glint {
+  0%, 78% { opacity: 0; transform: translateX(calc(var(--u) * -8)) rotate(28deg); }
+  82% { opacity: 0.85; }
+  90%, 100% { opacity: 0; transform: translateX(calc(var(--u) * 24)) rotate(28deg); }
+}
+
+.elihu.still .el-head, .elihu.still .el-lid, .elihu.still .el-glint { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  .elihu .el-head, .elihu .el-lid, .elihu .el-glint { animation: none; }
+  .elihu .el-paper, .elihu .el-roll.b, .elihu .el-seal { transition: none; }
+}

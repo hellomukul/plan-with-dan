@@ -5,6 +5,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { ArrowUp } from 'lucide-react'
 import { DanAvatar, DanMessages } from './DanChat'
+import TokenMeter from './TokenMeter'
 import { sendToDan, useDanChat } from '../lib/danChat'
 
 interface Props {
@@ -75,6 +76,7 @@ export default function HeroChat({ who, starters, onChangeWho, onSignup }: Props
       )}
       <div className="hc-fine">
         <span>AI answers can be wrong; check the linked source.</span>
+        <TokenMeter msgs={chat.msgs} />
         {chat.remaining !== null && !chat.limited && <span>{chat.remaining} free question{chat.remaining === 1 ? '' : 's'} left today</span>}
       </div>
     </section>

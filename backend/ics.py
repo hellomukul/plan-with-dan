@@ -21,7 +21,7 @@ from zoneinfo import ZoneInfo
 from icalendar import Calendar, Event, vRecur
 
 from catalog import DAY_ICS, DAY_ORDER, Section
-from rules import CALENDAR, CALENDAR_ENDS, MAKEUP_DAYS, NO_CLASS_DATES
+from rules import CALENDAR, CALENDAR_ENDS, MAKEUP_DAYS, NO_CLASS_DATES, calendar_end
 
 ET = ZoneInfo("America/New_York")
 PY_WEEKDAY = {"M": 0, "T": 1, "W": 2, "Th": 3, "F": 4}
@@ -42,6 +42,8 @@ def first_meeting(sec: Section) -> date | None:
 
 
 def _at(day: date, minutes: int) -> datetime:
+    """Local time on `day`; 24:00 (1440) rolls over to midnight the next day."""
+    day, minutes = day + timedelta(days=minutes // 1440), minutes % 1440
     return datetime.combine(day, time(minutes // 60, minutes % 60), ET)
 
 
@@ -97,7 +99,7 @@ def deadline_event(day: str, label: str, kind: str) -> Event:
     ev.add("dtstamp", datetime.now(timezone.utc))
     ev.add("summary", f"SOM · {label}")
     d = date.fromisoformat(day)
-    last = date.fromisoformat(CALENDAR_ENDS.get(day, day))
+    last = date.fromisoformat(calendar_end(day))
     ev.add("dtstart", d)
     ev.add("dtend", last + timedelta(days=1))  # all-day DTEND is exclusive
     ev.add("categories", [kind])
@@ -105,7 +107,25 @@ def deadline_event(day: str, label: str, kind: str) -> Event:
     return ev
 
 
-def build_calendar(sections: list[Section], owner: str, include_deadlines: bool = True) -> bytes:
+def personal_event(row, owner: str) -> Event:
+    """A student's own booked appointment (coach, interview room...), as a one-off event."""
+    ev = Event()
+    ev.add("uid", f"{owner}-personal-{row.id}@planwithdan")
+    ev.add("dtstamp", datetime.now(timezone.utc))
+    ev.add("summary", row.title)
+    day = date.fromisoformat(row.date)
+    ev.add("dtstart", _at(day, row.start_min))
+    ev.add("dtend", _at(day, row.end_min))
+    if row.location:
+        ev.add("location", row.location)
+    if row.note:
+        ev.add("description", row.note)
+    return ev
+
+
+def build_calendar(sections: list[Section], owner: str, include_deadlines: bool = True, personal: list | None = None,
+                   dates: list[tuple[str, str, str]] | None = None) -> bytes:
+    """dates: the academic dates to include (defaults to the shared calendar; rules.calendar_for adds the auction)."""
     cal = Calendar()
     cal.add("prodid", "-//Plan with Dan//Yale SOM planner//EN")
     cal.add("version", "2.0")
@@ -119,8 +139,10 @@ def build_calendar(sections: list[Section], owner: str, include_deadlines: bool 
         if ev is not None:
             cal.add_component(ev)
     if include_deadlines:
-        for day, label, kind in CALENDAR:
+        for day, label, kind in (dates if dates is not None else CALENDAR):
             cal.add_component(deadline_event(day, label, kind))
+    for row in personal or []:
+        cal.add_component(personal_event(row, owner))
     cal.add_missing_timezones()
     return cal.to_ical()
 

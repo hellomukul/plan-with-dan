@@ -1,0 +1,18 @@
+/* My plan: "Recent changes" card (moved from Dan's Desk). Rows keep one line each so Undo never shifts the layout. */
+.pl-actions { contain: inline-size; } /* long summaries ellipsize instead of widening the column */
+.pl-actions-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.pl-actions-list li { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 36px; border-top: 1px solid var(--line); }
+.pl-actions-list li:first-child { border-top: 0; }
+.pl-action { font-size: 13px; line-height: 1.45; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pl-action.undone { color: var(--faint); text-decoration: line-through; }
+.pl-undo { flex: none; }
+@media (max-width: 900px) {
+  .pl-actions-list li { min-height: 48px; }
+  .pl-undo { min-height: 44px; min-width: 44px; }
+}
+/* The week grid's columns may shrink below the timetable's 520px minimum (it scrolls inside its own box),
+   so the page never scrolls sideways on a phone. */
+.pl-week > * { min-width: 0; }
+
+/* My plan requirements card: the Global Studies link is a phone-sized tap target */
+@media (max-width: 900px) { .pl-gsr-link { min-height: 44px; display: inline-flex; align-items: center; } }

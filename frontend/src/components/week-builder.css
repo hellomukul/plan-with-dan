@@ -1,0 +1,55 @@
+/* Week builder: the term check (units, recommendation, meter) and the save / calendar actions under "Your courses".
+   Imported before landing.css, so every rule here is scoped under .wb to win over the older single-class rules.
+   Every block has a fixed size in all states: the page length never changes as courses come and go. */
+
+.wb .wb-plan { min-width: 0; max-width: 100%; display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 8px 12px; align-items: center; padding: 10px 12px;
+  border: 1px solid var(--line); border-radius: 10px; }
+.wb .wb-plan.done { border-color: rgba(61, 214, 140, 0.35); }
+.wb .wb-plan.over { border-color: rgba(245, 181, 68, 0.4); }
+.wb .wb-plan-face { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; overflow: hidden; background: var(--bg-2); color: var(--muted); }
+.wb .wb-plan.done .wb-plan-face { background: var(--green-soft); }
+.wb .wb-plan.need .wb-plan-face { background: var(--pink-soft); color: var(--pink-2); }
+.wb .wb-plan.over .wb-plan-face { background: var(--amber-soft); color: var(--amber); }
+.wb .wb-plan-face .wiggle { display: inline-flex; margin-top: 6px; }  /* Dan's ears sit at the top of his box; nudge him to the circle's centre */
+.wb .wb-plan-text { display: grid; gap: 2px; min-width: 0; }
+.wb .wb-plan-head { margin: 0; font-size: 14px; font-weight: 500; line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wb .wb-plan.done .wb-plan-head { color: var(--green); }
+/* always two whole lines tall, clamped, whatever the message */
+.wb .wb-plan-detail { margin: 0; font-size: 12.5px; line-height: 1.4; color: var(--muted); height: 2lh; overflow: hidden;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+
+.wb .wb-meter { grid-column: 1 / -1; display: grid; gap: 6px; min-width: 0; max-width: 100%; contain: inline-size; }
+/* min-width + contain: inline-size: the nowrap caption ellipsizes and can never widen the card, even on first layout */
+.wb .wb-meter-bar { position: relative; min-width: 0; max-width: 100%; height: 4px; border-radius: 999px; background: var(--line-2); }
+.wb .wb-meter-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: inherit; background: var(--pink); }
+.wb .wb-plan.done .wb-meter-fill { background: var(--green); }
+.wb .wb-plan.over .wb-meter-fill { background: var(--amber); }
+.wb .wb-plan.info .wb-meter-fill { background: var(--faint); }
+.wb .wb-meter-tick { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; border-radius: 1px; background: var(--text); }
+.wb .wb-meter-cap { min-width: 0; display: flex; justify-content: space-between; gap: 10px; font-family: var(--mono); font-size: 11px; line-height: 1.4; color: var(--faint); white-space: nowrap; }
+.wb .wb-meter-cap > :first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.wb .wb-meter-cap > :last-child { flex: none; }
+
+/* Save + Calendar file on one row, Link your calendar below: two fixed rows at every width */
+.wb .wb-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.wb .wb-link { position: relative; flex-basis: 100%; display: flex; }
+.wb .wb-link > .btn { margin-left: -9px; }  /* ghost button: line its icon up with the Save button's edge */
+.wb .wb-link-lock { color: var(--faint); }
+/* Hint for visitors: shown on hover and keyboard focus (a tap opens sign-up directly). display:none when hidden,
+   so it never adds to the page's scroll width. */
+.wb .wb-hint { display: none; position: absolute; left: 0; bottom: calc(100% + 6px); z-index: 15; width: max-content; max-width: min(280px, 100%);
+  padding: 8px 10px; border: 1px solid var(--line-2); border-radius: 8px; background: var(--card-2); color: var(--text); font-size: 12.5px; line-height: 1.4; }
+.wb .wb-link:hover .wb-hint, .wb .wb-link:focus-within .wb-hint { display: block; }
+
+/* clash check + "no published time" list: exactly two lines tall in every state */
+.wb .wb-check { display: grid; }
+.wb .wb-check > p { display: block; margin: 0; height: 1lh; line-height: 1.45; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wb .wb-check .icon { vertical-align: -2px; margin-right: 6px; }
+.wb .wb-check .lp-clash { color: #ffb4b4; }
+.wb .wb-check .lp-clash .icon { color: var(--red); }
+
+/* phones: every action is a full 44px tap target */
+@media (max-width: 900px) { .wb .wb-actions .btn { min-height: 44px; } }
+
+/* the course just added: a border colour only (no size change), for a moment */
+.wb .wb-picked li.new { border-color: var(--pink); }

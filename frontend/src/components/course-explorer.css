@@ -1,0 +1,214 @@
+/* Course Explorer: a fixed-height master/detail panel, so nothing on the page moves while you use it. */
+.cx { padding: 0; overflow: hidden; }
+.cx-head { padding: 16px 18px 6px; }
+.cx-head h3 { margin: 0 0 4px; font-size: 18px; letter-spacing: -0.01em; }
+.cx-head p { margin: 0; max-width: 720px; }
+.cx-controls { display: grid; gap: 10px; padding: 10px 18px 14px; border-bottom: 1px solid var(--line); }
+.cx-search { display: flex; align-items: center; gap: 10px; background: var(--bg-2); border: 1px solid var(--line-2); border-radius: 12px; padding: 10px 14px; }
+.cx-search:focus-within { border-color: var(--pink-line); box-shadow: 0 0 0 3px var(--pink-soft); }
+.cx-search input { flex: 1; min-width: 0; width: auto; background: none; border: 0; outline: none; padding: 0; color: var(--text); font: inherit; font-size: 15px; }
+.cx-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.cx-seg button { padding: 4px 10px; font-size: 12.5px; }
+.cx-topic { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line-2); border-radius: 999px; padding: 0 4px 0 10px; }
+.cx-topic select { width: auto; border: 0; background: transparent; padding: 5px 6px; font-size: 12.5px; }
+
+.cx-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); height: 600px; }
+.cx-results { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--line); }
+.cx-count { display: flex; justify-content: space-between; align-items: center; padding: 8px 14px; border-bottom: 1px solid var(--line); flex: none; }
+.cx-list { list-style: none; margin: 0; padding: 4px; overflow-y: auto; flex: 1; min-height: 0; overscroll-behavior: contain; }
+.cx-list > li > button:not(.cx-more) { width: 100%; display: grid; gap: 4px; text-align: left; padding: 10px 12px; border-radius: 10px; background: transparent;
+  border: 1px solid transparent; color: var(--text); font: inherit; cursor: pointer; }
+.cx-list > li > button.active { background: var(--bg-2); }
+.cx-list > li > button.selected { background: var(--pink-soft); border-color: var(--pink-line); }
+.cx-row-top { display: flex; gap: 8px; align-items: baseline; min-width: 0; }
+.cx-row-top .course-num { flex: none; }
+.cx-row-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; font-size: 14px; }
+.cx-row-meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cx-row-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+.cx-pill { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
+.cx-pill.ok { color: var(--green); background: var(--green-soft); }
+.cx-pill.warn { color: var(--amber); background: var(--amber-soft); }
+.cx-pill.no { color: var(--faint); background: var(--bg-2); border: 1px solid var(--line); }
+.cx-pill.in { color: var(--pink-2); background: var(--pink-soft); }
+.cx-pill.plain { color: var(--muted); background: var(--bg-2); }
+.cx-pill .icon.xs { width: 11px; height: 11px; }
+.cx-more { width: 100%; padding: 10px; background: none; border: 1px dashed var(--line-2); border-radius: 10px; color: var(--muted); font: inherit; cursor: pointer; margin-top: 4px; }
+.cx-empty { padding: 24px 16px; text-align: center; }
+
+.cx-detail { overflow-y: auto; min-height: 0; overscroll-behavior: contain; }
+.cx-card { padding: 16px 18px; display: grid; gap: 14px; }
+.cx-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.cx-card-head h4 { margin: 2px 0 6px; font-size: 18px; letter-spacing: -0.01em; }
+.cx-meta { display: flex; flex-wrap: wrap; gap: 2px 14px; }
+.cx-verdict { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 10px 12px; border-radius: 10px; font-size: 13.5px; }
+.cx-verdict > span { flex: 1 1 240px; min-width: 0; }
+.cx-verdict .icon { flex: none; }
+.cx-verdict.ok { background: var(--green-soft); border: 1px solid rgba(61, 214, 140, 0.35); }
+.cx-verdict.ok > .icon { color: var(--green); }
+.cx-verdict.warn { background: var(--amber-soft); border: 1px solid rgba(245, 181, 68, 0.4); }
+.cx-verdict.warn > .icon { color: var(--amber); }
+.cx-verdict.no { background: var(--red-soft); border: 1px solid rgba(255, 92, 92, 0.35); color: #ffc2c2; }
+.cx-verdict.no > .icon { color: var(--red); }
+.cx-sections ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.cx-sections li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; font-size: 13.5px; }
+.cx-sec-main { display: grid; gap: 2px; min-width: 0; }
+.cx-sec-line { min-width: 0; }
+.cx-sec-room { display: inline-block; margin-left: 8px; white-space: nowrap; }  /* wraps as a whole, never as "· ROOM" on its own line */
+.cx-sec-sub { display: block; }
+.cx-sections li.mine { border-color: var(--pink-line); background: var(--pink-soft); }
+.cx-sec-in { flex: none; }
+.cx-phone-back { display: none; }
+.cx-p { margin: 0; line-height: 1.6; }
+.cx-bio summary { cursor: pointer; color: var(--pink-2); }
+
+.cx-count { height: 38px; box-sizing: border-box; }
+/* Phones and narrow tablets: one fixed-height pane. The list shows until you pick a course or a person; then the
+   detail takes its place with "Back to results" (no second scroll box far below the list, and the page length
+   never changes). Typing in the search returns to the list. */
+@media (max-width: 900px) {
+  .cx-body, .cx.page .cx-body { display: block; height: 640px; }
+  .cx-results { border-right: 0; height: 100%; }
+  .cx-detail { height: 100%; min-height: 0; }
+  .cx.has-detail .cx-results { display: none; }
+  .cx:not(.has-detail) .cx-detail { display: none; }
+  .cx-phone-back { display: flex; align-items: center; gap: 6px; position: sticky; top: 0; z-index: 2; width: 100%; min-height: 44px;
+    padding: 0 18px; background: var(--card); border-bottom: 1px solid var(--line); text-decoration: none; }
+}
+.cx-search { height: 50px; box-sizing: border-box; }  /* the clear button appearing must not change the height */
+.cx-search .btn.icon { height: 30px; width: 30px; }
+.cx-hidden { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; padding: 6px 14px; border-bottom: 1px solid var(--line); color: var(--muted); flex: none; }
+
+/* ---- Faculty: name filter, search results, card and spotlight (all facts from the catalog) ---- */
+.cx-count { gap: 10px; }
+.cx-count-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cx-ava { display: inline-grid; place-items: center; flex: none; border-radius: 50%; background: var(--pink-soft); border: 1px solid var(--pink-line);
+  color: var(--pink-2); font-weight: 600; letter-spacing: 0.02em; line-height: 1; user-select: none; }
+.cx-ava.sm { width: 20px; height: 20px; font-size: 9px; }
+.cx-ava.md { width: 32px; height: 32px; font-size: 12px; }
+.cx-ava.lg { width: 56px; height: 56px; font-size: 19px; }
+
+/* Faculty name filter: fixed width, so picking or clearing a name never reflows the filter row. */
+.cx-fpick { position: relative; display: inline-flex; align-items: center; gap: 6px; flex: 0 1 190px; min-width: 0; height: 30px; box-sizing: border-box;
+  border: 1px solid var(--line-2); border-radius: 999px; padding: 0 4px 0 10px; }
+.cx-fpick:focus-within { border-color: var(--pink-line); }
+.cx-fpick.on { background: var(--pink-soft); border-color: var(--pink-line); }
+.cx-fpick input { flex: 1; min-width: 0; width: auto; height: 100%; border: 0; background: transparent; padding: 0 4px; font-size: 12.5px; text-overflow: ellipsis; outline: none; }
+.cx-fpick input::placeholder { color: var(--muted); }
+.cx-fpick-x { display: inline-grid; place-items: center; width: 24px; height: 24px; flex: none; border: 0; border-radius: 50%; background: none; color: var(--muted); cursor: pointer; padding: 0; }
+.cx-fpick-x:hover { background: var(--card-2); color: var(--text); }
+.cx-fpop { position: absolute; z-index: 20; top: calc(100% + 6px); right: 0; width: 100%; min-width: 250px; max-height: 280px; overflow-y: auto; overscroll-behavior: contain;
+  list-style: none; margin: 0; padding: 4px; background: var(--card-2); border: 1px solid var(--line-2); border-radius: 10px; }
+.cx-fpop li { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 7px; cursor: pointer; font-size: 13px; }
+.cx-fpop li.active { background: var(--bg-2); }
+.cx-fpop li.chosen .cx-fpop-name { color: var(--pink-2); }
+.cx-fpop .cx-fpop-empty { cursor: default; padding: 8px; }
+.cx-fpop-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Faculty rows in the result list */
+.cx-group { padding: 8px 12px 2px; font-size: 11.5px; font-weight: 500; color: var(--faint); }
+.cx-list > li > button.cx-fac-row { grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; }
+.cx-fac-row-text { display: grid; gap: 2px; min-width: 0; }
+
+/* Faculty card */
+.cx-back { display: inline-flex; align-items: center; gap: 4px; justify-self: start; }
+.cx-fac-head { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.cx-fac-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cx-fac-name { margin: 2px 0 4px; font-size: 20px; letter-spacing: -0.015em; overflow-wrap: anywhere; }
+.cx-fac-courses { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.cx-fac-courses button { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'top pill' 'meta pill'; gap: 3px 10px;
+  align-items: center; text-align: left; padding: 9px 12px; border: 1px solid var(--line); border-radius: 10px; background: transparent; color: var(--text); font: inherit; cursor: pointer; }
+.cx-fac-courses button:hover { border-color: var(--pink-line); background: var(--bg-2); }
+.cx-fac-courses .cx-row-top { grid-area: top; }
+.cx-fac-courses .cx-row-meta { grid-area: meta; }
+.cx-fac-courses .cx-pill { grid-area: pill; }
+.cx-fac-courses button.done .cx-row-title { color: var(--muted); }
+@media (max-width: 560px) {
+  /* narrow cards: course titles wrap instead of being cut ("Advanced Softwar…") */
+  .cx-fac-courses .cx-row-title { white-space: normal; overflow-wrap: anywhere; }
+}
+.cx-fac-topics, .cx-fac-team { display: flex; flex-wrap: wrap; gap: 6px; }
+.cx-fac-team .chip { max-width: 100%; padding: 3px 10px 3px 4px; }
+.cx-fac-chip-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cx-fac-foot { display: grid; gap: 4px; padding-top: 2px; }
+.cx-fac-foot a { display: inline-flex; align-items: center; gap: 5px; justify-self: start; }
+.cx-fac-foot p { margin: 0; }
+
+/* Empty pane: what it does, plus today's faculty spotlight (rotates by date, never random) */
+.cx-welcome { min-height: 100%; display: grid; align-content: center; gap: 22px; padding: 24px 18px; max-width: 480px; margin: 0 auto; box-sizing: border-box; }
+.cx-welcome-top { display: grid; justify-items: center; gap: 10px; text-align: center; }
+.cx-welcome-top p { margin: 0; max-width: 360px; }
+.cx-spot { display: grid; gap: 12px; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg-2); }
+.cx-spot-head { display: flex; align-items: center; gap: 12px; }
+.cx-spot-head svg { flex: none; }
+.cx-spot-head h5 { margin: 0 0 2px; font-size: 14px; font-weight: 600; letter-spacing: -0.01em; }
+.cx-spot-head p { margin: 0; }
+.cx-spot-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.cx-spot-grid button { width: 100%; display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px;
+  background: var(--card); color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.cx-spot-grid button:hover { border-color: var(--pink-line); }
+.cx-spot-text { display: grid; min-width: 0; }
+.cx-spot-name, .cx-spot-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cx-spot-name { font-weight: 500; font-size: 13.5px; }
+.cx-spot-note { margin: 0; text-align: center; }
+@media (max-width: 560px) {
+  .cx-spot-grid { grid-template-columns: minmax(0, 1fr); }
+  .cx-fpick { flex: 1 1 100%; }
+}
+
+/* ---- Profile links on faculty cards ---- */
+.cx-fac-links { display: flex; flex-wrap: wrap; gap: 4px 18px; }
+.cx-fac-link { display: inline-flex; align-items: center; gap: 5px; }
+
+/* ---- Page variant: the signed-in Course explorer page ---- */
+.cx.page .cx-controls { padding-top: 14px; }
+.cx.page .cx-body { height: clamp(560px, calc(100dvh - 330px), 720px); }
+.cx-more-wrap { position: relative; flex: none; }
+.cx-more-btn { width: 140px; justify-content: flex-start; height: 30px; box-sizing: border-box; white-space: nowrap; }  /* fixed width: the count never reflows the row */
+.cx-more-n { min-width: 1.4em; margin-left: auto; text-align: center; color: var(--pink-2); font-size: 11.5px; }
+.cx-more-pop { position: absolute; z-index: 25; top: calc(100% + 6px); left: 0; width: min(340px, calc(100vw - 32px)); display: grid; gap: 8px;
+  padding: 12px; background: var(--card-2); border: 1px solid var(--line-2); border-radius: 12px; }
+.cx-more-pop .section-label { margin: 0; }
+.cx-more-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.cx-more-chips .icon.xs { width: 12px; height: 12px; }
+.cx-more-pop.right { left: auto; right: 0; }
+.cx-more-foot { display: flex; justify-content: space-between; align-items: center; padding-top: 4px; }
+.cx-more-foot .link-btn:disabled { color: var(--faint); cursor: default; text-decoration: none; }
+
+@media (max-width: 900px) {
+  .cx.page .cx-body { height: 640px; }  /* fixed (no dvh: the phone's URL bar would change the page length on scroll) */
+  /* phones: every control is a 44px tap target (home page and the Course explorer page) */
+  .cx .cx-search { height: 50px; }
+  .cx .cx-search .btn.icon { width: 44px; height: 44px; margin-right: -8px; }
+  .cx .cx-search { padding-top: 0; padding-bottom: 0; }
+  .cx .cx-search input { align-self: stretch; height: 100%; }
+  .cx .cx-seg button { min-height: 44px; }
+  .cx .cx-filters > .chip { min-height: 44px; height: 44px; }
+  .cx .cx-more-btn { min-height: 46px; height: 46px; }
+  .cx .cx-topic, .cx .cx-fpick { min-height: 46px; height: 46px; }
+  .cx .cx-topic select, .cx .cx-fpick input { height: 44px; min-height: 44px; }
+  .cx .cx-fpick-x { width: 44px; height: 44px; margin-right: -3px; }
+  .cx .cx-card > a.small { min-height: 44px; display: inline-flex; align-items: center; }
+  /* faculty names: a 44px tap target that doesn't grow the meta line (negative margin), so "2 units", the name and
+     "75 seats" stay on one baseline */
+  .cx .cx-people .link-btn { min-height: 44px; display: inline-flex; align-items: center; margin: -12px 0; }
+  .cx .star-btn, .cx .cx-empty .btn { min-height: 44px; }
+  .cx .cx-fpop li { min-height: 44px; }
+  .cx .cx-more-pop .chip, .cx .cx-more-foot .btn, .cx .cx-more-foot .link-btn { min-height: 44px; }
+  .cx .cx-list > li > button:not(.cx-more) { min-height: 44px; }
+  .cx .cx-more { min-height: 44px; }
+  .cx .cx-count .link-btn, .cx .cx-hidden .link-btn, .cx .cx-back { min-height: 44px; display: inline-flex; align-items: center; }
+  .cx .cx-count { height: 46px; }
+  .cx .cx-sections .btn, .cx .cx-verdict .btn, .cx .cx-fac-team .chip { min-height: 44px; }
+  .cx .cx-fac-link { min-height: 44px; }
+  .cx .cx-spot-grid button { min-height: 52px; }
+}
+@media (max-width: 560px) {
+  /* phones: topic + more filters share a row, the faculty picker gets its own full row underneath */
+  .cx.page .cx-topic { flex: 1 1 calc(50% - 4px); min-width: 0; }
+  .cx.page .cx-topic select { flex: 1; min-width: 0; }
+  .cx.page .cx-more-wrap { flex: 1 1 calc(50% - 4px); min-width: 0; position: static; }
+  .cx.page .cx-filters { position: relative; }  /* the popover spans the whole filter block */
+  .cx.page .cx-fpick { order: 1; }
+  .cx.page .cx-more-btn { width: 100%; }
+  .cx-more-pop, .cx-more-pop.right { left: 0; right: 0; width: auto; }
+}

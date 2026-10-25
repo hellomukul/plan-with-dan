@@ -29,7 +29,7 @@ from planning import (
 )
 import knowledge
 import programs
-from rules import CALENDAR, GSA_DAYS, GSR_OPTIONS, LDR, gsr_courses
+from rules import AUCTION, CALENDAR, GSA_DAYS, GSR_OPTIONS, LDR, auction_applies, calendar_for, gsr_courses
 from safety import fence
 
 Term = Literal["202603", "202701", "any"]
@@ -337,7 +337,9 @@ def upcoming_dates(ctx: RunContext[StudentContext], count: int = 8) -> str:
     """The next academic-calendar dates and deadlines from today."""
     _log(ctx, "upcoming_dates")
     today = ctx.deps.today.isoformat()
-    rows = [(d, label, kind) for d, label, kind in CALENDAR if d >= today][: max(1, min(count, 15))]
+    prof = ctx.deps.profile
+    rows = [(d, label, kind) for d, label, kind in calendar_for(prof.get("program"), prof.get("year"))
+            if d >= today][: max(1, min(count, 15))]
     return "\n".join(f"{d} ({(date.fromisoformat(d) - ctx.deps.today).days} days): {label} [{kind}]" for d, label, kind in rows)
 
 
@@ -356,7 +358,7 @@ def bid_history(ctx: RunContext[StudentContext], course_number: str) -> str:
     offs = ctx.deps.catalog.offering_for_number(num, DEFAULT_TERM)
     seats = offs[0].lead.limit if offs else None
     if stats.get("too_few"):
-        return (f"{num}: fewer than 3 student reports, so stats are hidden to protect privacy. "
+        return (f"{num}: fewer than 5 students have reported, so stats are hidden to protect privacy. "
                 f"Seats: {seats or 'unknown'}. SOM does not publish clearing prices.")
     if not stats.get("reports"):
         return f"{num}: no bid reports yet. Seats: {seats or 'unknown'}. SOM does not publish clearing prices."

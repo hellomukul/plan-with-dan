@@ -18,7 +18,8 @@ import programs
 from rules import DEGREE, GSA_DAYS, GSR_OPTIONS, gsr_courses
 
 PASSING_MINUTES = 15
-MIN_REPORTS = 3  # hide bid statistics until at least this many real reports exist
+MIN_REPORTS = 5  # hide bid statistics until this many different students have reported (fake accounts are cheap)
+EXACT_REPORTS = 10  # below this, medians are rounded and the exact lowest win / highest loss stay hidden
 EARLY = 9 * 60
 LATE = 18 * 60
 LONG_GAP = 180
@@ -161,6 +162,9 @@ def week_review(sections: list[Section]) -> dict:
     busy: set[str] = set()
     if halves:
         for suffix, label in (("-1", "Session 1"), ("-2", "Session 2")):
+            half = [s for s in sections if s.session.endswith(suffix)]
+            if half and all(s.ended() for s in half):
+                continue  # that half-term is over (e.g. Fall-1 in late October): nothing left to critique
             window = [s for s in sections if s.session.endswith(suffix) or not s.session.endswith(("-1", "-2"))]
             n, b = _window_review(window, label)
             notes += n
@@ -371,9 +375,9 @@ def gsa_check(option_key: str, gsa_days_used: int) -> dict:
         return {"ok": False, "days_left": left, "reason": f"The application window closed on {opt['apply_by']}."}
     need = opt["gsa_days"] or 0
     if need > left:
-        return {"ok": True, "days_left": left, "reason": f"Allowed, but it uses ~{need} days and you have {left}; the rest is out of pocket."}
+        return {"ok": True, "days_left": left, "reason": f"Allowed, but it uses about {need} days and you have {left} left; the rest is out of pocket."}
     return {"ok": True, "days_left": left - need,
-            "reason": f"Fits your GSA days: ~{need} used, {left - need} left. Cash costs (like airfare) are separate."}
+            "reason": f"Uses about {need} of your {left} days left; {left - need} left after. Cash costs (like airfare) are separate."}
 
 
 # ---------------------------------------------------------------- alternates
@@ -422,7 +426,8 @@ def bid_stats(reports: list[dict]) -> dict:
     sample_count = len(reports) - len(real)
     if real:  # once students report real outcomes, SAMPLE rows stop counting
         reports = real
-    if not all(r.get("source") == "sample" for r in reports) and len(reports) < MIN_REPORTS:
+    reporters = len({r.get("user_id") or f"anon-{i}" for i, r in enumerate(reports)})
+    if not all(r.get("source") == "sample" for r in reports) and reporters < MIN_REPORTS:
         # Too few real reports: exact numbers would reveal individual classmates' bids.
         return {"reports": len(reports), "sample_only": False, "sample_reports_ignored": sample_count,
                 "too_few": True, "won": None, "lost": None, "lowest_winning_bid": None,
@@ -431,16 +436,25 @@ def bid_stats(reports: list[dict]) -> dict:
     won = sorted(r["points_bid"] for r in reports if r["got_seat"])
     lost = sorted(r["points_bid"] for r in reports if not r["got_seat"])
     clearing = [r["clearing_points"] for r in reports if r.get("clearing_points") is not None]
+    exact = all(r.get("source") == "sample" for r in reports) or reporters >= EXACT_REPORTS
+
+    def med(xs: list) -> float | None:
+        if not xs:
+            return None
+        m = statistics.median(xs)
+        return m if exact else round(m / 10) * 10  # rounded until enough classmates report, so no one bid is exposed
+
     return {
         "reports": len(reports),
         "sample_only": all(r.get("source") == "sample" for r in reports),
         "sample_reports_ignored": sample_count if real else 0,
         "won": len(won),
         "lost": len(lost),
-        "lowest_winning_bid": won[0] if won else None,
-        "median_winning_bid": statistics.median(won) if won else None,
-        "highest_losing_bid": lost[-1] if lost else None,
-        "median_reported_clearing": statistics.median(clearing) if clearing else None,
+        "lowest_winning_bid": (won[0] if won else None) if exact else None,
+        "median_winning_bid": med(won),
+        "highest_losing_bid": (lost[-1] if lost else None) if exact else None,
+        "median_reported_clearing": med(clearing),
+        "rounded": not exact,
         "terms": sorted({r["term_code"] for r in reports if r.get("term_code")}),
     }
 

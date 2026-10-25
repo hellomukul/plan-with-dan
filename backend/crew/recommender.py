@@ -26,6 +26,7 @@ from pydantic_ai.exceptions import ModelHTTPError
 from catalog import TERM_NAMES, card_text, get_catalog
 from config import ai_available
 from crew.agents import critic, curator
+from crew.chat import _split_followups
 from crew.context import load_context
 from crew.runtime import Run
 from db import RecommendationRun
@@ -68,11 +69,15 @@ def retrieve(ctx, term: str) -> tuple[list, dict]:
             return False
         return not o.lead.title.upper().startswith("IE:") or gsa_used == 0  # IE needs all 10 GSA days
 
+    # The student's week this term (their plan + the core SOM assigns): only courses with a section that fits it
+    # go to the curator, so Elihu never recommends something that clashes with their own core or plan.
+    week = list(ctx.sections(term)) + core_load(p, term, cat)["sections"]
     pool = [
         o for o in cat.eligible(term, program=program)
         if o.lead.number.upper() not in completed and o.key not in planned_keys
         and any(respects_prefs(s, prefs) for s in o.sections_for(program))
         and o.lead.units > 0 and trip_ok(o)
+        and best_section(o, week, prefs, program) is not None
     ]
     ranked = cat.search(_query(p), pool, limit=len(pool))
     scored = []
@@ -162,8 +167,13 @@ async def recommend(db, user_id: int, term: str = "202701", queue: asyncio.Queue
     completed_numbers = {" ".join(c.split()).upper() for c in p.get("completed", [])}
     skip_numbers = completed_numbers | {r.section.number.upper() for r in ctx.plan}
     assembled = []
+    trip_picked = False
     for pk in sorted(kept, key=lambda x: x.get("priority", 2)):
         off = by_key[pk["key"]]
+        if _is_trip(off):
+            if trip_picked:
+                continue  # one Global Studies trip at a time: keep the higher-priority one
+            trip_picked = True
         sec = best_section(off, chosen, prefs, program)
         row = {
             **pk,
@@ -178,9 +188,11 @@ async def recommend(db, user_id: int, term: str = "202701", queue: asyncio.Queue
         else:
             mine = off.sections_for(program) or off.sections
             first = mine[0]
-            hits = conflicts(chosen + [first])
+            me = f"{off.lead.number} §{first.section}"
+            # only clashes that involve this pick (the student's own existing clashes aren't the pick's fault)
+            hits = [h for h in conflicts(chosen + [first]) if me in (h["a"], h["b"])]
             row.update(fits=False, section_id=first.id, section=first.section, time=first.time_label,
-                       clash_with=sorted({h["a"] for h in hits} | {h["b"] for h in hits} - {f"{off.lead.number} §{first.section}"}))
+                       clash_with=sorted(({h["a"] for h in hits} | {h["b"] for h in hits}) - {me}))
         assembled.append(row)
 
     # 5. backups
@@ -197,8 +209,10 @@ async def recommend(db, user_id: int, term: str = "202701", queue: asyncio.Queue
     units_new = sum(r["units"] for r in assembled if r["fits"])
     units_total = sum(s.units for s in term_secs if not s.is_core) + core["units"]
     gsr_keys = {k for ks in gsr_courses(ctx.catalog, term).values() for k in ks}
+    summary, followups = _split_followups(summary or "")  # never show a raw "FOLLOWUPS: a | b" line
     out.update(
         summary=summary,
+        followups=followups,
         picks=assembled,
         dropped=dropped,
         schedule={

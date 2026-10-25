@@ -1,0 +1,52 @@
+/* Bid coach: the registrar's auction card (first-year MBAs). Quiet Yale: flat borders, one blue accent. Prefixed bd-. */
+.bd-auction-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.bd-auction-head .pb-h2 .icon { color: var(--pink); }
+.bd-window { display: flex; flex-wrap: wrap; gap: 4px 10px; margin: 6px 0 0; font-family: var(--mono); font-size: 13px; color: var(--text); }
+.bd-window span[aria-hidden] { color: var(--faint); }
+.bd-status { flex: none; }
+.bd-auction-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
+.bd-auction-grid > div { padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--bg-2); min-width: 0; }
+.bd-auction-grid h3 { margin: 0 0 8px; font-size: 12px; font-weight: 500; color: var(--muted); }
+.bd-auction-grid .pb-list { color: var(--text); line-height: 1.45; }
+.bd-sessions { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 6px; }
+.bd-sessions li { display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 10px; font-size: 13px; }
+.bd-sessions b { font-weight: 500; }
+.bd-session-date { font-family: var(--mono); font-size: 12px; padding-top: 1px; }
+@media (max-width: 1100px) { .bd-auction-grid { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 640px) {
+  .bd-auction-head { flex-direction: column; gap: 8px; }
+  /* 44px tap targets on phones */
+  .bd-page .tabs button, .bd-page .btn, .bd-page input, .bd-page select, .bd-page .pb-yesno .chip { min-height: 44px; }
+  .bd-page .pb-prio .tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; }
+  .bd-page .pb-prio .tabs button { justify-content: center; }
+}
+.bd-auction { margin-bottom: 28px; }  /* same gap as .mt-lg between the other sections */
+
+/* phones: tables become stacked rows (label left, value right), so nothing scrolls sideways */
+@media (max-width: 640px) {
+  .bd-page .table.bd-stack, .bd-page .bd-stack tbody, .bd-page .bd-stack tr { display: block; width: 100%; }
+  .bd-page .bd-stack thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .bd-page .bd-stack tr { padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .bd-page .bd-stack tr:last-child { border-bottom: 0; }
+  .bd-page .bd-stack td { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 3px 0; border: 0; text-align: right; }
+  .bd-page .bd-stack td::before { content: attr(data-label); flex: none; color: var(--faint); font-size: 12px; font-family: var(--font); font-weight: 400; text-align: left; }
+  .bd-page .bd-stack td.bd-first { display: block; text-align: left; padding-bottom: 6px; }
+  .bd-page .bd-stack td.bd-first::before { content: none; }
+  .bd-page .bd-stack td.bd-wide { display: block; text-align: left; }
+  .bd-page .bd-stack td.bd-wide::before { content: none; }
+  .bd-page .bd-stack td.pb-share { display: grid; grid-template-columns: auto minmax(0, 1fr) 40px; align-items: center; }
+  .bd-page .bd-stack td.pb-share > * { margin: 0 !important; }
+}
+
+/* Bid history: a fixed-height box (the table scrolls inside, header stays put), so searching never moves the page */
+.bd-hist-box { height: 560px; overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--line); border-radius: var(--radius-sm); }
+.bd-hist-box .table-wrap { overflow: visible; border: 0; }
+.bd-hist-box thead th { position: sticky; top: 0; z-index: 1; background: var(--card); }
+.bd-hist-empty { margin: 0; padding: 16px; }
+.bd-hist-loading { display: grid; place-items: center; }
+@media (max-width: 640px) {
+  .bd-hist-box { height: 620px; padding: 0 12px; }
+}
+/* the split result: Dan's cheer inline; a stale split (budget changed) is dimmed until you split again */
+.bd-ready { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; }
+.bd-stale .table-wrap, .bd-stale .bd-ready { opacity: 0.45; }

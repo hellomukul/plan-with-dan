@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
-import { Ellipsis, LogOut, Search, Shield, UserRound } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Compass, Ellipsis, LogOut, Search, Shield, UserRound } from 'lucide-react'
 import { api } from './api'
 import CommandPalette from './components/CommandPalette'
 import CourseDrawer from './components/CourseDrawer'
@@ -10,6 +10,7 @@ import Bids from './pages/Bids'
 import Calendar from './pages/Calendar'
 import Chat from './pages/Chat'
 import Explore from './pages/Explore'
+import Faculty from './pages/Faculty'
 import Find from './pages/Find'
 import Global from './pages/Global'
 import Home from './pages/Home'
@@ -17,31 +18,52 @@ import Landing from './pages/Landing'
 import Onboarding from './pages/Onboarding'
 import Plan from './pages/Plan'
 import Privacy from './pages/Privacy'
+import Shortlist from './pages/Shortlist'
+import Help from './pages/Help'
 import Usage from './pages/Usage'
-import { AppProvider, useApp, type Route } from './state'
+import { useFocusTrap } from './components/ui'
+import { AppProvider, isRoute, useApp, type Route } from './state'
 
 function Page({ route }: { route: Route }) {
   switch (route) {
     case 'find': return <Find />
     case 'chat': return <Chat />
     case 'explore': return <Explore />
+    case 'faculty': return <Faculty />
     case 'plan': return <Plan />
+    case 'shortlist': return <Shortlist />
+    case 'help': return <Help />
     case 'calendar': return <Calendar />
     case 'global': return <Global />
     case 'bids': return <Bids />
     case 'usage': return <Usage />
     case 'privacy': return <Privacy />
     case 'profile': return <Onboarding editing />
-    default: return <Home />
+    case 'home': return <Home />
+    default: return <NotFound signedIn />
   }
 }
 
+/** Any hash that isn't a page: say so, with a way home, instead of quietly showing something else. */
+function NotFound({ signedIn }: { signedIn: boolean }) {
+  return (
+    <div className="empty not-found" style={{ minHeight: signedIn ? '60vh' : '100vh', justifyContent: 'center' }}>
+      <Compass className="icon lg" aria-hidden="true" />
+      <h1 style={{ fontSize: 22, margin: 0, color: 'var(--text)' }}>That page doesn’t exist</h1>
+      <p className="muted" style={{ margin: 0 }}>The link may be old or mistyped.</p>
+      <a className="btn primary" href={signedIn ? '#/home' : '#/'}>{signedIn ? 'Go to Dan’s Desk' : 'Go to the home page'}</a>
+    </div>
+  )
+}
+
 function Shell() {
-  const { user, setUser, profile, route, go, plan } = useApp()
+  const { user, setUser, profile, profileReady, endSession, route, plan, shortlist, go } = useApp()
   const [checked, setChecked] = useState(false)
   const [cmdk, setCmdk] = useState(false)
   const [drawerKey, setDrawerKey] = useState<string | null>(null)
   const [moreOpen, setMoreOpen] = useState(false)
+  const moreRef = useRef<HTMLDivElement>(null)
+  useFocusTrap(moreRef, moreOpen, () => setMoreOpen(false))
   useEffect(() => { setMoreOpen(false) }, [route])
   const closeDrawer = useCallback(() => setDrawerKey(null), [])
 
@@ -71,14 +93,21 @@ function Shell() {
   if (!checked) {
     return <div className="empty" style={{ minHeight: '100vh', justifyContent: 'center' }}><span className="spinner" /></div>
   }
-  if (!user) return <>{route === 'privacy' ? <div className="main" style={{ margin: '0 auto' }}><Privacy /></div> : <Landing />}<Toasts /></>
-  if (profile && !profile.onboarded && route !== 'explore' && route !== 'privacy') return <><Onboarding /><Toasts /></>
+  if (!user) {
+    const page = route === 'privacy' ? <div className="main" style={{ margin: '0 auto' }}><Privacy /></div>
+      : isRoute(route) ? <Landing /> : <main><NotFound signedIn={false} /></main>
+    return <>{page}<Toasts /></>
+  }
+  // Wait for the profile, so a brand-new account goes straight to onboarding (no flash of the Desk, no brief).
+  if (!profileReady) {
+    return <><div className="empty" style={{ minHeight: '100vh', justifyContent: 'center' }}><span className="spinner" /></div><Toasts /></>
+  }
+  if (profile && !profile.onboarded && route !== 'explore' && route !== 'faculty' && route !== 'privacy') return <><Onboarding /><Toasts /></>
 
   const clashCount = Object.values(plan?.terms ?? {}).reduce((n, t) => n + t.conflicts.length, 0)
   const logout = async () => {
     await api.logout().catch(() => undefined)
-    setUser(null)
-    go('home')
+    endSession('logout')
   }
 
   let lastSection: string | undefined = 'none'
@@ -99,17 +128,18 @@ function Shell() {
           return (
             <div key={n.route}>
               {header}
-              <a href={`#/${n.route}`} className={`nav-item ${route === n.route ? 'active' : ''}`}>
+              <a href={`#/${n.route}`} className={`nav-item ${route === n.route ? 'active' : ''}`} aria-current={route === n.route ? 'page' : undefined}>
                 <n.icon className="icon" />
                 <span>{n.label}</span>
                 {n.route === 'plan' && clashCount > 0 && <span className="badge red" style={{ marginLeft: 'auto' }}>{clashCount}</span>}
+                {n.route === 'shortlist' && shortlist.size > 0 && <span className="badge gray" style={{ marginLeft: 'auto' }}>{shortlist.size}</span>}
               </a>
             </div>
           )
         })}
         <div className="nav-spacer" />
-        <a href="#/profile" className={`nav-item ${route === 'profile' ? 'active' : ''}`}><UserRound className="icon" /><span>Profile and goals</span></a>
-        <a href="#/privacy" className={`nav-item ${route === 'privacy' ? 'active' : ''}`}><Shield className="icon" /><span>Privacy and data</span></a>
+        <a href="#/profile" className={`nav-item ${route === 'profile' ? 'active' : ''}`} aria-current={route === 'profile' ? 'page' : undefined}><UserRound className="icon" /><span>Profile and goals</span></a>
+        <a href="#/privacy" className={`nav-item ${route === 'privacy' ? 'active' : ''}`} aria-current={route === 'privacy' ? 'page' : undefined}><Shield className="icon" /><span>Privacy and data</span></a>
         <button className="nav-item" onClick={logout}><LogOut className="icon" /><span>Sign out</span></button>
         <div className="faint small" style={{ padding: '8px 10px' }}>{user.email}</div>
       </aside>
@@ -118,7 +148,7 @@ function Shell() {
       </main>
       <nav className="bottom-nav" aria-label="Main navigation">
         {NAV.filter((n) => n.mobile).map((n) => (
-          <button key={n.route} className={route === n.route ? 'active' : ''} onClick={() => go(n.route)}>
+          <button key={n.route} className={route === n.route ? 'active' : ''} aria-current={route === n.route ? 'page' : undefined} onClick={() => go(n.route)}>
             <n.icon className="icon" />{n.mobile}
           </button>
         ))}
@@ -129,9 +159,9 @@ function Shell() {
       </nav>
       {moreOpen && (
         <div className="overlay more-overlay" onClick={() => setMoreOpen(false)}>
-          <div className="more-sheet" id="more-sheet" role="dialog" aria-label="More pages" onClick={(e) => e.stopPropagation()}>
+          <div className="more-sheet" id="more-sheet" ref={moreRef} role="dialog" aria-modal="true" aria-label="More pages" tabIndex={-1} style={{ outline: 'none' }} onClick={(e) => e.stopPropagation()}>
             {NAV.filter((n) => !n.mobile).map((n) => (
-              <a key={n.route} href={`#/${n.route}`} className={`nav-item ${route === n.route ? 'active' : ''}`}>
+              <a key={n.route} href={`#/${n.route}`} className={`nav-item ${route === n.route ? 'active' : ''}`} aria-current={route === n.route ? 'page' : undefined}>
                 <n.icon className="icon" /><span>{n.label}</span>
               </a>
             ))}

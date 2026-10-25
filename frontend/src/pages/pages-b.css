@@ -39,7 +39,7 @@
 .pb-day { height: 30px; border-radius: 8px; display: grid; place-items: center; font-family: var(--mono); font-size: 11.5px; font-weight: 500;
   border: 1px solid var(--line-2); color: var(--faint); background: transparent; }
 .pb-day.left { background: var(--accent-fill); border-color: var(--accent-fill); color: #ffffff; }
-@media (max-width: 420px) { .pb-day { height: 26px; font-size: 10.5px; border-radius: 6px; } .pb-days { gap: 4px; } }
+@media (max-width: 420px) { .pb-day { height: 26px; font-size: 11px; border-radius: 6px; } .pb-days { gap: 4px; } }
 
 /* ------------------------------------------------------------ option list */
 .pb-opts { border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); overflow: hidden; }

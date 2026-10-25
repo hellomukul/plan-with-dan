@@ -1,0 +1,208 @@
+/* Dan's Desk (signed-in home). Quiet Yale: flat 1px borders, one blue accent, status colour only with text.
+   Layout reacts to the space the page actually has (container queries), so it works with or without the sidebar.
+   Every line that holds changing text is clamped to a fixed number of lines, so ticking countdowns and
+   loading states never change the page height. */
+
+.dk { container-type: inline-size; display: flex; flex-direction: column; gap: 14px; }
+.dk h2 { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; margin: 0; line-height: 1.4; }
+.dk-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; min-height: 22px; }
+.dk-head-sub { color: var(--muted); font-weight: 400; }
+.dk-eyebrow { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); font-weight: 500; line-height: 1.4; }
+.link-plain { background: none; border: 0; padding: 0; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.link-plain:hover { text-decoration: underline; text-decoration-color: var(--line-2); text-underline-offset: 3px; }
+
+/* ------------------------------------------------------------ header */
+.dk-top { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 6px; }
+.dk-hello { min-width: 0; flex: 1; }
+.dk-date { display: block; font-family: var(--mono); font-size: 11.5px; color: var(--faint); letter-spacing: 0.02em; line-height: 1.5; }
+.dk-hello h1 { font-size: 28px; letter-spacing: -0.03em; margin: 2px 0 6px; line-height: 1.15; }
+.dk-brief { display: flex; align-items: baseline; gap: 10px; max-width: 780px; font-size: 15px; line-height: 1.5; color: var(--muted); min-height: 1lh; }
+.dk-brief-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--pink); flex: none; transform: translateY(-2px); }
+.dk-brief-text { flex: 0 1 auto; min-width: 0; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dk-brief { position: relative; }
+/* "More" opens the full brief over the page, so nothing below moves */
+.dk-brief-pop { position: absolute; top: calc(100% + 6px); left: 0; z-index: 20; width: min(640px, 100%); padding: 12px 14px;
+  background: var(--card-2); border: 1px solid var(--line-2); border-radius: var(--radius-sm); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  color: var(--text); font-size: 14px; line-height: 1.55; display: grid; gap: 6px; justify-items: start; }
+.dk-brief-pop p { margin: 0; }
+.dk-count-skel { display: inline-block; width: 56px; height: 12px; min-height: 0; vertical-align: middle; }
+/* "N more" in This week: the whole list scrolls inside the box at its 3-row height */
+.dk-list-all { overflow-y: auto; overscroll-behavior: contain; }
+.dk-brief-more { flex: none; }
+.dk-brief-skel { display: block; flex: 1; height: 1lh; max-width: 520px; }
+
+/* ------------------------------------------------------------ grid
+   Wide: a main column (today strip, this week) and a 300px rail (countdown, progress), week view underneath.
+   Medium: strip and this week full width, countdown and progress side by side. Narrow: one column. */
+.dk-grid { display: grid; gap: 14px; align-items: stretch; grid-template-columns: minmax(0, 1fr) 300px;
+  grid-template-areas: "ts tile" "week rings" "more more" "wv wv"; }
+.dk-grid > * { min-width: 0; }
+.dk-grid > .ts { grid-area: ts; }
+.dk-grid > .dk-tile { grid-area: tile; }
+.dk-grid > .dk-week { grid-area: week; }
+.dk-grid > .dk-rings { grid-area: rings; }
+.dk-grid > .dk-more { grid-area: more; }
+.dk-grid > .dk-weekview { grid-area: wv; }
+
+/* ------------------------------------------------------------ today strip */
+.ts { container-type: inline-size; padding: 0; display: flex; flex-direction: column; overflow: hidden; }
+.ts-main { flex: 1; display: grid; grid-template-columns: 58px minmax(0, 1fr) auto auto; gap: 18px; align-items: center; padding: 18px 20px; }
+.ts-rail { list-style: none; margin: 0; padding: 0 0 0 16px; border-left: 1px solid var(--line); display: flex; flex-direction: column; gap: 2px; font-family: var(--mono); font-size: 11.5px; line-height: 1.5; color: var(--faint); min-width: 118px; }
+.ts-rail li { display: flex; gap: 10px; white-space: nowrap; position: relative; }
+.ts-rail li.on { color: var(--text); }
+.ts-rail li.on::before { content: ''; position: absolute; left: -17px; top: 3px; bottom: 3px; width: 2px; border-radius: 1px; background: var(--accent-fill); }
+.ts-rail li.past { text-decoration: line-through; text-decoration-color: var(--line-2); }
+.ts-rail-time { min-width: 4.2ch; text-align: right; }
+.ts-rail-more { color: var(--faint); }
+.ts-skel { grid-column: 1 / -1; height: 62px; }
+.ts-date { width: 58px; height: 62px; border: 1px solid var(--line-2); border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; background: var(--bg-2); line-height: 1.1; }
+.ts-date span { font-size: 10.5px; color: var(--pink-2); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
+.ts-date b { font-size: 24px; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.ts-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.ts-eyebrow { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted); font-weight: 500; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ts-live { width: 7px; height: 7px; border-radius: 50%; background: var(--green); flex: none; box-shadow: 0 0 0 0 rgba(61, 214, 140, 0.5); animation: ts-live 2s ease-out infinite; }
+@keyframes ts-live { 0% { box-shadow: 0 0 0 0 rgba(61, 214, 140, 0.45); } 100% { box-shadow: 0 0 0 7px rgba(61, 214, 140, 0); } }
+.ts-title { display: block; font-size: 19px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.3; height: 1lh; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; color: var(--text); }
+.ts-num { font-family: var(--mono); font-size: 13px; font-weight: 500; color: var(--muted); letter-spacing: 0; }
+.ts-meta { display: flex; align-items: center; gap: 6px 14px; font-size: 13px; color: var(--muted); line-height: 1.5; height: 1lh; overflow: hidden; white-space: nowrap; min-width: 0; }
+.ts-meta > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ts-room { display: inline-flex; align-items: center; gap: 5px; color: var(--text); }
+.ts-room .icon { color: var(--faint); }
+.ts-count { display: flex; flex-direction: column; align-items: flex-end; gap: 0; text-align: right; }
+.ts-count-label { font-size: 12px; color: var(--faint); line-height: 1.4; }
+.ts-count-value { font-size: 30px; font-weight: 600; letter-spacing: -0.03em; line-height: 1.15; font-variant-numeric: tabular-nums; min-width: 7ch; white-space: nowrap; }
+.ts-cta { display: flex; gap: 8px; }
+.ts-title.wrap, .ts-meta.wrap { white-space: normal; height: auto; padding: 0; margin: 0; max-height: 2lh; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.ts-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 20px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--muted); line-height: 1.5; min-height: calc(1lh + 21px); background: var(--bg-2); }
+.ts-foot-text { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ts-foot-link, .dk-tile-btn .icon, .dk-item-action .icon { display: inline-flex; align-items: center; gap: 4px; }
+.ts-foot-link { flex: none; }
+
+/* ------------------------------------------------------------ countdown tile */
+.dk-tile { display: flex; flex-direction: column; gap: 6px; min-height: 0; }
+.dk-tile-count { display: flex; align-items: baseline; gap: 8px; margin-top: 4px; }
+.dk-tile-label { font-size: 12px; color: var(--faint); }
+.dk-tile-value { font-size: 30px; font-weight: 600; letter-spacing: -0.03em; line-height: 1.15; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dk-tile-title { font-size: 15px; font-weight: 600; line-height: 1.35; margin-top: 4px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; height: 2lh; }
+.dk-tile-when { font-size: 12.5px; color: var(--muted); line-height: 1.5; height: 1lh; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dk-tile-btn { margin-top: auto; align-self: flex-start; }
+.dk-tile-extra { display: none; list-style: none; margin: 6px 0 0; padding: 8px 0 0; border-top: 1px solid var(--line); font-size: 12px; color: var(--faint); line-height: 1.45; }
+.dk-tile-extra li { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin-bottom: 4px; }
+
+/* ------------------------------------------------------------ this week */
+.dk-week { display: flex; flex-direction: column; padding-bottom: 6px; }
+.dk-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.dk-item { display: flex; align-items: center; gap: 6px; border-top: 1px solid var(--line); min-height: 64px; }
+.dk-item:first-child { border-top: 0; }
+.dk-item-skel { display: block; width: 100%; height: 44px; }
+.dk-item-main { flex: 1; min-width: 0; display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 10px 6px 10px 0; background: none; border: 0; font: inherit; color: inherit; text-align: left; cursor: pointer; border-radius: 8px; }
+.dk-item-main:hover .dk-item-title { text-decoration: underline; text-decoration-color: var(--line-2); text-underline-offset: 3px; }
+.dk-item-main:hover .dk-item-action { color: var(--text); }
+.dk-item-date { width: 44px; height: 44px; border: 1px solid var(--line-2); border-radius: 9px; background: var(--bg-2); display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.05; color: var(--muted); }
+.dk-item-date span { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; }
+.dk-item-date b { font-size: 16px; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
+.dk-item.urgent .dk-item-date { border-color: rgba(255, 92, 92, 0.45); color: var(--red); }
+.dk-item-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.dk-item-title { font-size: 14px; font-weight: 500; line-height: 1.4; height: 1lh; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dk-item-meta { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); line-height: 1.5; height: 1lh; white-space: nowrap; overflow: hidden; min-width: 0; }
+.dk-item-detail { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--faint); }
+.dk-item-when { flex: none; }
+.dk-kind { flex: none; font-size: 11px; font-weight: 500; color: var(--muted); display: inline-flex; align-items: center; gap: 5px; }
+.dk-kind::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--faint); }
+.dk-kind.k-deadline::before { background: var(--amber); }
+.dk-kind.k-appointment::before { background: var(--blue); }
+.dk-kind.k-decision::before { background: var(--pink); }
+.dk-item.urgent .dk-kind { color: var(--red); }
+.dk-item.urgent .dk-kind::before { background: var(--red); }
+.dk-item-action { font-size: 12.5px; font-weight: 500; color: var(--pink-2); white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; }
+.dk-done { flex: none; }
+.dk-week-end { margin: auto 0 0; padding: 12px 0 6px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--faint); line-height: 1.5; }
+.dk-clear { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 6px; padding: 18px 10px 22px; }
+.dk-clear .icon { color: var(--pink); }
+.dk-more .dk-head { margin-bottom: 4px; }
+
+/* ------------------------------------------------------------ rings */
+.dk-rings { display: flex; flex-direction: column; }
+.dk-ring-row { flex: 1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; align-items: center; padding: 4px 0 10px; }
+.dk-ring-row.n1 { grid-template-columns: minmax(0, 1fr); }
+.dk-ring-row.n2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.dk-ring-skel { display: block; width: 76px; height: 76px; border-radius: 50%; justify-self: center; }
+.pring { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 0; }
+.pring-dial { position: relative; flex: none; }
+.pring-dial svg { display: block; }
+.pring-track { stroke: var(--card-2); }
+.pring-arc { stroke: var(--pink); transition: stroke-dasharray 0.6s var(--ease); }
+.pring.tone-good .pring-arc { stroke: var(--green); }
+.pring.tone-warn .pring-arc { stroke: var(--amber); }
+.pring.tone-muted .pring-arc { stroke: var(--faint); }
+.pring-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.1; }
+.pring-value { font-size: 19px; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; display: inline-flex; }
+.pring.tone-good .pring-value { color: var(--green); }
+.pring.tone-warn .pring-value { color: var(--amber); }
+.pring.tone-accent .pring-value .icon { color: var(--pink); }
+.pring-sub { font-size: 10.5px; color: var(--faint); margin-top: 2px; }
+.pring figcaption { display: flex; flex-direction: column; align-items: center; text-align: center; min-width: 0; max-width: 100%; }
+.pring-label { font-size: 13px; font-weight: 500; line-height: 1.4; height: 1lh; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.pring-status { font-size: 12px; color: var(--muted); line-height: 1.4; height: 1lh; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+  .dk-rings-foot .icon { margin-left: 4px; }
+.dk-rings-foot .link-btn { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dk-rings-foot { border-top: 1px solid var(--line); padding-top: 10px; line-height: 1.5; min-height: calc(1lh + 10px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ------------------------------------------------------------ week view */
+.dk-weekview .tt-head { white-space: nowrap; overflow: hidden; text-overflow: clip; padding-inline: 2px; }
+.dk-weekview .tt-head.tt-today { color: var(--text); box-shadow: inset 0 -2px 0 var(--accent-fill); }
+.dk-weekview .tt-col.tt-today { background: rgba(99, 170, 255, 0.035); }
+.dk-week-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; text-align: center; min-height: 200px; border: 1px dashed var(--line-2); border-radius: 10px; padding: 20px; }
+.dk-week-empty .icon { color: var(--faint); }
+
+@container (max-width: 660px) { .ts-rail { display: none; } }
+
+/* ------------------------------------------------------------ narrower containers */
+@container (max-width: 900px) {
+  .dk-tile-extra { display: block; }
+  .dk-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "ts ts" "week week" "tile rings" "more more" "wv wv"; }
+}
+@container (max-width: 640px) {
+  .dk-hello h1 { font-size: 24px; }
+  .dk-brief { align-items: flex-start; gap: 8px; min-height: 2lh; }
+  .dk-brief-dot { transform: none; margin-top: calc(0.5lh - 3px); }
+  .dk-brief-more { margin-top: calc(0.5lh - 22px); }
+  .dk-item-title { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; height: auto; max-height: 2lh; }
+  .dk-item-detail:not(.keep) { display: none; }
+  .dk-brief-text { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; height: 2lh; }
+  .ts-main { grid-template-columns: 50px minmax(0, 1fr); gap: 12px 14px; padding: 14px 16px; }
+  .ts-date { width: 50px; height: 56px; }
+  .ts-date b { font-size: 21px; }
+  .ts-date span, .dk-item-date span, .pring-sub { font-size: 11px; }  /* nothing under 11px on phones */
+  .ts-title { font-size: 17px; }
+  .ts-count { grid-column: 1 / -1; flex-direction: row; align-items: baseline; justify-content: space-between; border-top: 1px solid var(--line); padding-top: 10px; }
+  .ts-count-value { font-size: 26px; min-width: 0; }
+  .ts-cta { grid-column: 1 / -1; }
+  .ts-cta .btn { flex: 1; min-height: 44px; }
+  .ts-foot { padding: 10px 16px; }
+  .ts-foot-link, .dk-head .link-btn, .dk-rings-foot .link-btn, .dk-brief-more { min-height: 44px; min-width: 44px; display: inline-flex; align-items: center; justify-content: center; }
+  .ts-title { height: calc(1lh + 22px); padding: 11px 0; margin: -11px 0; }
+  .ts-foot-text .link-btn { min-height: 44px; display: inline-flex; align-items: center; }
+  .dk-week-empty .btn, .dk-tile .btn { min-height: 44px; }
+  .ts-foot { padding-block: 0; }
+  .dk-grid { grid-template-columns: minmax(0, 1fr); grid-template-areas: "ts" "week" "more" "tile" "rings" "wv"; }
+  .dk-tile-extra { display: none; }
+  .dk-tile { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; row-gap: 4px; align-items: center; }
+  .dk-tile > * { grid-column: 1; }
+  .dk-tile .dk-tile-btn { grid-column: 2; grid-row: 1 / span 3; margin: 0; align-self: center; }
+  .dk-head { margin-bottom: 4px; }
+  .dk-tile-btn { min-height: 44px; }
+  .dk-item-main { grid-template-columns: 44px minmax(0, 1fr); }
+  .dk-item-date { grid-row: span 2; align-self: start; }
+  .dk-item-action { grid-column: 2; justify-self: start; margin-top: -8px; }
+  .dk .dk-done { width: 44px; height: 44px; }
+  .dk-item-main { min-height: 64px; }
+  .dk-rings-foot { padding-top: 0; }
+  .dk-weekview .tt-head { font-size: 11.5px; }
+}
+
+/* The Desk's week view has room for each block's time on wider screens. */
+@container (min-width: 700px) {
+  .dk-weekview .tt-scroll.compact .tt-block .tt-time { display: block; font-size: 11px; line-height: 1.2; }
+  .dk-weekview .tt-scroll.compact .tt-block b { font-size: 11px; }
+}

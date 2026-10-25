@@ -10,26 +10,32 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
+import threading
+from urllib.parse import quote
 import secrets
 import sys
-from contextlib import asynccontextmanager
-from datetime import date, datetime
+from contextlib import asynccontextmanager, contextmanager
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Literal, Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # allow `uvicorn backend.main:app` from the repo root
 
-from fastapi import Depends, FastAPI, HTTPException, Request, Response  # noqa: E402
+from fastapi import Depends, FastAPI, HTTPException, Path, Request, Response  # noqa: E402
+from typing import Annotated  # noqa: E402
+from starlette.middleware.gzip import GZipMiddleware  # noqa: E402
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
-from pydantic import BaseModel, Field  # noqa: E402
+from pydantic import BaseModel, Field, model_validator  # noqa: E402
 from slowapi.errors import RateLimitExceeded  # noqa: E402
 from sqlmodel import Session, func, select  # noqa: E402
 
 import auth  # noqa: E402
-from auth import current_user, limiter  # noqa: E402
+from auth import client_ip, current_user, limiter  # noqa: E402
 import som_feed  # noqa: E402
-from catalog import CATALOG_PATH, LIVE_PATH, TERM_NAMES, TOPIC_RULES, data_path, get_catalog  # noqa: E402
+from catalog import CATALOG_PATH, LIVE_PATH, TERM_NAMES, TOPIC_RULES, Section, clock, data_path, get_catalog  # noqa: E402
+import config  # noqa: E402
 from config import (  # noqa: E402
     DAILY_BUDGET_USD, MODEL_NAME, PUBLIC_MESSAGES_PER_DAY, ROOT, RUN_BUDGET_USD, ai_available,
 )
@@ -40,16 +46,19 @@ from crew.recommender import recommend  # noqa: E402
 from fit import FitContext, best_fits  # noqa: E402
 from db import (  # noqa: E402
     USER_TABLES, ActionLog, AuditEvent, BidReport, ChatMemory, ChatMessage, DeskBrief, DeskState, FitDismissal, GlobalChoice,
+    PersonalEvent, ShortlistItem,
     PlanItem, Profile, RecommendationRun, UsageLog, User, get_db, init_db, log_audit, storage_info, utcnow,
 )
 from ics import build_calendar, google_template_link, meeting_dates  # noqa: E402
 from programs import CODES as PROGRAM_CODES, PROGRAMS  # noqa: E402
+from shortlist import MAX_SHORTLIST, compare as compare_shortlist  # noqa: E402
 from planning import (  # noqa: E402
     PlanRow, bid_stats, conflicts, core_load, effective_gsa_used, gsa_check, requirement_progress, suggest_bids,
     units_by_term, week_review,
 )
 from rules import (  # noqa: E402
-    CALENDAR, CALENDAR_ENDS, CORE_COURSES, DEGREE, GLOBAL_WEEKS, GSA_DAYS, GSR_OPTIONS, LDR, SOURCES, gsr_courses,
+    AUCTION, AUCTION_DATES, CALENDAR, CALENDAR_ENDS, CORE_COURSES, DEGREE, GLOBAL_WEEKS, GRADING, GSA_DAYS, GSR_OPTIONS, LDR, PASS_FAIL_CAP_UNITS,
+    SOURCES, auction_applies, calendar_end, calendar_for, gsr_courses,
 )
 from safety import screen_input, spent_today  # noqa: E402
 from seed import seed_sample_bids  # noqa: E402
@@ -74,8 +83,29 @@ async def lifespan(_app: FastAPI):
     yield
 
 
-app = FastAPI(title="Plan with Dan", version="1.0.0", lifespan=lifespan)
+DbId = Annotated[int, Path(ge=1, le=2**31 - 1)]  # ids beyond a DB integer are a clean 422, not a 500
+
+# On Render the interactive API docs are off (they'd list every endpoint publicly); locally they stay at /docs.
+_docs = {} if not config.ON_HOSTED_PLATFORM else {"docs_url": None, "redoc_url": None, "openapi_url": None}
+app = FastAPI(title="Plan with Dan", version="1.0.0", lifespan=lifespan, **_docs)
 app.state.limiter = limiter
+app.add_middleware(GZipMiddleware, minimum_size=1024)  # the catalog is ~860 KB of JSON; gzip makes it ~10x smaller
+MAX_BODY_BYTES = 1_000_000  # every legitimate request body is tiny; this stops memory-exhaustion uploads
+
+
+class _RedactCalendarTokens(logging.Filter):
+    """Calendar feed URLs (/cal/<token>.ics) are private: keep the token out of access logs."""
+    _rx = re.compile(r"/cal/[^\s\"?]+")
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if record.args and isinstance(record.args, tuple):
+            record.args = tuple(self._rx.sub("/cal/[redacted].ics", a) if isinstance(a, str) else a for a in record.args)
+        elif isinstance(record.msg, str):
+            record.msg = self._rx.sub("/cal/[redacted].ics", record.msg)
+        return True
+
+
+logging.getLogger("uvicorn.access").addFilter(_RedactCalendarTokens())
 
 
 @app.exception_handler(RateLimitExceeded)
@@ -84,7 +114,8 @@ async def _rate_limited(_request: Request, _exc: RateLimitExceeded):
 
 
 # The Vite dev server (npm run dev) proxies /api from another port; production is same-origin.
-DEV_ORIGINS = {"http://127.0.0.1:5173", "http://localhost:5173"}  # only honoured when the app itself runs on localhost
+# *.localhost names always resolve to this machine (RFC 6761); they give parallel dev/QA browser sessions their own cookies.
+DEV_ORIGINS = re.compile(r"^http://(127\.0\.0\.1|([a-z0-9-]+\.)?localhost):51\d\d$")  # Vite dev ports; only honoured when the app itself runs on localhost
 TRUST_PROXY = os.getenv("TRUST_PROXY", "").lower() in ("1", "true", "yes")  # set on Render, which adds X-Forwarded-Host
 CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
        "font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; "
@@ -93,12 +124,18 @@ CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' 
 
 @app.middleware("http")
 async def guard_requests(request: Request, call_next):
-    """CSRF defence for cookie auth: unsafe API calls must come from our own origin."""
+    """CSRF defence for cookie auth: unsafe API calls must come from our own origin. Also caps request bodies."""
+    try:
+        too_big = int(request.headers.get("content-length") or 0) > MAX_BODY_BYTES
+    except ValueError:
+        too_big = True
+    if too_big or (request.headers.get("transfer-encoding", "").lower() == "chunked" and request.url.path.startswith("/api/")):
+        return JSONResponse({"detail": "Request too large."}, status_code=413)
     if request.method not in ("GET", "HEAD", "OPTIONS") and request.url.path.startswith("/api/"):
         origin = request.headers.get("origin")
         host = (request.headers.get("x-forwarded-host") if TRUST_PROXY else None) or request.headers.get("host", "")
         local = host.split(":")[0] in ("localhost", "127.0.0.1")
-        if origin and origin.split("://", 1)[-1] != host and not (local and origin in DEV_ORIGINS):
+        if origin and origin.split("://", 1)[-1] != host and not (local and DEV_ORIGINS.match(origin)):
             return JSONResponse({"detail": "Cross-site request blocked."}, status_code=403)
     response = await call_next(request)
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
@@ -106,10 +143,14 @@ async def guard_requests(request: Request, call_next):
     response.headers.setdefault("X-Frame-Options", "DENY")
     if not request.url.path.startswith(("/docs", "/redoc", "/openapi.json")):
         response.headers.setdefault("Content-Security-Policy", CSP)
+    if config.ON_HOSTED_PLATFORM:
+        response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
     return response
 
 
 app.include_router(auth.router)
+import oauth  # noqa: E402  (Continue with Google / Microsoft)
+app.include_router(oauth.router)
 
 
 # ------------------------------------------------------------------ health + catalog
@@ -155,8 +196,41 @@ def programs_public():
         })
     remaining = [{"date": d, "end": CALENDAR_ENDS.get(d, d), "title": label, "kind": kind}
                  for d, label, kind in CALENDAR if CALENDAR_ENDS.get(d, d) >= today]
-    return {"programs": progs, "upcoming": remaining[:6], "dates": remaining, "today": today, "data_as_of": _data_as_of(),
+    every = [{"date": d, "end": CALENDAR_ENDS.get(d, d), "title": label, "kind": kind} for d, label, kind in CALENDAR]
+    auction = {**AUCTION, "dates": [{"date": d, "end": calendar_end(d), "title": label, "kind": kind}
+                                    for d, label, kind in AUCTION_DATES]}
+    return {"programs": progs, "mba": _mba_requirements(), "auction": auction, "upcoming": remaining[:6], "dates": remaining,
+            "calendar": every,
+            "today": today,
+            "data_as_of": _data_as_of(),
             "calendar_note": "Dates are the shared MBA, MAM and MMS calendar. The MBA for Executives and MMS-PEM run on their own calendars."}
+
+
+def _mba_requirements() -> dict:
+    """MBA-only rules for the home page's Requirements tab: Leadership Distribution, Global Studies (with the
+    catalog courses that count for each option this year) and grading. All from the 2026-27 Bulletin."""
+    cat = get_catalog()
+
+    def course(off) -> dict:
+        s = off.lead
+        return {"key": off.key, "number": s.number, "title": s.title, "term": TERM_NAMES.get(s.term, s.term),
+                "units": s.units}
+
+    matches = gsr_courses(cat)
+    gsr = [{"key": o["key"], "name": o["name"], "units": o["units"], "gsa_days": o["gsa_days"], "timing": o["timing"],
+            "enrol": o["enrol"], "cost": o["cost"], "is_course": bool(o["match"]),
+            "courses": sorted((course(cat.offerings[k]) for k in matches.get(o["key"], []) if k in cat.offerings),
+                              key=lambda c: (c["term"] != "Fall 2026", c["number"]))}
+           for o in GSR_OPTIONS]
+    ldr = sorted((course(off) for off in cat.offerings.values()
+                  if off.sections_for(None) and any(sec.counts_for_ldr for sec in off.sections)),
+                 key=lambda c: (c["term"] != "Fall 2026", c["number"]))
+    return {
+        "ldr": {k: LDR[k] for k in ("summary", "focus", "how_flagged", "petition", "examples", "source", "focus_source")}
+        | {"courses": ldr},
+        "gsr": gsr, "gsa_days": GSA_DAYS, "gsr_source": SOURCES["gsr"], "gsr_funding_source": SOURCES["gsr_funding"],
+        "grading": GRADING, "pass_fail_cap": PASS_FAIL_CAP_UNITS, "grading_source": SOURCES["requirements"],
+    }
 
 
 def _data_as_of() -> str:
@@ -174,7 +248,7 @@ def _data_as_of() -> str:
 
 
 class IcsPreviewIn(BaseModel):
-    course_ids: list[str] = Field(max_length=20)
+    course_ids: list[str] = Field(max_length=40)  # both terms of core plus electives
 
 
 @app.post("/api/ics/preview")
@@ -188,12 +262,31 @@ def ics_preview(request: Request, body: IcsPreviewIn):
                     headers={"Content-Disposition": 'attachment; filename="my-som-week.ics"'})
 
 
+@app.post("/api/calendar/preview")
+@limiter.limit("30/minute")
+def calendar_preview(request: Request, body: IcsPreviewIn):
+    """Public: every class meeting of the week built on the home page, for the Dates tab's month calendar.
+    Same meetings as the calendar file; nothing is stored."""
+    cat = get_catalog()
+    classes = []
+    for sid in body.course_ids:
+        s = cat.by_id.get(sid)
+        if not s or not s.meeting:
+            continue
+        for d in meeting_dates(s):
+            classes.append({"date": d.isoformat(), "start_min": s.meeting.start, "end_min": s.meeting.end,
+                            "title": f"{s.number} {s.title}", "room": s.room, "course_id": s.id})
+    return {"classes": classes}
+
+
 @app.get("/api/starter-week")
 def starter_week(program: str = "MBA", year: str = "", cohort: str = "", term: str = "202701"):
     """Public: the courses SOM already decides for this student (core or required), where official data exists.
 
     Used by the home page week builder, so a visitor sees their real week before adding electives.
     """
+    if program not in PROGRAMS or term not in TERM_NAMES or year not in ("", "1", "2", "admit"):
+        raise HTTPException(422, "Unknown program, year or term.")
     cat = get_catalog()
     prog = PROGRAMS.get(program, PROGRAMS["MBA"])
     today = date.today()
@@ -292,8 +385,12 @@ class ProfileIn(BaseModel):
 
 @app.get("/api/profile")
 def get_profile(user: User = Depends(current_user), db: Session = Depends(get_db)):
-    p = db.get(Profile, user.id) or Profile(user_id=user.id)
-    return {"profile": p.as_dict(), "user": auth.public_user(user)}
+    saved = db.get(Profile, user.id)
+    p = saved or Profile(user_id=user.id)
+    # updated_at: when the student last saved their profile (goals included); the Course explorer uses it to
+    # suggest a quick review when goals are stale. Kept outside "profile" so a PUT round-trip never sends it back.
+    return {"profile": p.as_dict(), "user": auth.public_user(user),
+            "updated_at": saved.updated_at.isoformat() if saved and saved.updated_at else None}
 
 
 @app.put("/api/profile")
@@ -383,13 +480,26 @@ def get_plan(user: User = Depends(current_user), db: Session = Depends(get_db)):
     }
 
 
+ADD_DROP_DAYS = 7  # SOM add/drop runs about a week from the start of each session (Bulletin course policies)
+
+
 def _check_section_allowed(db: Session, user_id: int, sec, status: str = "planned") -> None:
     """Students can only plan sections open to their program that haven't already ended."""
     program = (db.get(Profile, user_id) or Profile(user_id=user_id)).program or "MBA"
     if not sec.open_to(program):
         raise HTTPException(400, f"Section {sec.section} of {sec.number} is only open to {', '.join(sec.programs)} students.")
+    if status == "completed" and sec.starts and sec.starts > date.today():
+        raise HTTPException(400, f"{sec.number} hasn't started yet, so it can't be completed.")
     if sec.ended() and status != "completed":
         raise HTTPException(400, f"{sec.number} section {sec.section} has already ended. Mark it completed instead.")
+    # Under way and past its ~1-week add/drop: you can't newly plan or bid on it, but if you're taking it, add it
+    # as enrolled so it shows on your week and calendar.
+    # (a start date more than ~10 months before the end is a typo in SOM's feed, e.g. MGT 640 listed as 2026-03-22)
+    plausible = bool(sec.starts and (not sec.ends or (sec.ends - sec.starts).days < 300))
+    if (plausible and status in ("planned", "bidding")
+            and date.today() > sec.starts + timedelta(days=ADD_DROP_DAYS)):
+        raise HTTPException(400, f"{sec.number} is already in session and add/drop has closed. "
+                                 "If you're taking it, add it as enrolled.")
 
 
 def _log_action(db: Session, user_id: int, action: str, summary: str, payload: dict, by: str = "student") -> int:
@@ -400,8 +510,27 @@ def _log_action(db: Session, user_id: int, action: str, summary: str, payload: d
     return entry.id
 
 
+_user_locks: dict[int, threading.Lock] = {}
+_user_locks_guard = threading.Lock()
+
+
+@contextmanager
+def _one_at_a_time(user_id: int):
+    """Serialise a student's add/save requests: a double-click arrives as two concurrent requests, and without
+    this both pass the "already added?" check before either inserts (duplicate rows, double-counted units)."""
+    with _user_locks_guard:
+        lock = _user_locks.setdefault(user_id, threading.Lock())
+    with lock:
+        yield
+
+
 @app.post("/api/plan")
 def add_plan(body: PlanIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    with _one_at_a_time(user.id):
+        return _add_plan(body, user, db)
+
+
+def _add_plan(body: PlanIn, user: User, db: Session):
     cat = get_catalog()
     sec = cat.by_id.get(body.course_id)
     if not sec:
@@ -426,14 +555,15 @@ def add_plan(body: PlanIn, user: User = Depends(current_user), db: Session = Dep
     db.add(item)
     db.commit()
     db.refresh(item)
-    action_id = _log_action(db, user.id, "add", f"Added {sec.number} {sec.title}", {"item_id": item.id}, body.added_by)
+    action_id = _log_action(db, user.id, "add", f"Added {sec.number} {sec.title}", {"item_id": item.id, "course_id": sec.id},
+                            body.added_by)
     _, rows = _plan_rows(db, user.id)
     clashes = [c for c in conflicts([r.section for r in rows if r.section.term == sec.term]) if sec.id in (c["a_id"], c["b_id"])]
     return {"ok": True, "id": item.id, "clashes": clashes, "action_id": action_id}
 
 
 @app.patch("/api/plan/{item_id}")
-def patch_plan(item_id: int, body: PlanPatch, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def patch_plan(item_id: DbId, body: PlanPatch, user: User = Depends(current_user), db: Session = Depends(get_db)):
     item = db.get(PlanItem, item_id)
     if not item or item.user_id != user.id:
         raise HTTPException(404, "Not in your plan.")
@@ -463,7 +593,7 @@ def patch_plan(item_id: int, body: PlanPatch, user: User = Depends(current_user)
 
 
 @app.delete("/api/plan/{item_id}")
-def delete_plan(item_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def delete_plan(item_id: DbId, user: User = Depends(current_user), db: Session = Depends(get_db)):
     item = db.get(PlanItem, item_id)
     if not item or item.user_id != user.id:
         raise HTTPException(404, "Not in your plan.")
@@ -483,7 +613,7 @@ def list_actions(user: User = Depends(current_user), db: Session = Depends(get_d
 
 
 @app.post("/api/actions/{action_id}/undo")
-def undo_action(action_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def undo_action(action_id: DbId, user: User = Depends(current_user), db: Session = Depends(get_db)):
     a = db.get(ActionLog, action_id)
     if not a or a.user_id != user.id:
         raise HTTPException(404, "Nothing to undo.")
@@ -492,7 +622,9 @@ def undo_action(action_id: int, user: User = Depends(current_user), db: Session 
     data = json.loads(a.payload or "{}")
     if a.action == "add":
         item = db.get(PlanItem, data.get("item_id"))
-        if not item or item.user_id != user.id:
+        # ids can be reused after a delete (SQLite), so check it's still the course this action added
+        if (not item or item.user_id != user.id
+                or ("course_id" in data and item.course_id != data["course_id"])):
             return {"ok": False, "detail": "That course is no longer in your plan, so there's nothing to undo."}
         db.delete(item)
     elif a.action == "remove":
@@ -507,9 +639,17 @@ def undo_action(action_id: int, user: User = Depends(current_user), db: Session 
             raise HTTPException(400, "Your plan is full (60 courses).")
         db.add(PlanItem(user_id=user.id, course_id=sec.id, status=data.get("status", "planned"),
                         bid_points=data.get("bid_points"), added_by=data.get("added_by", "student")))
+    elif a.action == "event_add":
+        ev = db.get(PersonalEvent, data.get("event_id"))
+        if not ev or ev.user_id != user.id or ("title" in data and (ev.title, ev.date) != (data["title"], data.get("date"))):
+            return {"ok": False, "detail": "That appointment is already gone."}
+        db.delete(ev)
+    elif a.action == "event_remove":
+        fields = {k: data[k] for k in ("title", "date", "start_min", "end_min", "location", "note") if k in data}
+        db.add(PersonalEvent(user_id=user.id, **fields))
     elif a.action in ("switch", "update"):
         item = db.get(PlanItem, data.get("item_id"))
-        if item and item.user_id == user.id:
+        if item and item.user_id == user.id and (a.action != "switch" or item.course_id == data.get("to")):
             if a.action == "switch":
                 item.course_id = data["from"]
             else:
@@ -586,6 +726,11 @@ def list_global(user: User = Depends(current_user), db: Session = Depends(get_db
 
 @app.post("/api/global")
 def add_global(body: GlobalIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    with _one_at_a_time(user.id):
+        return _add_global(body, user, db)
+
+
+def _add_global(body: GlobalIn, user: User, db: Session):
     row = db.exec(select(GlobalChoice).where(GlobalChoice.user_id == user.id, GlobalChoice.option_key == body.option_key)).first()
     row = row or GlobalChoice(user_id=user.id, option_key=body.option_key)
     row.target_term, row.status, row.note = body.target_term, body.status, body.note
@@ -596,35 +741,224 @@ def add_global(body: GlobalIn, user: User = Depends(current_user), db: Session =
 
 @app.delete("/api/global/{option_key}")
 def delete_global(option_key: str, user: User = Depends(current_user), db: Session = Depends(get_db)):
-    row = db.exec(select(GlobalChoice).where(GlobalChoice.user_id == user.id, GlobalChoice.option_key == option_key)).first()
-    if row:
-        db.delete(row)
-        db.commit()
+    for row in db.exec(select(GlobalChoice).where(GlobalChoice.user_id == user.id, GlobalChoice.option_key == option_key)).all():
+        db.delete(row)  # all of them: older double-clicks may have left two
+    db.commit()
     return {"ok": True}
+
+
+# ------------------------------------------------------------------ shortlist and compare
+
+def _shortlist_rows(db: Session, user_id: int) -> list[ShortlistItem]:
+    return db.exec(select(ShortlistItem).where(ShortlistItem.user_id == user_id)
+                   .order_by(ShortlistItem.rank, ShortlistItem.id)).all()
+
+
+@app.get("/api/shortlist")
+def get_shortlist(user: User = Depends(current_user), db: Session = Depends(get_db)):
+    cat = get_catalog()
+    _, rows = _plan_rows(db, user.id)
+    profile = (db.get(Profile, user.id) or Profile(user_id=user.id)).as_dict()
+    items = [{"id": r.id, "key": r.course_key, "note": r.note, "rank": r.rank} for r in _shortlist_rows(db, user.id)]
+    numbers = {cat.offering(i["key"]).lead.number for i in items if cat.offering(i["key"])}
+    reports: dict[str, list[dict]] = {}
+    for rep in db.exec(select(BidReport).where(BidReport.course_number.in_(numbers))).all() if numbers else []:
+        reports.setdefault(rep.course_number, []).append(rep.model_dump())
+    return {"items": compare_shortlist(profile, rows, cat, items, reports), "max": MAX_SHORTLIST}
+
+
+class ShortlistIn(BaseModel):
+    key: str = Field(max_length=200)
+
+
+@app.post("/api/shortlist")
+def add_shortlist(body: ShortlistIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    with _one_at_a_time(user.id):
+        return _add_shortlist(body, user, db)
+
+
+def _add_shortlist(body: ShortlistIn, user: User, db: Session):
+    cat = get_catalog()
+    if not cat.offering(body.key):
+        raise HTTPException(404, "That course isn't in SOM's course list.")
+    rows = _shortlist_rows(db, user.id)
+    if any(r.course_key == body.key for r in rows):
+        return {"ok": True, "already": True, "count": len(rows)}
+    if len(rows) >= MAX_SHORTLIST:
+        raise HTTPException(400, f"Your shortlist is full ({MAX_SHORTLIST}). Remove one to add another.")
+    db.add(ShortlistItem(user_id=user.id, course_key=body.key, rank=len(rows)))
+    db.commit()
+    return {"ok": True, "count": len(rows) + 1}
+
+
+class ShortlistPatch(BaseModel):
+    note: Optional[str] = Field(None, max_length=500)
+    order: Optional[list[int]] = Field(None, max_length=MAX_SHORTLIST)  # shortlist item ids, most wanted first
+
+
+@app.patch("/api/shortlist")
+def reorder_shortlist(body: ShortlistPatch, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    rows = {r.id: r for r in _shortlist_rows(db, user.id)}
+    for rank, item_id in enumerate(body.order or []):
+        if item_id in rows:
+            rows[item_id].rank = rank
+            db.add(rows[item_id])
+    db.commit()
+    return {"ok": True}
+
+
+@app.patch("/api/shortlist/{item_id}")
+def note_shortlist(item_id: DbId, body: ShortlistPatch, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    row = db.get(ShortlistItem, item_id)
+    if not row or row.user_id != user.id:
+        raise HTTPException(404, "Not in your shortlist.")
+    if body.note is not None:
+        row.note = body.note.strip()
+    db.add(row)
+    db.commit()
+    return {"ok": True}
+
+
+@app.delete("/api/shortlist/{item_id}")
+def remove_shortlist(item_id: DbId, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    row = db.get(ShortlistItem, item_id)
+    if not row or row.user_id != user.id:
+        raise HTTPException(404, "Not in your shortlist.")
+    db.delete(row)
+    db.commit()
+    return {"ok": True}
+
+
+# ------------------------------------------------------------------ personal events (booked appointments)
+
+def _personal_events(db: Session, user_id: int) -> list[PersonalEvent]:
+    return db.exec(select(PersonalEvent).where(PersonalEvent.user_id == user_id)
+                   .order_by(PersonalEvent.date, PersonalEvent.start_min)).all()
+
+
+def _event_dict(e: PersonalEvent) -> dict:
+    return {"id": e.id, "title": e.title, "date": e.date, "start_min": e.start_min, "end_min": e.end_min,
+            "location": e.location, "note": e.note}
+
+
+def _event_clashes(db: Session, user_id: int, day: str, start: int, end: int) -> list[str]:
+    """Classes (plan and cohort core) that meet on that day and overlap the appointment. Same overlap rule as clashes."""
+    out = []
+    for s, _ in _calendar_sections(db, user_id):
+        if not s.meeting or max(s.meeting.start, start) >= min(s.meeting.end, end):
+            continue
+        if day in {d.isoformat() for d in meeting_dates(s)}:
+            out.append(f"{s.number} {s.title} ({clock(s.meeting.start)}–{clock(s.meeting.end)})")
+    return out
+
+
+class PersonalEventIn(BaseModel):
+    title: str = Field(min_length=1, max_length=120)
+    date: date
+
+    @model_validator(mode="after")
+    def _sane(self):
+        if not self.title.strip():
+            raise ValueError("Give the appointment a title.")
+        if not (2025 <= self.date.year <= 2028):
+            raise ValueError("Pick a date in this academic year.")
+        return self
+
+    start_min: int = Field(ge=0, le=24 * 60)
+    end_min: int = Field(ge=0, le=24 * 60)
+    location: str = Field("", max_length=200)
+    note: str = Field("", max_length=300)
+
+
+@app.get("/api/personal-events")
+def list_personal_events(user: User = Depends(current_user), db: Session = Depends(get_db)):
+    return {"events": [_event_dict(e) for e in _personal_events(db, user.id)]}
+
+
+@app.post("/api/personal-events")
+def add_personal_event(body: PersonalEventIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    with _one_at_a_time(user.id):
+        return _add_personal_event(body, user, db)
+
+
+def _add_personal_event(body: PersonalEventIn, user: User, db: Session):
+    if body.end_min <= body.start_min:
+        raise HTTPException(422, "The end time needs to be after the start time.")
+    title = " ".join(body.title.split())
+    same = next((e for e in _personal_events(db, user.id) if e.title == title and e.date == body.date.isoformat()
+                 and e.start_min == body.start_min and e.end_min == body.end_min), None)
+    if same:  # a double submit: return the saved one instead of a duplicate
+        return {"event": _event_dict(same), "clashes": _event_clashes(db, user.id, same.date, same.start_min, same.end_min),
+                "action_id": None, "unchanged": True}
+    if len(_personal_events(db, user.id)) >= 200:
+        raise HTTPException(400, "You have 200 appointments saved. Delete some old ones first.")
+    ev = PersonalEvent(user_id=user.id, title=" ".join(body.title.split()), date=body.date.isoformat(),
+                       start_min=body.start_min, end_min=body.end_min, location=body.location.strip(), note=body.note.strip())
+    db.add(ev)
+    db.commit()
+    db.refresh(ev)
+    action_id = _log_action(db, user.id, "event_add", f"Added {ev.title} on {ev.date}",
+                            {"event_id": ev.id, "title": ev.title, "date": ev.date})
+    # A clash never blocks the save: the student may well be skipping a class for an interview.
+    return {"event": _event_dict(ev), "clashes": _event_clashes(db, user.id, ev.date, ev.start_min, ev.end_min),
+            "action_id": action_id}
+
+
+@app.delete("/api/personal-events/{event_id}")
+def remove_personal_event(event_id: DbId, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    ev = db.get(PersonalEvent, event_id)
+    if not ev or ev.user_id != user.id:
+        raise HTTPException(404, "Not on your calendar.")
+    payload = _event_dict(ev)
+    db.delete(ev)
+    db.commit()
+    action_id = _log_action(db, user.id, "event_remove", f"Removed {payload['title']} on {payload['date']}", payload)
+    return {"ok": True, "action_id": action_id}
 
 
 # ------------------------------------------------------------------ calendar
 
+def _calendar_sections(db: Session, user_id: int) -> list[tuple[Section, str]]:
+    """Everything that belongs on the student's calendar: their plan, plus the cohort core SOM assigns them
+    (first-year MBAs with a cohort set), which is never in the plan because it isn't chosen or bid on."""
+    _, rows = _plan_rows(db, user_id)
+    out = [(r.section, r.status) for r in rows]
+    profile = (db.get(Profile, user_id) or Profile(user_id=user_id)).model_dump()
+    seen = {sec.id for sec, _ in out}
+    for term in TERM_NAMES:
+        for sec in core_load(profile, term, get_catalog())["sections"]:
+            if sec.id not in seen:
+                seen.add(sec.id)
+                out.append((sec, "core"))
+    return out
+
+
 @app.get("/api/calendar/events")
 def calendar_events(user: User = Depends(current_user), db: Session = Depends(get_db)):
-    """Academic dates plus every individual class meeting, for the in-app calendar."""
-    _, rows = _plan_rows(db, user.id)
+    """Academic dates plus every individual class meeting (plan and cohort core), for the in-app calendar."""
     classes = []
-    for r in rows:
-        s = r.section
+    for s, status in _calendar_sections(db, user.id):
         if not s.meeting:
             continue
         for d in meeting_dates(s):
             classes.append({"date": d.isoformat(), "start_min": s.meeting.start, "end_min": s.meeting.end,
-                            "status": r.status,
+                            "status": status,
                             "title": f"{s.number} {s.title}", "room": s.room, "course_id": s.id})
     shared = _mba_calendar(db, user.id)
-    deadlines = [{"date": d, "end": CALENDAR_ENDS.get(d, d), "title": label, "kind": kind}
-                 for d, label, kind in CALENDAR] if shared else []
+    deadlines = [{"date": d, "end": calendar_end(d), "title": label, "kind": kind}
+                 for d, label, kind in _dates_for(db, user.id)] if shared else []
     prog = PROGRAMS.get((db.get(Profile, user.id) or Profile(user_id=user.id)).program or "MBA", PROGRAMS["MBA"])
     note = None if shared else (f"{prog['label']} runs on its own calendar ({prog['calendar']}), so SOM's MBA/MAM/MMS "
                                 f"dates aren't shown. See {prog['sources'][-1]}")
-    return {"classes": classes, "deadlines": deadlines, "today": date.today().isoformat(), "calendar_note": note}
+    personal = [_event_dict(e) for e in _personal_events(db, user.id)]
+    return {"classes": classes, "deadlines": deadlines, "personal": personal, "today": date.today().isoformat(),
+            "calendar_note": note}
+
+
+def _dates_for(db: Session, user_id: int) -> list[tuple[str, str, str]]:
+    """The shared academic calendar, plus the registrar's auction dates for first-year MBAs."""
+    prof = db.get(Profile, user_id) or Profile(user_id=user_id)
+    return calendar_for(prof.program, prof.year)
 
 
 def _mba_calendar(db: Session, user_id: int) -> bool:
@@ -640,8 +974,10 @@ def _feed_urls(request: Request, user: User) -> dict:
     return {
         "feed_url": https,
         "webcal_url": webcal,
-        "google_subscribe": f"https://calendar.google.com/calendar/render?cid={webcal}",
-        "outlook_subscribe": f"https://outlook.live.com/calendar/0/addfromweb?url={https}&name=Plan%20with%20Dan",
+        "google_subscribe": f"https://calendar.google.com/calendar/render?cid={quote(webcal, safe='')}",
+        "outlook_subscribe": f"https://outlook.live.com/calendar/0/addfromweb?url={quote(https, safe='')}&name=Plan%20with%20Dan",
+        # Yale accounts (and most work/school accounts) are Microsoft 365, which lives on outlook.office.com
+        "outlook_yale_subscribe": f"https://outlook.office.com/calendar/0/addfromweb?url={quote(https, safe='')}&name=Plan%20with%20Dan",
         "is_local": "localhost" in base or "127.0.0.1" in base,
     }
 
@@ -664,15 +1000,17 @@ def calendar_feed(token: str, db: Session = Depends(get_db)):
     user = db.exec(select(User).where(User.cal_token == token)).first()
     if not user or len(token) < 20:
         raise HTTPException(404, "Unknown calendar.")
-    _, rows = _plan_rows(db, user.id)
-    body = build_calendar([r.section for r in rows], owner=f"u{user.id}", include_deadlines=_mba_calendar(db, user.id))
+    sections = [sec for sec, _ in _calendar_sections(db, user.id)]
+    body = build_calendar(sections, owner=f"u{user.id}", include_deadlines=_mba_calendar(db, user.id),
+                          personal=_personal_events(db, user.id), dates=_dates_for(db, user.id))
     return Response(body, media_type="text/calendar; charset=utf-8", headers={"Cache-Control": "no-cache"})
 
 
 @app.get("/api/plan.ics")
 def plan_download(user: User = Depends(current_user), db: Session = Depends(get_db)):
-    _, rows = _plan_rows(db, user.id)
-    body = build_calendar([r.section for r in rows], owner=f"u{user.id}", include_deadlines=_mba_calendar(db, user.id))
+    sections = [sec for sec, _ in _calendar_sections(db, user.id)]
+    body = build_calendar(sections, owner=f"u{user.id}", include_deadlines=_mba_calendar(db, user.id),
+                          personal=_personal_events(db, user.id), dates=_dates_for(db, user.id))
     return Response(body, media_type="text/calendar; charset=utf-8",
                     headers={"Content-Disposition": 'attachment; filename="plan-with-dan.ics"'})
 
@@ -685,6 +1023,16 @@ class BidIn(BaseModel):
     points_bid: int = Field(ge=0, le=2000)
     got_seat: bool
     clearing_points: Optional[int] = Field(None, ge=0, le=2000)
+
+    @model_validator(mode="after")
+    def _consistent(self):
+        # a winning bid can't be below the clearing price, and a losing one can't be above it
+        if self.clearing_points is not None:
+            if self.got_seat and self.points_bid < self.clearing_points:
+                raise ValueError("A winning bid can't be lower than the clearing price.")
+            if not self.got_seat and self.points_bid > self.clearing_points:
+                raise ValueError("A losing bid can't be higher than the clearing price.")
+        return self
 
 
 @app.get("/api/bids")
@@ -833,8 +1181,9 @@ async def chat_public(request: Request, response: Response, body: PublicChatIn, 
     device = request.cookies.get("pwd_vid")
     if not device or len(device) > 64:
         device = secrets.token_urlsafe(16)
-        response.set_cookie("pwd_vid", device, max_age=86400 * 30, httponly=True, samesite="lax")
-    ip = request.client.host if request.client else "unknown"
+        response.set_cookie("pwd_vid", device, max_age=86400 * 30, httponly=True, samesite="lax",
+                            secure=request.url.scheme == "https" or config.ON_HOSTED_PLATFORM)
+    ip = client_ip(request)
     left = _bump(f"d:{device}", PUBLIC_MESSAGES_PER_DAY)
     if left is None or _bump(f"ip:{ip}", VISITOR_IP_CAP) is None:
         return {"answer": f"That's today's {PUBLIC_MESSAGES_PER_DAY} visitor questions. Dan resets at midnight, and the "
@@ -846,8 +1195,9 @@ async def chat_public(request: Request, response: Response, body: PublicChatIn, 
                        f"{ctx.cohort} cohort" if ctx.cohort else "") if p]
     message = body.message if not who else f"[I'm a {', '.join(who)} student.] {body.message}"
     result = await run_turn(db, None, message, "dan", visitor_history=[t.model_dump() for t in body.history])
-    if cache_key and result.get("agent") and not result.get("blocked") and not result.get("safety"):
-        _answer_cache[cache_key] = (time.time(), {k: result[k] for k in ("answer", "agent", "proposals", "blocked", "safety")})
+    # Messages that triggered the support card are never cached, so their text isn't kept even in memory.
+    if cache_key and result.get("agent") and not result.get("blocked") and not result.get("safety") and not result.get("support"):
+        _answer_cache[cache_key] = (time.time(), {k: result.get(k) for k in ("answer", "agent", "proposals", "blocked", "safety", "followups")})
     return {**result, "remaining_today": left}
 
 
@@ -1047,24 +1397,29 @@ def _rows_for(db: Session, model, user_id: int) -> list[dict]:
 def export_account(user: User = Depends(current_user), db: Session = Depends(get_db)):
     data = {"user": {"email": user.email, "name": user.name, "created_at": user.created_at.isoformat()}}
     for model in (Profile, PlanItem, GlobalChoice, ChatMessage, ChatMemory, RecommendationRun, FitDismissal, ActionLog,
-                  AuditEvent, DeskState, DeskBrief):
+                  AuditEvent, DeskState, DeskBrief, ShortlistItem, PersonalEvent):
         data[model.__name__] = _rows_for(db, model, user.id)
     data["BidReport"] = _rows_for(db, BidReport, user.id)
     data["UsageLog"] = _rows_for(db, UsageLog, user.id)
+    data["OAuthIdentity"] = _rows_for(db, oauth.OAuthIdentity, user.id)  # linked Google/Microsoft accounts (no tokens)
     return Response(json.dumps(data, indent=2, default=str), media_type="application/json",
                     headers={"Content-Disposition": 'attachment; filename="plan-with-dan-my-data.json"'})
 
 
 class DeleteIn(BaseModel):
-    password: str = Field(max_length=200)
+    password: str = Field("", max_length=200)
+    confirm: str = Field("", max_length=20)  # accounts with no password (Google/Microsoft only) type DELETE
 
 
 @app.post("/api/account/delete")
 @limiter.limit("5/minute")
 def delete_account(request: Request, response: Response, body: DeleteIn, user: User = Depends(current_user),
                    db: Session = Depends(get_db)):
-    if not auth.hasher.verify(body.password, user.password_hash):
-        raise HTTPException(401, "That password doesn't match.")
+    if user.password_hash:
+        if not body.password or not auth.hasher.verify(body.password, user.password_hash):
+            raise HTTPException(401, "That password doesn't match.")
+    elif body.confirm.strip().upper() != "DELETE":
+        raise HTTPException(401, "Type DELETE to confirm.")
     for model in USER_TABLES:
         for row in db.exec(select(model).where(model.user_id == user.id)).all():
             db.delete(row)

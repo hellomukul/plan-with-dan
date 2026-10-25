@@ -1,0 +1,45 @@
+/* Shortlist and compare */
+/* minmax(0, 1fr): the single column may shrink below the longest title, so names ellipsize instead of
+   pushing the reorder and remove buttons off-screen (no sideways scroll at 375 or 1024). */
+.sl-rank ol { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; }
+.sl-rank li { display: flex; align-items: center; gap: 10px; padding: 4px 4px 4px 8px; border-radius: 8px; min-width: 0; }
+.sl-rank li:hover { background: var(--bg-2); }
+.sl-rank-n { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: var(--card-2); font-size: 12px; font-family: var(--mono); flex: none; }
+.sl-rank-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+.sl-rank-out { flex: none; white-space: nowrap; }
+.sl-rank li > .row { flex: none; flex-wrap: nowrap; }
+.sl-scroll { overflow-x: auto; margin-top: 16px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); }
+/* Fixed layout: every course column gets the same width, whatever its text. */
+.sl-table { border-collapse: collapse; table-layout: fixed; width: 100%; min-width: calc(150px + var(--cols) * 210px); font-size: 13.5px; }
+.sl-table th, .sl-table td { padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; text-align: left; overflow-wrap: anywhere; }
+.sl-table thead th { position: sticky; top: 0; background: var(--card); z-index: 1; }
+.sl-table thead th:not(.sl-label) { display: table-cell; }
+.sl-table thead th .course-num, .sl-table thead th .sl-title, .sl-table thead th .faint { display: block; }
+/* Titles and descriptions take a fixed number of lines, so reordering never changes row heights. */
+.sl-title { font-weight: 600; font-size: 14px; margin: 2px 0; line-height: 1.35; height: calc(2 * 1.35em); overflow: hidden;
+  display: -webkit-box !important; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.sl-desc { line-height: 1.45; height: calc(8 * 1.45em); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 8; -webkit-box-orient: vertical; }
+.sl-table th.best, .sl-table td.best { background: var(--pink-soft); }
+.sl-best { display: inline-block; font-size: 11px; color: var(--pink-2); background: var(--pink-soft); border: 1px solid var(--pink-line); border-radius: 999px; padding: 1px 8px; margin-bottom: 6px; }
+/* every header reserves the "Best on paper" line, so moving the pick between columns keeps the height */
+.sl-table thead th:not(.sl-label) { padding-top: 34px; position: sticky; }
+.sl-table thead th .sl-best { position: absolute; top: 9px; left: 12px; margin: 0; }
+.sl-label { width: 150px; color: var(--faint); font-weight: 500; font-size: 12.5px; position: sticky; left: 0; background: var(--card); z-index: 2; }
+.sl-table td .icon { vertical-align: -2px; margin-right: 4px; }
+.fit-fits { color: var(--green); }
+.fit-clash { color: var(--amber); }
+.fit-not_open { color: var(--faint); }
+.goal-strong { color: var(--green); font-weight: 600; }
+.goal-some { color: var(--text); font-weight: 600; }
+.goal-none { color: var(--faint); font-weight: 500; }
+.sl-note { width: 100%; min-height: 0; resize: vertical; font-size: 13px; padding: 6px 8px; }
+.sl-actions { display: grid; gap: 6px; justify-items: start; }
+.sl-table tbody tr:last-child th, .sl-table tbody tr:last-child td { border-bottom: 0; }
+.sl-skel { display: block; border-radius: var(--radius); }
+@media (max-width: 640px) {
+  .sl-rank li { gap: 6px; padding-left: 4px; }
+  .sl-rank .btn.icon { width: 44px; height: 44px; }
+  .sl-rank-out { display: none; }
+  .sl-actions .btn, .sl-head .btn { min-height: 44px; }
+  .sl-actions a { min-height: 44px; display: inline-flex; align-items: center; }
+}

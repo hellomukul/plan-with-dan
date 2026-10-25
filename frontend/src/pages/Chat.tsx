@@ -3,11 +3,13 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { api, streamChat, type ChatResult, type TraceStep } from '../api'
 import AgentTrace from '../components/AgentTrace'
+import SupportCard from '../components/SupportCard'
 import { CostChip } from '../components/ui'
 import HandsomeDan from '../mascots/HandsomeDan'
 import { Brain, Check, MessageCircle, Newspaper, Plus, ShieldAlert, X } from 'lucide-react'
 import { usd } from '../lib/format'
 import { useApp } from '../state'
+import '../components/dan-chat.css'
 
 type Mode = 'dan' | 'news'
 
@@ -21,7 +23,7 @@ interface Turn {
 const PROMPTS: Record<Mode, string[]> = {
   dan: [
     'Find me a spring elective on healthcare strategy that fits my schedule',
-    'Do I have any clashes, and am I on track for 16 units?',
+    'Do I have any clashes, and am I on track for my unit minimum?',
     'Which Global Studies option suits me best?',
     'How should I split 300 bid points across my plan?',
     'I want to go into product management. Which courses build that?',
@@ -95,24 +97,24 @@ export default function Chat() {
   }
 
   return (
-    <div style={{ maxWidth: 900 }}>
+    <div className="chat-page" style={{ maxWidth: 900 }}>
       <div className="page-head">
-        <div>
+        <div style={{ flex: '1 1 100%' }}>{/* full width in both modes, so the tabs row sits in the same place */}
           <h1>{mode === 'dan' ? 'Ask Dan' : 'AI news desk'}</h1>
-          <p>{mode === 'dan'
+          <p className="chat-lede" style={{ minHeight: '3.2em' }}>{mode === 'dan'
             ? 'Courses, clashes, requirements, Global Studies, bids, careers. Dan routes your question to the right specialist, who checks real data.'
             : 'The latest AI news with sources, plus the SOM course where you can learn it.'}</p>
         </div>
         <div className="row">
-          <div className="tabs">
-            <button className={mode === 'dan' ? 'on' : ''} onClick={() => setMode('dan')}><MessageCircle className="icon sm" />Ask Dan</button>
-            <button className={mode === 'news' ? 'on' : ''} onClick={() => setMode('news')}><Newspaper className="icon sm" />AI news</button>
+          <div className="tabs" role="tablist" aria-label="Chat mode">
+            <button type="button" role="tab" aria-selected={mode === 'dan'} className={mode === 'dan' ? 'on' : ''} onClick={() => setMode('dan')}><MessageCircle className="icon sm" />Ask Dan</button>
+            <button type="button" role="tab" aria-selected={mode === 'news'} className={mode === 'news' ? 'on' : ''} onClick={() => setMode('news')}><Newspaper className="icon sm" />AI news</button>
           </div>
-          {mode === 'dan' && (
-            <button className="btn sm ghost" onClick={() => setShowMemory((v) => !v)} aria-expanded={showMemory}>
-              <Brain className="icon sm" />Memory{facts.length ? ` (${facts.length})` : ''}
-            </button>
-          )}
+          {/* Kept in the layout (hidden) on AI news, so switching tabs doesn't move the page. */}
+          <button className="btn sm ghost" onClick={() => setShowMemory((v) => !v)} aria-expanded={showMemory}
+            style={mode !== 'dan' ? { visibility: 'hidden' } : undefined}>
+            <Brain className="icon sm" />Memory{facts.length ? ` (${facts.length})` : ''}
+          </button>
           {turns.length > 0 && <button className="btn sm ghost" onClick={clear}><Plus className="icon sm" />New chat</button>}
         </div>
       </div>
@@ -137,7 +139,7 @@ export default function Chat() {
 
       <div className="chat">
         {turns.length === 0 && !busy && (
-          <div className="card stack" style={{ alignItems: 'center', textAlign: 'center' }}>
+          <div className="card stack chat-empty" style={{ alignItems: 'center', justifyContent: 'center', textAlign: 'center', minHeight: 240 }}>
             <HandsomeDan size={56} furColor="#f4b183" bandanaColor="#00356b" />
             <h3 style={{ margin: 0 }}>{mode === 'dan' ? 'What are we planning?' : 'What’s happening in AI?'}</h3>
             <div className="row" style={{ justifyContent: 'center' }}>
@@ -156,6 +158,7 @@ export default function Chat() {
                 {r?.agent && <div className="faint small row" style={{ marginBottom: 4, gap: 6 }}><span className="avatar"><HandsomeDan size={20} furColor="#f4b183" bandanaColor="#00356b" /></span>{r.agent === 'Dispatcher' ? 'Dan' : `Dan · via ${r.agent}`}</div>}
                 <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: (p) => <a {...p} target="_blank" rel="noreferrer" /> }}>{t.content}</ReactMarkdown>
               </div>
+              {(r?.support || Boolean(t.meta?.support)) && <SupportCard flush />}
               {r && r.proposals.length > 0 && (
                 <div className="stack tight" style={{ width: '88%' }}>
                   {r.proposals.map((p) => (
@@ -186,6 +189,14 @@ export default function Chat() {
             </div>
           )
         })}
+        {!busy && turns.length > 0 && turns[turns.length - 1].role === 'assistant' && (turns[turns.length - 1].result?.followups?.length ?? 0) > 0 && (
+          <div className="dan-followups" style={{ paddingLeft: 0 }} aria-label="Suggested follow-up questions">
+            <span className="dan-followups-label">Curious? Tap one</span>
+            {turns[turns.length - 1].result!.followups!.map((q) => (
+              <button key={q} type="button" className="dan-followup" onClick={() => send(q)}>{q}</button>
+            ))}
+          </div>
+        )}
 
         {busy && (
           <div className="bubble bot" style={{ minWidth: 260 }}>

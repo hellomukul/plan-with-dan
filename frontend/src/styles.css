@@ -12,7 +12,7 @@
   --line-2: #34343a;
   --text: #ededef;
   --muted: #a1a1aa;
-  --faint: #71717a;
+  --faint: #85858f;  /* 4.65:1 on --card-2, ≥5:1 on --bg (WCAG AA for small text) */
   /* Yale palette: Yale Blue #00356B (brand), Medium Blue #286DC0 (fills), Light Blue #63AAFF (text on dark).
      Variable names keep "pink" so existing markup keeps working; the colour is Yale blue. */
   --yale: #00356b;
@@ -74,7 +74,15 @@ kbd { font-family: var(--mono); font-size: 11px; padding: 1px 6px; border-radius
 
 /* ------------------------------------------------------------ layout */
 .shell { display: grid; grid-template-columns: 232px 1fr; min-height: 100vh; }
-.sidebar { position: sticky; top: 0; height: 100vh; padding: 16px 10px; border-right: 1px solid var(--line); background: var(--bg); display: flex; flex-direction: column; gap: 2px; }
+.sidebar { position: sticky; top: 0; height: 100vh; padding: 16px 10px; border-right: 1px solid var(--line); background: var(--bg); display: flex; flex-direction: column; gap: 2px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+/* Short laptop screens (e.g. 1024x768): tighten the nav so Sign out stays on screen; the sidebar scrolls if it still can't fit. */
+@media (min-width: 901px) and (max-height: 860px) {
+  .sidebar { padding-top: 12px; padding-bottom: 10px; }
+  .sidebar .brand { padding-bottom: 10px; }
+  .sidebar .search-trigger { margin-bottom: 6px; }
+  .sidebar .nav-item { padding-top: 5px; padding-bottom: 5px; }
+  .sidebar .nav-section { padding-top: 10px; padding-bottom: 2px; }
+}
 .brand { display: flex; align-items: center; gap: 10px; padding: 4px 10px 16px; }
 .brand-name { font-weight: 600; font-size: 15px; letter-spacing: -0.01em; }
 .brand-sub { font-size: 11px; color: var(--faint); }
@@ -100,11 +108,12 @@ kbd { font-family: var(--mono); font-size: 11px; padding: 1px 6px; border-radius
   .sidebar { display: none; }
   .main { padding: 16px 14px 92px; }
   .bottom-nav { display: flex; position: fixed; bottom: 0; left: 0; right: 0; z-index: 40; justify-content: space-around; background: rgba(11, 11, 12, 0.96); backdrop-filter: blur(10px); border-top: 1px solid var(--line); padding: 6px 4px 10px; }
-  .bottom-nav button { background: none; border: 0; color: var(--faint); font: inherit; font-size: 11px; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 4px 8px; border-radius: 8px; cursor: pointer; }
+  .bottom-nav button { flex: 1 1 0; min-width: 0; min-height: 48px; background: none; border: 0; color: var(--faint); font: inherit; font-size: 11px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; padding: 4px 2px; border-radius: 8px; cursor: pointer; }
   .bottom-nav button.active { color: var(--text); }
   .bottom-nav button.active .icon { color: var(--pink); }
   .overlay.more-overlay { align-items: flex-end; justify-content: stretch; z-index: 35; }
   .more-sheet { width: 100%; background: var(--bg-2); border-top: 1px solid var(--line); border-radius: 16px 16px 0 0; padding: 12px 12px calc(76px + env(safe-area-inset-bottom)); display: grid; gap: 2px; }
+  .more-sheet .nav-item { min-height: 44px; }
 
 }
 
@@ -198,7 +207,7 @@ input[type='range'] { accent-color: var(--pink); padding: 0; }
 .bar.gray > span { background: var(--faint); }
 .ring { --p: 0; --c: var(--pink); width: 84px; height: 84px; border-radius: 50%; display: grid; place-items: center; background: conic-gradient(var(--c) calc(var(--p) * 1%), var(--card-2) 0); }
 .ring > div { width: 70px; height: 70px; border-radius: 50%; background: var(--card); display: grid; place-items: center; text-align: center; font-weight: 600; font-size: 16px; line-height: 1.05; }
-.ring small { display: block; font-weight: 400; font-size: 10px; color: var(--muted); }
+.ring small { display: block; font-weight: 400; font-size: 11px; color: var(--muted); }
 .meter { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; font-size: 13px; }
 .meter .bar { grid-column: 1 / -1; margin-bottom: 8px; }
 
@@ -215,6 +224,9 @@ input[type='range'] { accent-color: var(--pink); padding: 0; }
 .overlay.center { justify-content: center; align-items: flex-start; padding: 12vh 16px 16px; }
 .drawer { width: min(540px, 100%); height: 100%; overflow-y: auto; background: var(--bg-2); border-left: 1px solid var(--line); padding: 22px; animation: slideIn 0.18s var(--ease); }
 .modal { width: min(560px, 100%); max-height: 76vh; overflow-y: auto; background: var(--card); border: 1px solid var(--line-2); border-radius: var(--radius); padding: 20px; animation: pop 0.15s var(--ease); }
+.confirm-dialog { width: min(420px, 100%); }
+.confirm-actions { margin-top: 18px; }
+@media (max-width: 900px) { .confirm-actions .btn { min-height: 44px; } }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes slideIn { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
 @keyframes pop { from { transform: translateY(4px) scale(0.99); opacity: 0; } to { transform: none; opacity: 1; } }
@@ -385,3 +397,18 @@ input[type='range'] { accent-color: var(--pink); padding: 0; }
   .desk-head h1 { font-size: 20px; }
   .brief { font-size: 15px; }
 }
+.star-btn.on .icon { color: #f5c542; fill: #f5c542; }
+/* Course drawer on phones: Close, Shortlist, Add, Syllabus and Email instructor are 44px tap targets */
+@media (max-width: 900px) {
+  .drawer .btn.icon { width: 44px; height: 44px; }
+  .drawer .btn.sm, .drawer a.btn { min-height: 44px; }
+  .empty .btn { min-height: 44px; }  /* empty-state actions */
+}
+
+/* Phones: iOS Safari zooms the whole page into any field whose text is under 16px. */
+@media (max-width: 900px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select, textarea { font-size: 16px !important; }
+}
+
+/* the AI cost receipt chip can be long ("3 calls · 12.4k in (60% cached) · 900 out · $0.0012"): let it wrap on phones */
+.badge.cost-chip { white-space: normal; max-width: 100%; overflow-wrap: anywhere; line-height: 1.4; }

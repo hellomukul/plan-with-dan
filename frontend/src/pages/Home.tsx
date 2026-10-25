@@ -1,324 +1,559 @@
-/* Dan's Desk: the chief-of-staff home. One focal point (the brief), then decisions,
-   then best fits, with a quiet supporting pane. See docs/design_brief.md. */
-import { useCallback, useEffect, useState } from 'react'
+/* Dan's Desk: the signed-in home. Built to be glanced at between classes:
+   1. today strip (next class, room, live countdown) + a countdown tile (course auction or next deadline)
+   2. this week (at most three things, deadlines and decisions mixed, each with one next action) + progress rings
+   3. a small timetable of this week's real class meetings
+   The brief from Dan is one line under the greeting. Recent actions (with undo) live on My plan. */
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
-  AlarmClock, ArrowRight, Check, ChevronDown, ChevronRight, CircleHelp, Clock, MessageCircle, RotateCcw,
+  ArrowRight, CalendarClock, CalendarDays, Check, CircleAlert, Gavel, Plus, Sparkles,
 } from 'lucide-react'
-import { api, type ActionEntry, type BestFits, type CalendarEvents, type DeskCard, type DeskResponse, type Fit } from '../api'
+import {
+  api, auctionApplies, type CalendarEvents, type DeskCard, type DeskResponse, type ProgramsInfo, type Section,
+} from '../api'
 import CourseDrawer from '../components/CourseDrawer'
-import { Bar } from '../components/ui'
-import { PLANNING_TERM, prettyDate, relDays, daysUntil, usd } from '../lib/format'
-import { useApp } from '../state'
+import HandsomeDan from '../mascots/HandsomeDan'
+import ProgressRing from '../components/ProgressRing'
+import Timetable from '../components/Timetable'
+import TodayStrip from '../components/TodayStrip'
+import {
+  WEEKDAY_CODES, auctionPhase, clockText, countdown, dayDiff, dayName, dayStart, isoDay, msToNextMinute, shownWeek, type Meeting,
+} from '../lib/deskTime'
+import { PLANNING_TERM, TERM_NAMES } from '../lib/format'
+import { useApp, type Route } from '../state'
+import './desk.css'
 
-const REASONS: { id: string; label: string }[] = [
-  { id: 'time', label: 'Wrong time' },
-  { id: 'interest', label: 'Not my interest' },
-  { id: 'taken', label: 'Already taken' },
-  { id: 'competitive', label: 'Too competitive' },
-]
+/* ------------------------------------------------------------------ clock */
 
-function greeting(): string {
-  const h = new Date().getHours()
-  return h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'
+/** Dev-only test hooks: sessionStorage 'pwd-desk-now' (ISO date-time) pins the Desk's clock;
+    'pwd-desk-shift' (an ISO date-time) starts the clock there and lets it keep running. */
+const shiftBase = Date.now()
+function readNow(): Date {
+  if (import.meta.env.DEV) {
+    const pinned = sessionStorage.getItem('pwd-desk-now')
+    if (pinned && !Number.isNaN(Date.parse(pinned))) return new Date(pinned)
+    const shift = sessionStorage.getItem('pwd-desk-shift')
+    if (shift && !Number.isNaN(Date.parse(shift))) return new Date(Date.parse(shift) + (Date.now() - shiftBase))
+  }
+  return new Date()
 }
 
-function dueLabel(c: DeskCard): string {
-  if (c.days_left == null || !c.due) return 'No fixed date'
-  return `${relDays(c.days_left)} · ${prettyDate(c.due)}`
+/** The current time, re-read on every minute boundary and when the tab comes back into view. */
+function useNow(): Date {
+  const [now, setNow] = useState(readNow)
+  useEffect(() => {
+    let timer = 0
+    const tick = () => {
+      const n = readNow()
+      setNow(n)
+      timer = window.setTimeout(tick, msToNextMinute(n))
+    }
+    timer = window.setTimeout(tick, msToNextMinute(readNow()))
+    const onVis = () => { if (document.visibilityState === 'visible') { window.clearTimeout(timer); tick() } }
+    document.addEventListener('visibilitychange', onVis)
+    return () => { window.clearTimeout(timer); document.removeEventListener('visibilitychange', onVis) }
+  }, [])
+  return now
 }
 
-function Decision({ card, onAct, onState }: { card: DeskCard; onAct: (c: DeskCard) => void; onState: (c: DeskCard, s: 'snoozed' | 'dismissed' | 'done') => void }) {
-  const [open, setOpen] = useState(false)
+const RING = 76
+
+/** True on phone widths, where week-view blocks need 44px-tall tap targets. */
+function useNarrow(): boolean {
+  const q = '(max-width: 640px)'
+  const [narrow, setNarrow] = useState(() => window.matchMedia(q).matches)
+  useEffect(() => {
+    const m = window.matchMedia(q)
+    const on = () => setNarrow(m.matches)
+    m.addEventListener('change', on)
+    return () => m.removeEventListener('change', on)
+  }, [])
+  return narrow
+}
+const fmtUnits = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1))
+const firstSentence = (t: string) => (/^[\s\S]*?[.!?](?=\s|$)/.exec(t.trim())?.[0] ?? t).trim()
+
+/* ------------------------------------------------------------------ countdown tile */
+
+/** The next SOM deadline (not a class day or break) that hasn't passed. */
+function nextDeadline(cal: CalendarEvents | null, now: Date) {
+  const today = isoDay(now)
+  return cal?.deadlines.find((d) => (d.end ?? d.date) >= today && d.kind === 'deadline') ?? null
+}
+const isDropDeadline = (title: string) => /drop/i.test(title)
+
+function CountdownTile({ programs, cal, now, auctionFor, go, error, onRetry }: {
+  programs: ProgramsInfo | null; cal: CalendarEvents | null; now: Date; auctionFor: boolean; go: (r: Route) => void
+  error: boolean; onRetry: () => void
+}) {
+  if (error && !(auctionFor && programs)) {
+    return (
+      <section className="card dk-tile" aria-label="Key dates">
+        <span className="dk-eyebrow"><CalendarDays className="icon sm" />Key dates</span>
+        <span className="dk-tile-title">Couldn't load your dates</span>
+        <span className="dk-tile-when">Check your connection and try again.</span>
+        <button type="button" className="btn sm dk-tile-btn" onClick={onRetry}>Try again</button>
+      </section>
+    )
+  }
+  if (auctionFor && !programs) {
+    return <section className="card dk-tile" aria-busy="true"><span className="skeleton" style={{ height: 96 }} /></section>
+  }
+  const a = programs?.auction
+  const phase = a && auctionFor ? auctionPhase(a, now) : null
+  if (!cal && !(phase && phase.phase !== 'after')) {
+    return <section className="card dk-tile" aria-busy="true"><span className="skeleton" style={{ height: 96 }} /></section>
+  }
+  if (phase && phase.phase !== 'after') {
+    return (
+      <section className="card dk-tile" aria-label="Course auction countdown">
+        <span className="dk-eyebrow"><Gavel className="icon sm" />Course auction</span>
+        <div className="dk-tile-count">
+          <span className="dk-tile-label">{phase.phase === 'before' ? 'opens in' : 'closes in'}</span>
+          <span className="dk-tile-value">{countdown(phase.target.getTime() - now.getTime())}</span>
+        </div>
+        <span className="dk-tile-when">{phase.when}</span>
+        {a && a.rounds.length > 0 && (
+          <ul className="dk-tile-extra" aria-label="Auction rounds (registrar email)">
+            {a.rounds.map((r) => <li key={r}>{r}</li>)}
+          </ul>
+        )}
+        <button type="button" className="btn sm dk-tile-btn" onClick={() => go('bids')}>Plan your bids<ArrowRight className="icon sm" /></button>
+      </section>
+    )
+  }
+  if (!cal) return null
+  if (cal.calendar_note) {
+    return (
+      <section className="card dk-tile" aria-label="Key dates">
+        <span className="dk-eyebrow"><CalendarDays className="icon sm" />Key dates</span>
+        <span className="dk-tile-title">Your program runs on its own calendar</span>
+        <span className="dk-tile-when">Dan shows your classes; check your program office for dates.</span>
+        <button type="button" className="btn sm dk-tile-btn" onClick={() => go('calendar')}>Calendar<ArrowRight className="icon sm" /></button>
+      </section>
+    )
+  }
+  const next = nextDeadline(cal, now)
+  if (!next) {
+    return (
+      <section className="card dk-tile" aria-label="Key dates">
+        <span className="dk-eyebrow"><CalendarDays className="icon sm" />Next deadline</span>
+        <span className="dk-tile-title">No deadlines left this year</span>
+        <span className="dk-tile-when">Enjoy it.</span>
+        <button type="button" className="btn sm dk-tile-btn" onClick={() => go('calendar')}>Calendar<ArrowRight className="icon sm" /></button>
+      </section>
+    )
+  }
+  const n = dayDiff(next.date, now)
+  const after = cal.deadlines.find((d) => d.date > next.date && d.kind === 'deadline')
   return (
-    <div className="decision">
-      <span className={`sev ${card.severity}`} aria-label={`${card.severity} priority`} />
-      <div className="body">
-        <div className="title">{card.title}</div>
-        <div className="detail">{card.detail}</div>
-        {card.due && <div className="faint small mono show-mobile" style={{ marginTop: 4 }}>{dueLabel(card)}</div>}
-        {open && <div className="faint small" style={{ marginTop: 4 }}>Why you're seeing this: {card.why || 'computed from your plan'}. Source: <span className="mono">{card.source}</span></div>}
+    <section className="card dk-tile" aria-label="Next deadline">
+      <span className="dk-eyebrow"><CalendarDays className="icon sm" />Next deadline</span>
+      <div className="dk-tile-count">
+        <span className="dk-tile-label">{n <= 0 ? 'due' : 'in'}</span>
+        <span className="dk-tile-value">{n <= 0 ? 'Today' : n === 1 ? '1 day' : `${n} days`}</span>
       </div>
-      <span className="due hide-mobile">{dueLabel(card)}</span>
-      <div className="actions">
-        <button className="btn sm" onClick={() => onAct(card)}>{card.action.label}<ArrowRight className="icon sm" /></button>
-        <button className="btn icon ghost" title="Why am I seeing this?" aria-label="Why am I seeing this?" onClick={() => setOpen((v) => !v)}><CircleHelp className="icon sm" /></button>
-        <button className="btn icon ghost" title="Snooze 3 days" aria-label="Snooze 3 days" onClick={() => onState(card, 'snoozed')}><AlarmClock className="icon sm" /></button>
-        <button className="btn icon ghost" title="Done" aria-label="Mark done" onClick={() => onState(card, 'done')}><Check className="icon sm" /></button>
-      </div>
-    </div>
+      <span className="dk-tile-when" title={next.title}>{dayName(next.date, now)} · {next.title.split(' (')[0]}</span>
+      {after && (
+        <ul className="dk-tile-extra"><li>Then {dayStart(after.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}: {after.title.split(' (')[0]}</li></ul>
+      )}
+      {isDropDeadline(next.title)
+        ? <button type="button" className="btn sm dk-tile-btn" onClick={() => go('plan')}>Review my plan<ArrowRight className="icon sm" /></button>
+        : <button type="button" className="btn sm dk-tile-btn" onClick={() => go('calendar')}>Calendar<ArrowRight className="icon sm" /></button>}
+    </section>
   )
 }
 
-function TierLabel({ tier }: { tier: Fit['tier'] }) {
-  const cls = tier === 'Strong fit' ? 'strong' : tier === 'Good fit' ? 'good' : 'look'
-  const n = tier === 'Strong fit' ? 3 : tier === 'Good fit' ? 2 : 1
+/* ------------------------------------------------------------------ this week */
+
+interface WeekItem {
+  id: string
+  kind: 'Decision' | 'Deadline' | 'Appointment'
+  title: string
+  detail: string
+  date: string | null
+  sev: number
+  label: string
+  run: () => void
+  card?: DeskCard
+}
+
+const SEV = { high: 0, medium: 1, low: 2 } as const
+
+function buildWeek(desk: DeskResponse | null, cal: CalendarEvents | null, now: Date, act: (c: DeskCard) => void, go: (r: Route) => void,
+  skip: (title: string, date: string | null) => boolean): WeekItem[] {
+  const today = isoDay(now)
+  const inWeek = (iso: string) => { const n = dayDiff(iso, now); return n >= 0 && n <= 6 }
+  const cards = [...(desk?.top ?? []), ...(desk?.later ?? [])]
+  let items: WeekItem[] = cards.map((c) => ({
+    id: `card-${c.id}`, kind: c.kind === 'deadline' ? 'Deadline' : 'Decision', title: c.title, detail: c.detail,
+    date: c.due, sev: SEV[c.severity], label: c.action.label, run: () => act(c), card: c,
+  }))
+  const taken = new Set(cards.filter((c) => c.due).map((c) => c.due))
+  for (const d of cal?.deadlines ?? []) {
+    if ((d.kind !== 'deadline' && d.kind !== 'exam') || !inWeek(d.date) || taken.has(d.date)) continue
+    items.push({
+      id: `cal-${d.date}-${d.title}`, kind: 'Deadline', title: d.title.split(' (')[0], detail: d.title.includes('(') ? d.title.slice(d.title.indexOf('(') + 1).replace(/\)$/, '') : 'SOM academic calendar',
+      date: d.date, sev: 1, label: isDropDeadline(d.title) ? 'Review plan' : 'Calendar', run: () => go(isDropDeadline(d.title) ? 'plan' : 'calendar'),
+    })
+  }
+  const nowMin = now.getHours() * 60 + now.getMinutes()
+  for (const p of cal?.personal ?? []) {
+    if (!inWeek(p.date) || (p.date === today && p.end_min <= nowMin)) continue
+    items.push({
+      id: `pe-${p.id}`, kind: 'Appointment', title: p.title,
+      detail: `${clockText(p.start_min)}–${clockText(p.end_min)}${p.location ? ` · ${p.location}` : ''}`,
+      date: p.date, sev: 1, label: 'Calendar', run: () => go('calendar'),
+    })
+  }
+  // 0: urgent (a high-priority card that is undated, like a clash, or due within two weeks), 1: happening in the
+  // next seven days, 2: everything else by date, undated last.
+  const rank = (i: WeekItem) => (isUrgent(i, now) ? 0 : i.date != null && inWeek(i.date) ? 1 : 2)
+  items = items.filter((i) => !skip(i.title, i.date))
+  items.sort((a, b) => rank(a) - rank(b) || (a.date ?? '9999').localeCompare(b.date ?? '9999') || a.sev - b.sev)
+  // Mix deadlines and decisions: if the first three hold no decision but one exists, it takes the third slot.
+  const firstDecision = items.findIndex((i) => i.kind === 'Decision')
+  if (firstDecision > 2 && !items.slice(0, 3).some((i) => i.kind === 'Decision')) {
+    const [d] = items.splice(firstDecision, 1)
+    items.splice(2, 0, d)
+  }
+  return items
+}
+
+function isUrgent(i: WeekItem, now: Date): boolean {
+  if (i.sev !== 0) return false
+  return i.date == null || dayDiff(i.date, now) <= 14
+}
+
+function WeekRow({ item, now, onDone }: { item: WeekItem; now: Date; onDone?: (c: DeskCard) => void }) {
+  const d = item.date ? dayStart(item.date) : null
+  const n = item.date ? dayDiff(item.date, now) : null
+  const urgent = isUrgent(item, now)
+  const when = n == null ? 'No fixed date' : n < 0 ? 'Overdue' : n === 0 ? 'Today' : n === 1 ? 'Tomorrow' : n <= 6 ? `In ${n} days` : `Due ${d!.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
   return (
-    <span className={`tier ${cls}`}>
-      <span className="tier-dots" aria-hidden>{[0, 1, 2].map((i) => <i key={i} className={i < n ? 'on' : ''} />)}</span>
-      {tier}
-    </span>
+    <li className={`dk-item${urgent ? ' urgent' : ''}`}>
+      <button type="button" className="dk-item-main" onClick={item.run}>
+        <span className="dk-item-date" aria-hidden="true">
+          {d && n != null && n <= 6 ? (<><span>{d.toLocaleDateString('en-US', { weekday: 'short' })}</span><b>{d.getDate()}</b></>)
+            : item.kind === 'Decision' ? <CircleAlert className="icon" /> : <CalendarClock className="icon" />}
+        </span>
+        <span className="dk-item-body">
+          <span className="dk-item-title">{item.title}</span>
+          <span className="dk-item-meta">
+            <span className={`dk-kind k-${item.kind.toLowerCase()}`}>{urgent ? 'Urgent' : item.kind}</span>
+            <span className="dk-item-when">{when}</span>
+            <span className={`dk-item-detail${item.kind === 'Appointment' ? ' keep' : ''}`}>{item.detail}</span>
+          </span>
+        </span>
+        <span className="dk-item-action">{item.label}<ArrowRight className="icon sm" /></span>
+      </button>
+      {item.card && onDone && (
+        <button type="button" className="btn icon ghost dk-done" title="Mark done" aria-label={`Mark done: ${item.title}`} onClick={() => onDone(item.card!)}>
+          <Check className="icon sm" />
+        </button>
+      )}
+    </li>
   )
 }
 
-function FitCard({ fit, primary, onOpen, onDismiss }: { fit: Fit; primary: boolean; onOpen: (k: string) => void; onDismiss: (f: Fit, reason: string) => void }) {
-  const { addCourse, plannedIds, celebrate } = useApp()
-  const [why, setWhy] = useState(false)
-  const [askReason, setAskReason] = useState(false)
-  const inPlan = plannedIds.has(fit.section_id)
-  const add = async () => {
-    await addCourse(fit.section_id, 'dan')
-    if (fit.tier === 'Strong fit') celebrate(`${fit.number} is in. Nice pick.`)
+/* ------------------------------------------------------------------ rings */
+
+function Rings({ go, programs }: { go: (r: Route) => void; programs: ProgramsInfo | null }) {
+  const { plan } = useApp()
+  if (!plan) {
+    return (
+      <section className="card dk-rings" aria-busy="true">
+        <div className="dk-head"><h2>Progress</h2></div>
+        <div className="dk-ring-row">{[0, 1, 2].map((i) => <span key={i} className="skeleton dk-ring-skel" />)}</div>
+      </section>
+    )
+  }
+  const p = plan.progress
+  const target = p.total_target || 72
+  const unitsPct = p.planned_total / target
+  const unitsRing = (
+    <ProgressRing
+      key="units" size={RING} value={unitsPct} center={fmtUnits(p.planned_total)} sub={`of ${target}`} label="Units"
+      status={p.planned_total >= target ? 'All planned' : `${fmtUnits(target - p.planned_total)} to plan`}
+      tone={p.planned_total >= target ? 'good' : 'accent'}
+      description={`Units: ${fmtUnits(p.planned_total)} of ${target} counted or planned`}
+    />
+  )
+  const reqRing = (label: string, full: string, met: boolean, planned: boolean) => (
+    <ProgressRing
+      key={label} size={RING} value={met ? 1 : planned ? 0.5 : 0}
+      center={met ? <Check className="icon lg" /> : planned ? <CalendarClock className="icon lg" /> : <Plus className="icon lg" />}
+      label={label} status={met ? 'Met' : planned ? 'In your plan' : 'Not yet'} tone={met ? 'good' : planned ? 'accent' : 'warn'}
+      description={`${full}: ${met ? 'met' : planned ? 'planned, not done yet' : 'not started'}`}
+    />
+  )
+  let rings: ReactNode[]
+  let next: { text: string; route: Route } | null = null
+  if (p.mba_rules !== false) {
+    rings = [unitsRing, reqRing('LDR', 'Leadership (LDR)', p.ldr.met, p.ldr.planned), reqRing('GSR', 'Global Studies (GSR)', p.gsr.met, p.gsr.planned)]
+    if (!p.ldr.met && !p.ldr.planned) next = { text: 'Add a Leadership (LDR) course', route: 'explore' }
+    else if (!p.gsr.met && !p.gsr.planned) next = { text: 'Pick a Global Studies path', route: 'global' }
+  } else {
+    rings = [unitsRing]
+    // Required courses from the program's 2026-27 Bulletin list: in the plan (any status) or marked done.
+    const info = programs?.programs.find((x) => x.code === p.program)
+    const required = info?.required ?? []
+    if (required.length) {
+      const inPlan = new Set(plan.items.map((i) => i.section.number))
+      const doneChecks = (p.checks ?? []).filter((c) => c.status === 'done').map((c) => c.label)
+      const have = required.filter((r) => inPlan.has(r.number) || doneChecks.some((l) => l.startsWith(r.number))).length
+      rings.push(
+        <ProgressRing
+          key="req" size={RING} value={have / required.length} center={`${have}/${required.length}`} label="Required courses"
+          status={have === required.length ? 'All in plan' : `${required.length - have} to add`} tone={have === required.length ? 'good' : 'warn'}
+          description={`Required courses: ${have} of ${required.length} in your plan or done`}
+        />,
+      )
+      const missing = required.find((r) => !inPlan.has(r.number) && !doneChecks.some((l) => l.startsWith(r.number)))
+      if (missing) next = { text: `Add required ${missing.number}`, route: 'explore' }
+    }
+    const spring = p.terms.find((t) => t.term === PLANNING_TERM)
+    const springUnits = plan.terms[PLANNING_TERM]?.units ?? spring?.units ?? 0
+    const min = spring ? (spring.min_applies ? spring.min_units ?? null : null) : info?.min_units ?? null
+    const max = spring?.max_units ?? info?.max_units ?? null
+    const goal = min ?? max
+    if (goal) {
+      const low = min != null && springUnits < min
+      const over = max != null && springUnits > max
+      rings.push(
+        <ProgressRing
+          key="spring" size={RING} value={springUnits / goal} center={fmtUnits(springUnits)} sub={min != null ? `of ${min} min` : `max ${max}`}
+          label={TERM_NAMES[PLANNING_TERM]} status={low ? 'Below minimum' : over ? 'Needs approval' : 'In range'}
+          tone={low || over ? 'warn' : 'good'}
+          description={`${TERM_NAMES[PLANNING_TERM]} units: ${fmtUnits(springUnits)}${min != null ? ` of a ${min}-unit minimum` : ` with a ${max}-unit cap`}`}
+        />,
+      )
+      if (!next && low) next = { text: `Add ${fmtUnits(min! - springUnits)} units to ${TERM_NAMES[PLANNING_TERM]}`, route: 'find' }
+    }
   }
   return (
-    <article className="fit">
-      <div className="row between" style={{ flexWrap: 'nowrap' }}>
-        <TierLabel tier={fit.tier} />
-        <span className="course-num">{fit.number}</span>
+    <section className="card dk-rings" aria-label="Progress">
+      <div className="dk-head">
+        <h2>Progress{p.program_label && p.mba_rules === false ? <span className="dk-head-sub"> · {p.program_label}</span> : null}</h2>
+        <button type="button" className="link-btn small" onClick={() => go('plan')}>My plan</button>
       </div>
-      <button className="link-btn course-title" style={{ color: 'var(--text)', textAlign: 'left' }} onClick={() => onOpen(fit.key)}>{fit.title}</button>
-      <div className="meta">
-        <span><Clock className="icon sm" />{fit.time}</span>
-        <span>{fit.units} units</span>
-        <span style={{ color: 'var(--green)' }}><Check className="icon sm" />No clash</span>
+      <div className={`dk-ring-row n${rings.length}`}>{rings}</div>
+      <div className="dk-rings-foot">
+        {next ? (
+          <button type="button" className="link-btn small" onClick={() => go(next!.route)}>Next: {next.text}<ArrowRight className="icon sm" style={{ verticalAlign: '-2px' }} /></button>
+        ) : <span className="faint small">{p.planned_total >= target ? 'Everything is planned. Keep it that way.' : `On track. ${fmtUnits(target - p.planned_total)} units left to plan.`}</span>}
       </div>
-      <div className="row" style={{ gap: 6 }}>
-        {fit.chips.map((c) => <span key={c} className="reason">{c}</span>)}
-      </div>
-      <div className="faint small">
-        Demand: {fit.demand.level}{fit.demand.seats ? ` · ${fit.demand.seats} seats` : ''}
-        {fit.demand.reports ? ` · ${fit.demand.reports} bid reports${fit.demand.sample ? ' (sample)' : ''}` : ''}
-      </div>
-      {why && (
-        <div className="why">
-          {fit.why.evidence ? <p style={{ margin: '0 0 6px' }}>From the course description: <q>{fit.why.evidence}</q></p> : <p style={{ margin: '0 0 6px' }}>No description line matched your goals closely.</p>}
-          {fit.why.counter && <p style={{ margin: '0 0 6px' }}>Worth knowing: {fit.why.counter}.</p>}
-          <a href="#/chat" onClick={() => sessionStorage.setItem('pwd-ask', `Is ${fit.number} ${fit.title} a good fit for my goals? What should I know before bidding?`)}>
-            <MessageCircle className="icon sm" style={{ verticalAlign: '-3px' }} /> Ask Dan about this
-          </a>
-        </div>
-      )}
-      {askReason ? (
-        <div className="row" style={{ gap: 6 }}>
-          <span className="faint small">Why not?</span>
-          {REASONS.map((r) => <button key={r.id} className="chip" onClick={() => onDismiss(fit, r.id)}>{r.label}</button>)}
-          <button className="btn sm ghost" onClick={() => onDismiss(fit, '')}>Skip</button>
-        </div>
-      ) : (
-        <div className="row" style={{ gap: 6, marginTop: 'auto' }}>
-          {inPlan ? <span className="badge green"><Check className="icon sm" />In your plan</span>
-            : <button className={`btn sm ${primary ? 'primary' : ''}`} onClick={add}>Add to plan</button>}
-          <button className="btn sm ghost" onClick={() => setAskReason(true)}>Not for me</button>
-          <button className="btn sm ghost" style={{ marginLeft: 'auto' }} onClick={() => setWhy((v) => !v)} aria-expanded={why}>
-            Why? {why ? <ChevronDown className="icon sm" /> : <ChevronRight className="icon sm" />}
-          </button>
-        </div>
-      )}
-    </article>
+    </section>
   )
 }
 
+/* ------------------------------------------------------------------ week view */
+
+function WeekView({ cal, now, onOpen, go, error, onRetry }: {
+  cal: CalendarEvents | null; now: Date; onOpen: (key: string) => void; go: (r: Route) => void; error: boolean; onRetry: () => void
+}) {
+  const { sectionById } = useApp()
+  const days = useMemo(() => shownWeek(now), [now])
+  const today = isoDay(now)
+  const meetings = useMemo(() => (cal?.classes ?? []).filter((c) => days.includes(c.date)), [cal, days])
+  const sections = useMemo<Section[]>(() => meetings.map((m) => {
+    const code = WEEKDAY_CODES[dayStart(m.date).getDay()]
+    const real = sectionById.get(m.course_id)
+    const [n1, n2, ...rest] = m.title.split(' ')
+    const base: Section = real ?? {
+      id: m.course_id, key: '', number: `${n1} ${n2}`, title: rest.join(' '), term: '', term_name: '', session: '', session_name: '',
+      starts: null, ends: null, days: [], start_min: null, end_min: null, time: '', room: m.room, units: 0, section: '', faculty: [],
+      emails: [], category: '', enrollment: '', limit: null, ldr: false, gsr: false, core: false, prerequisite: '', description: '',
+      syllabus: '', bio: '', new: false, topics: [], programs: [],
+    }
+    return { ...base, id: `${m.course_id}@${m.date}-${m.start_min}`, session: '', days: [code], start_min: m.start_min, end_min: m.end_min, room: m.room }
+  }), [meetings, sectionById])
+  const clashIds = useMemo(() => {
+    const ids = new Set<string>()
+    sections.forEach((a, i) => sections.slice(i + 1).forEach((b) => {
+      if (a.days[0] === b.days[0] && Math.max(a.start_min!, b.start_min!) < Math.min(a.end_min!, b.end_min!)) { ids.add(a.id); ids.add(b.id) }
+    }))
+    return ids
+  }, [sections])
+  const range = useMemo<[number, number]>(() => {
+    if (!meetings.length) return [8 * 60, 17 * 60]
+    let s = Math.floor(Math.min(...meetings.map((m) => m.start_min)) / 60) * 60
+    let e = Math.ceil(Math.max(...meetings.map((m) => m.end_min)) / 60) * 60
+    while (e - s < 8 * 60) { if (e < 22 * 60) e += 60; else s -= 60 }
+    return [s, e]
+  }, [meetings])
+  const narrow = useNarrow()
+  const labels = Object.fromEntries(days.map((d) => [WEEKDAY_CODES[dayStart(d).getDay()], `${dayStart(d).toLocaleDateString('en-US', { weekday: 'short' })} ${dayStart(d).getDate()}`]))
+  const todayCode = days.includes(today) ? WEEKDAY_CODES[now.getDay()] : undefined
+  const first = dayStart(days[0]); const last = dayStart(days[4])
+  const span = `${first.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}–${first.getMonth() === last.getMonth() ? last.getDate() : last.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+  const nextLater = (cal?.classes ?? []).find((c) => c.date > days[4])
+  const byKey = (s: Section) => {
+    const id = s.id.split('@')[0]
+    const real = sectionById.get(id)
+    if (real) onOpen(real.key)
+  }
+  return (
+    <section className="card dk-weekview" aria-label="Week timetable">
+      <div className="dk-head">
+        <h2>{days.includes(today) ? 'This week' : 'Next week'} <span className="dk-head-sub">· {span}</span></h2>
+        <span className="row" style={{ gap: 14 }}>
+          {cal ? <span className="faint small hide-mobile">{meetings.length} {meetings.length === 1 ? 'class' : 'classes'}</span>
+            : <span className="skeleton hide-mobile dk-count-skel" aria-hidden="true" />}
+          <button type="button" className="link-btn small" onClick={() => go('calendar')}>Full calendar</button>
+        </span>
+      </div>
+      {!cal && error ? (
+        <div className="dk-week-empty"><CalendarDays className="icon lg" /><b>Couldn't load your week</b><button type="button" className="btn sm" onClick={onRetry}>Try again</button></div>
+      ) : !cal ? <span className="skeleton" style={{ display: 'block', height: 240 }} />
+        : meetings.length ? (
+          <Timetable sections={sections} clashIds={clashIds} compact hours={range} dayLabels={labels} today={todayCode} onOpen={byKey} pxPerMin={narrow ? 0.58 : 0.46} />
+        ) : (
+          <div className="dk-week-empty">
+            <HandsomeDan size={56} />
+            <b>No classes {days.includes(today) ? 'this week' : 'next week'}</b>
+            <span className="muted small">
+              {nextLater ? `Your next class is ${dayStart(nextLater.date).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}.`
+                : 'Add courses to your plan and your week fills in here.'}
+            </span>
+            {!nextLater && <button type="button" className="btn sm" onClick={() => go('explore')}>Open the course explorer</button>}
+          </div>
+        )}
+    </section>
+  )
+}
+
+/* ------------------------------------------------------------------ page */
+
 export default function Home() {
-  const { user, profile, plan, go, toast, refreshPlan } = useApp()
+  const { user, profile, plan, go, toast, sectionById } = useApp()
+  const now = useNow()
   const [desk, setDesk] = useState<DeskResponse | null>(null)
-  const [fits, setFits] = useState<BestFits | null>(null)
   const [cal, setCal] = useState<CalendarEvents | null>(null)
-  const [actions, setActions] = useState<ActionEntry[]>([])
-  const [showLater, setShowLater] = useState(false)
-  const [showHow, setShowHow] = useState(false)
+  const [programs, setPrograms] = useState<ProgramsInfo | null>(null)
   const [open, setOpen] = useState<string | null>(null)
+  const [showAll, setShowAll] = useState(false)
+  const [briefOpen, setBriefOpen] = useState(false)
+  const listRef = useRef<HTMLUListElement>(null)
+  const [listH, setListH] = useState<number | null>(null)
   const closeDrawer = useCallback(() => setOpen(null), [])
 
   const loadDesk = useCallback(() => api.desk().then(setDesk).catch(() => undefined), [])
-  const loadFits = useCallback(() => api.bestFits(PLANNING_TERM).then(setFits).catch(() => undefined), [])
-  const loadActions = useCallback(() => api.actions().then((r) => setActions(r.actions)).catch(() => undefined), [])
-
+  const [calError, setCalError] = useState(false)
+  const loadCal = useCallback(() => api.calendarEvents().then((c) => { setCal(c); setCalError(false) }).catch(() => setCalError(true)), [])
+  useEffect(() => { api.programs().then(setPrograms).catch(() => undefined) }, [])
+  // The plan drives the desk cards and the class list, so (re)load both once the plan is in and whenever it
+  // changes (add, remove, undo). Waiting for the plan avoids two concurrent /api/desk calls on first load,
+  // which could each write a brief. If the plan can't load, fall back after a moment so the Desk still fills.
   useEffect(() => {
-    loadDesk(); loadFits(); loadActions()
-    api.calendarEvents().then(setCal).catch(() => undefined)
-  }, [loadDesk, loadFits, loadActions])
+    if (plan) { loadDesk(); loadCal(); return }
+    const t = window.setTimeout(() => { loadDesk(); loadCal() }, 2500)
+    return () => window.clearTimeout(t)
+  }, [plan, loadDesk, loadCal])
 
-  // When the plan changes (add, undo), the desk, fits and action log change too.
-  useEffect(() => { if (plan) { loadDesk(); loadFits(); loadActions() } }, [plan, loadDesk, loadFits, loadActions])
-
-  const act = (c: DeskCard) => {
-    if (c.action.type === 'scroll') document.getElementById(c.action.target || 'fits')?.scrollIntoView({ behavior: 'smooth' })
-    else if (c.action.route) go(c.action.route as never)
-  }
-  const setState = async (c: DeskCard, s: 'snoozed' | 'dismissed' | 'done') => {
-    await api.deskCard(c.id, s)
+  const act = useCallback((c: DeskCard) => {
+    if (c.action.type === 'scroll') go(c.action.target === 'fits' ? 'find' : 'plan')
+    else if (c.action.route) go(c.action.route as Route)
+  }, [go])
+  const markDone = async (c: DeskCard) => {
+    await api.deskCard(c.id, 'done')
     await loadDesk()
-    toast(s === 'snoozed' ? 'Snoozed for 3 days' : s === 'done' ? 'Marked done' : 'Dismissed', 'good', {
-      label: 'Undo', run: async () => { await api.deskCard(c.id, 'active'); loadDesk() },
-    })
-  }
-  const dismiss = async (f: Fit, reason: string) => {
-    await api.dismissFit(f.key, reason)
-    await loadFits()
-    toast(`Hid ${f.number}. Similar courses rank lower now.`, 'good', {
-      label: 'Undo', run: async () => { await api.undismissFit(f.key); loadFits() },
-    })
-  }
-  const undo = async (a: ActionEntry) => {
-    try {
-      const r = await api.undo(a.id)
-      await refreshPlan()
-      toast(r.ok ? 'Undone' : r.detail || 'Nothing to undo', r.ok ? undefined : 'bad')
-    } catch (e) {
-      toast((e as Error).message, 'bad')
-    }
+    toast('Marked done', 'good', { label: 'Undo', run: async () => { await api.deskCard(c.id, 'active'); loadDesk() } })
   }
 
-  const today = cal?.today ?? new Date().toISOString().slice(0, 10)
-  const nextUp = (cal?.deadlines ?? []).filter((d) => d.date >= today).slice(0, 2)
-  const spring = plan?.terms[PLANNING_TERM]
-  const prog = plan?.progress
-  const clashes = Object.values(plan?.terms ?? {}).reduce((n, t) => n + t.conflicts.length, 0)
-  const gsaLeft = 10 - (plan?.progress.gsa_used ?? profile?.gsa_days_used ?? 0)
-  const springTerm = prog?.terms.find((t) => t.term === PLANNING_TERM)
-  const minApplies = springTerm?.min_applies ?? profile?.year === '1'
-  const springUnits = spring?.units ?? 0
-  const unitGoal = (minApplies ? springTerm?.min_units ?? 16 : springTerm?.max_units ?? 24) || 24
-  const status = (met?: boolean, planned?: boolean) => met ? ['Done', 'var(--green)'] : planned ? ['Planned, not done', 'var(--text)'] : ['Not yet', 'var(--amber)']
-  const ldrStatus = status(prog?.ldr.met, prog?.ldr.planned)
-  const gsrStatus = status(prog?.gsr.met, prog?.gsr.planned)
-  const nearest = (cal?.deadlines ?? []).find((d) => d.date >= today && d.kind === 'deadline')
+  const auctionFor = auctionApplies(profile?.program, profile?.year)
+  // Whatever the countdown tile shows (the auction, or the next deadline) is left out of "This week", so the
+  // three slots go to other things.
+  const tileShowsAuction = !!(auctionFor && programs?.auction && auctionPhase(programs.auction, now).phase !== 'after')
+  const tileDeadline = tileShowsAuction || cal?.calendar_note ? null : nextDeadline(cal, now)
+  const skip = useCallback((title: string, date: string | null) =>
+    (tileShowsAuction && /^Course auction (opens|closes)/.test(title))
+    || (!!tileDeadline && date === tileDeadline.date && tileDeadline.title.startsWith(title)), [tileShowsAuction, tileDeadline])
+  const week = useMemo(() => buildWeek(desk, cal, now, act, go, skip), [desk, cal, now, act, go, skip])
+  const top = week.slice(0, 3)
+  const rest = week.slice(3)
+  const h = now.getHours()
+  const hello = h < 5 ? 'Up late' : h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'
+  const first = (user?.name || '').split(' ')[0]
+  const hasPlan = (plan?.items.length ?? 0) > 0 || (cal?.classes.length ?? 0) > 0
+  const mba = (profile?.program ?? 'MBA') === 'MBA' || profile?.program === 'MBA-JOINT'
+  const needsCohort = mba && profile?.year === '1' && !profile?.cohort && !(cal?.classes.length)
+  const brief = desk ? firstSentence(desk.brief.text) : ''
+  const briefMore = desk ? desk.brief.text.trim().length > brief.length + 1 : false
+  const sectionKey = (id: string) => plan?.items.find((i) => i.section.id === id)?.section.key
 
   return (
-    <div>
-      <div className="desk-head">
-        <div>
-          <h1>{greeting()}, {user?.name || 'there'}</h1>
-          <div className="muted small">
-            Spring 2027 planning{nearest ? ` · ${nearest.title.split(' (')[0]} ${relDays(daysUntil(nearest.date, new Date(today + 'T00:00:00')))}` : ''}
-          </div>
-        </div>
-        <span className="faint small hide-mobile">Press <kbd>⌘K</kbd> to search</span>
-      </div>
-
-      <div className="brief" aria-live="polite">
-        {desk ? desk.brief.text : <span className="skeleton" style={{ display: 'block', height: 44 }} />}
-        {desk && (
-          <span className="meta-line">
-            Written by Dan from {desk.top.length} decision{desk.top.length === 1 ? '' : 's'} · {desk.brief.cached ? 'cached today' : 'fresh'}
-            {desk.brief.cost_usd ? ` · ${usd(desk.brief.cost_usd)}` : ' · $0'}
-          </span>
-        )}
-      </div>
-
-      <div className="desk">
-        <div>
-          <div className="section-label">
-            <span>Decisions needed</span>
-            {desk && desk.hidden > 0 && <span className="faint">{desk.hidden} snoozed or done</span>}
-          </div>
-          <div className="decisions">
-            {!desk && <div style={{ padding: 14 }}><span className="skeleton" style={{ display: 'block', height: 40 }} /></div>}
-            {desk && desk.top.length === 0 && <div className="empty small" style={{ padding: 20 }}>You're all caught up. Dan will flag the next decision here.</div>}
-            {desk?.top.map((c) => <Decision key={c.id} card={c} onAct={act} onState={setState} />)}
-          </div>
-          {desk && desk.later.length > 0 && (
-            <div style={{ marginTop: 8 }}>
-              <button className="btn sm ghost" onClick={() => setShowLater((v) => !v)}>
-                {showLater ? <ChevronDown className="icon sm" /> : <ChevronRight className="icon sm" />} Later ({desk.later.length})
+    <div className="dk">
+      <header className="dk-top">
+        <div className="dk-hello">
+          <span className="dk-date">{now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</span>
+          <h1>{hello}{first ? `, ${first}` : ''}</h1>
+          <div className="dk-brief" aria-live="polite">
+            <span className="dk-brief-dot" aria-hidden="true" />
+            {desk ? (
+              <span className="dk-brief-text" title={desk.brief.text}>{brief}</span>
+            ) : <span className="skeleton dk-brief-skel" />}
+            {briefMore && (
+              <button type="button" className="link-btn small dk-brief-more" onClick={() => setBriefOpen((v) => !v)}
+                aria-expanded={briefOpen} aria-controls="dk-brief-full">
+                {briefOpen ? 'Less' : 'More'}
               </button>
-              {showLater && <div className="decisions" style={{ marginTop: 6 }}>{desk.later.map((c) => <Decision key={c.id} card={c} onAct={act} onState={setState} />)}</div>}
-            </div>
-          )}
-
-          <div id="fits" className="section-label" style={{ marginTop: 26 }}>
-            <span>Your best fits · Spring 2027</span>
-            <span className="row" style={{ gap: 12 }}>
-              <button className="link-btn small" onClick={() => setShowHow((v) => !v)}>Why these?</button>
-              <button className="link-btn small" onClick={() => go('find')}>Deep dive with AI</button>
-            </span>
-          </div>
-          {showHow && fits && <p className="faint small" style={{ marginTop: -2 }}>{fits.how} <a href="#/profile">Edit your goals</a>.</p>}
-          {!fits && <div className="fits">{[0, 1, 2].map((i) => <div key={i} className="fit"><span className="skeleton" style={{ height: 120 }} /></div>)}</div>}
-          {fits && fits.top.length === 0 && <div className="card empty small">No clash-free matches left. Try loosening your schedule preferences.</div>}
-          {fits && fits.top.length > 0 && (
-            <div className="fits">
-              {fits.top.map((f, i) => <FitCard key={f.key} fit={f} primary={i === 0} onOpen={setOpen} onDismiss={dismiss} />)}
-            </div>
-          )}
-          {fits?.over_cap && <p className="small" style={{ marginTop: 8, color: 'var(--amber)' }}>Spring is already at {fits.term_units} units, so anything you add needs approval. Swap rather than add.</p>}
-          {fits && (fits.pref_misses ?? 0) > 0 && <p className="faint small" style={{ marginTop: 8 }}>{fits.pref_misses} good matches are hidden because every section breaks your schedule preferences. <button className="link-btn small" onClick={() => go('profile')}>Change preferences</button></p>}
-          {fits && fits.swap_count > 0 && <p className="faint small" style={{ marginTop: 8 }}>{fits.swap_count} more courses would fit if you swapped something in your plan.</p>}
-
-          {fits?.rows.map((row) => (
-            <div key={row.id} className="fit-row">
-              <div className="section-label"><span>{row.title}</span></div>
-              <div className="strip">
-                {row.items.map((f) => (
-                  <button key={f.key} className="mini-fit" style={{ textAlign: 'left', color: 'inherit', font: 'inherit', cursor: 'pointer' }} onClick={() => setOpen(f.key)}>
-                    <span className="row between" style={{ flexWrap: 'nowrap' }}><TierLabel tier={f.tier} /><span className="course-num">{f.number}</span></span>
-                    <span style={{ fontWeight: 500 }}>{f.title}</span>
-                    <span className="faint small">{f.time}{f.chips[0] ? ` · ${f.chips[0]}` : ''}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <aside className="side-pane">
-          <div className="card">
-            <div className="section-label"><span>Next up</span><button className="link-btn small" onClick={() => go('calendar')}>Calendar</button></div>
-            {nextUp.length === 0 && <span className="faint small">Loading…</span>}
-            {nextUp.map((d) => (
-              <div key={d.date + d.title} className="row between" style={{ padding: '6px 0', flexWrap: 'nowrap' }}>
-                <span style={{ fontSize: 13 }}>{d.title.split(' (')[0]}</span>
-                <span className="mono faint">{relDays(daysUntil(d.date, new Date(today + 'T00:00:00')))}</span>
-              </div>
-            ))}
-          </div>
-
-          <div className="card">
-            <div className="section-label"><span>Your plan</span><button className="link-btn small" onClick={() => go('plan')}>Open</button></div>
-            <div className="meter">
-              <span>Spring units{spring?.core_units ? ` (incl. ${spring.core_units} core)` : ''}</span>
-              <span className="mono">{springUnits} / {unitGoal}{minApplies ? ' minimum' : ' maximum'}</span>
-              <Bar pct={(springUnits / unitGoal) * 100} tone={springUnits > (springTerm?.max_units ?? 24) ? 'amber' : minApplies && springUnits >= unitGoal ? 'lime' : ''} />
-              {prog?.mba_rules === false ? (
-                <>
-                  <span>Units in plan</span><span className="mono">{prog.planned_total} / {prog.total_target}</span>
-                  <Bar pct={(prog.planned_total / (prog.total_target || 1)) * 100} />
-                </>
-              ) : (
-                <>
-                  <span>Electives</span><span className="mono">{prog?.electives.planned ?? 0} / 41.5</span>
-                  <Bar pct={((prog?.electives.planned ?? 0) / 41.5) * 100} />
-                  <span>Global Studies days left</span><span className="mono">{gsaLeft} / 10</span>
-                  <Bar pct={gsaLeft * 10} tone="gray" />
-                </>
-              )}
-            </div>
-            {prog?.mba_rules === false ? (
-              (prog.checks ?? []).filter((c) => c.status === 'missing').slice(0, 3).map((c) => (
-                <div key={c.label} className="row between small" style={{ marginTop: 6 }}><span>{c.label}</span><span style={{ color: 'var(--amber)' }}>Not yet</span></div>
-              ))
-            ) : (
-              <>
-                <div className="row between small"><span>Leadership</span><span style={{ color: ldrStatus[1] }}>{ldrStatus[0]}</span></div>
-                <div className="row between small" style={{ marginTop: 6 }}><span>Global Studies</span><span style={{ color: gsrStatus[1] }}>{gsrStatus[0]}</span></div>
-              </>
             )}
-            <div className="row between small" style={{ marginTop: 6 }}><span>Clashes</span><span style={{ color: clashes ? 'var(--red)' : 'var(--green)' }}>{clashes ? `${clashes} to fix` : 'None'}</span></div>
-          </div>
-
-          <div className="card">
-            <div className="section-label"><span>Recent actions</span></div>
-            {actions.length === 0 && <span className="faint small">Every change you or Dan make shows up here, with undo.</span>}
-            {actions.slice(0, 4).map((a) => (
-              <div key={a.id} className="row between" style={{ padding: '5px 0', flexWrap: 'nowrap' }}>
-                <span className="small" style={{ color: a.undone ? 'var(--faint)' : 'var(--text)', textDecoration: a.undone ? 'line-through' : 'none' }}>
-                  {a.summary}{a.by === 'dan' ? <span className="faint"> · via Dan</span> : null}
-                </span>
-                {!a.undone && <button className="btn icon ghost" aria-label={`Undo: ${a.summary}`} title="Undo" onClick={() => undo(a)}><RotateCcw className="icon sm" /></button>}
+            {/* The full brief opens over the page (not inline), so the cards below never move. */}
+            {briefOpen && desk && (
+              <div id="dk-brief-full" className="dk-brief-pop" role="region" aria-label="Dan's full brief"
+                onKeyDown={(e) => { if (e.key === 'Escape') setBriefOpen(false) }}>
+                <p>{desk.brief.text}</p>
+                <button type="button" className="link-btn small" onClick={() => setBriefOpen(false)}>Close</button>
               </div>
-            ))}
+            )}
           </div>
-        </aside>
+        </div>
+      </header>
+
+      <div className="dk-grid">
+        <TodayStrip
+          classes={cal ? cal.classes as Meeting[] : null} now={now} hasPlan={hasPlan} needsCohort={needsCohort}
+          error={calError && !cal} onRetry={loadCal}
+          onOpenCourse={(id) => { const k = sectionById.get(id)?.key ?? sectionKey(id); if (k) setOpen(k) }}
+          go={go}
+        />
+        <CountdownTile programs={programs} cal={cal} now={now} auctionFor={auctionFor} go={go} error={calError && !cal} onRetry={loadCal} />
+
+        <section className="card dk-week" aria-label="This week">
+          <div className="dk-head">
+            <h2>This week</h2>
+            {rest.length > 0 && (
+              <button type="button" className="link-btn small" aria-expanded={showAll} aria-controls="dk-week-list"
+                onClick={() => { if (!showAll) setListH(listRef.current?.offsetHeight ?? null); setShowAll((v) => !v) }}>
+                {showAll ? 'Show less' : `${rest.length} more`}
+              </button>
+            )}
+          </div>
+          {!desk || (!cal && !calError) ? (
+            <ul className="dk-list">{[0, 1, 2].map((i) => <li key={i} className="dk-item"><span className="skeleton dk-item-skel" /></li>)}</ul>
+          ) : top.length === 0 ? (
+            <div className="dk-clear">
+              <Sparkles className="icon lg" />
+              <b>Nothing due this week</b>
+              <span className="muted small">No clashes, deadlines or open decisions. Dan will flag the next one here.</span>
+            </div>
+          ) : (
+            <>
+              {/* "N more" scrolls the full list inside the same box instead of adding a card below. */}
+              <ul className={`dk-list${showAll ? ' dk-list-all' : ''}`} id="dk-week-list" ref={listRef}
+                style={showAll && listH ? { height: listH } : undefined} tabIndex={showAll ? 0 : undefined}
+                aria-label={showAll ? `All ${week.length} items this week` : undefined}>
+                {(showAll ? week : top).map((i) => <WeekRow key={i.id} item={i} now={now} onDone={markDone} />)}
+              </ul>
+              {top.length < 3 && <p className="dk-week-end">That's everything for now. Dan flags new things here.</p>}
+            </>
+          )}
+        </section>
+        <Rings go={go} programs={programs} />
+
+        <WeekView cal={cal} now={now} onOpen={setOpen} go={go} error={calError && !cal} onRetry={loadCal} />
       </div>
+
       {open && <CourseDrawer courseKey={open} onClose={closeDrawer} />}
     </div>
   )

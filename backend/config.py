@@ -47,6 +47,16 @@ MAX_MESSAGE_CHARS = 2000
 SESSION_DAYS = int(os.getenv("SESSION_DAYS", "30"))  # renewed while in use, so active students stay signed in
 SECURE_COOKIES = os.getenv("SECURE_COOKIES", "auto")  # auto = Secure when served over https
 
+# "Continue with Google / Microsoft" (docs/oauth_setup.md). A provider whose ID or secret is missing is simply
+# hidden; email + password keeps working. Set these in the Render dashboard, never in the repo.
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "").strip()
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "").strip()
+MICROSOFT_CLIENT_ID = os.getenv("MICROSOFT_CLIENT_ID", "").strip()
+MICROSOFT_CLIENT_SECRET = os.getenv("MICROSOFT_CLIENT_SECRET", "").strip()
+# Optional: pin the public address used in OAuth redirect URIs (e.g. https://plan-with-dan.onrender.com).
+# Without it the address is taken from the request, which works behind Render's proxy too.
+PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "").strip().rstrip("/")
+
 
 def api_key() -> tuple[str, str]:
     """Return (key, kind). PORTKEY_API_KEY is preferred; OPENAI_API_KEY also works."""

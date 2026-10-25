@@ -4,6 +4,11 @@
   font: inherit; font-weight: 500; font-size: 14px; cursor: pointer; box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
   transition: transform 0.15s var(--ease), border-color 0.15s var(--ease); }
 .dan-launcher:hover { transform: translateY(-1px); border-color: var(--pink); }
+/* stepping aside: over a button, link or field the launcher fades out and lets clicks through (DanChat useLauncherDodge).
+   It fades in place: moving it would change what's under it and make it blink. A keyboard user who tabs to it still sees it. */
+.dan-launcher.dodge { opacity: 0; pointer-events: none; }
+.dan-launcher.dodge:focus-visible { opacity: 1; pointer-events: auto; }
+.dan-launcher { transition: transform 0.15s var(--ease), border-color 0.15s var(--ease), opacity 0.2s var(--ease); }
 .dan-launcher-face { width: 40px; height: 40px; border-radius: 50%; background: var(--pink-soft); display: grid; place-items: center; overflow: hidden; }
 .dan-chat { position: fixed; right: 20px; bottom: 84px; z-index: 50; width: min(400px, calc(100vw - 24px)); height: min(600px, calc(100vh - 120px));
   display: flex; flex-direction: column; background: var(--card); border: 1px solid var(--line-2); border-radius: 16px;
@@ -14,6 +19,7 @@
 .dan-chat-name { font-weight: 600; }
 .dan-chat-sub { color: var(--faint); font-size: 12px; }
 .dan-chat-body { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 12px; font-size: 14px; }
+.dan-chat-bot-wrap { display: grid; gap: 6px; }
 .dan-chat-bot { display: flex; gap: 8px; align-items: flex-start; max-width: 100%; }
 .dan-chat-bot .bubble.bot { max-width: calc(100% - 34px); padding-top: 3px; }
 .dan-chat-empty p { margin: 0 0 10px; color: var(--muted); }
@@ -41,4 +47,48 @@
   .dan-launcher { right: 12px; padding: 4px; }
   .dan-launcher-label { display: none; }
   .dan-chat { right: 12px; bottom: 76px; }
+  /* room to scroll the last control on a page clear of the launcher: launcher top (84 + 48px) + 16px */
+  .shell .main { padding-bottom: 156px; }
+  .lp-footer { padding-bottom: 92px; }  /* signed out: the launcher sits 20px from the bottom, 50px tall */
+  /* phone-sized tap targets in the panel */
+  .dan-chat-head .btn.icon, .dan-chat-input .btn.icon { width: 44px; height: 44px; }
+  .dan-chat-input textarea { min-height: 44px; }
+  .dan-chat-starters .chip, .dan-followup { min-height: 44px; }
+}
+.dan-followups { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding-left: 34px; animation: dan-pop-in 0.35s var(--ease) both; }
+.dan-followups-label { width: 100%; font-size: 11.5px; color: var(--faint); }
+.dan-followup { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--pink-line); background: var(--pink-soft); color: var(--text);
+  border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 13px; cursor: pointer; transition: transform 0.12s var(--ease), background 0.12s var(--ease); }
+.dan-followup:hover { transform: translateY(-1px); background: rgba(99, 170, 255, 0.2); }
+.dan-followup .icon { color: var(--pink); }
+@keyframes dan-pop-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+/* tokenomics */
+.tm { position: relative; display: inline-flex; }
+.tm-btn { display: inline-flex; align-items: center; gap: 5px; background: none; border: 1px solid var(--line-2); border-radius: 999px; padding: 2px 9px;
+  color: var(--muted); font: inherit; font-size: 11.5px; font-family: var(--mono); cursor: pointer; }
+.tm-btn:hover { color: var(--text); border-color: var(--pink-line); }
+.tm-panel { position: absolute; bottom: calc(100% + 8px); right: 0; z-index: 30; width: min(340px, 86vw); display: grid; gap: 10px; padding: 12px 14px;
+  background: var(--card); border: 1px solid var(--line-2); border-radius: 12px; box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55); font-family: var(--font); color: var(--text); font-size: 13px; }
+.tm-grid { display: grid; grid-template-columns: 1fr auto; gap: 3px 12px; }
+.tm-grid span:nth-child(odd) { color: var(--muted); }
+.tm-list { margin: 0; padding-left: 18px; display: grid; gap: 6px; max-height: 160px; overflow-y: auto; }
+.tm-list li { display: grid; }
+.tm-q { font-size: 12.5px; }
+
+/* gentle support card under an answer (never a refusal) */
+.dan-support { display: grid; gap: 6px; margin: 2px 0 0 30px; max-width: 88%; padding: 10px 12px; border: 1px solid var(--line-2); border-radius: 10px; background: var(--card); font-size: 13px; line-height: 1.5; color: var(--text); }
+.dan-support p { display: flex; gap: 8px; align-items: flex-start; margin: 0; }
+.dan-support p .icon { flex: none; margin-top: 3px; color: var(--green); }
+.dan-support a { color: var(--text); font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
+.dan-support .dan-support-link { display: inline-flex; align-items: center; gap: 4px; justify-self: start; font-weight: 500; }
+.dan-support.flush { margin-left: 0; }
+
+/* Ask Dan page on phones: 44px tap targets (tabs, Memory / New chat, starters, Send, forget-one buttons) */
+@media (max-width: 900px) {
+  .chat-page .tabs button, .chat-page .page-head .btn, .chat-page .chat-empty .chip, .chat-page .composer .btn { min-height: 44px; }
+  .chat-page .btn.icon { width: 44px; height: 44px; }
+  .chat-page .composer .btn { min-width: 70px; }
+  /* Ask Dan and AI news have different intros and starter counts: give both the same room so the page doesn't jump */
+  .chat-page .chat-lede { min-height: 3lh !important; }
+  .chat-page .chat-empty { min-height: 392px !important; }
 }

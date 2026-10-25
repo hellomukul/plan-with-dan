@@ -1,0 +1,32 @@
+/* Onboarding and Profile: the step card keeps one height and Back / Next stay put between steps.
+   On phones Back / Next sit in a bar pinned to the bottom of the screen, so Next is always in view. */
+.ob { margin: 0 auto; max-width: 860px; width: 100%; }
+.ob-head { flex-wrap: wrap; gap: 10px; }
+.ob-hello { flex-wrap: nowrap; min-width: 0; }
+.ob-exit { gap: 6px; }
+.ob-exit .btn { gap: 6px; }
+.ob-carried { margin: -10px 0 0; }
+.ob-card { min-height: 540px; }
+.ob-courses-msg { margin: -6px 0 0; min-height: 2.9em; }
+.ob-foot { display: flex; align-items: center; gap: 10px; margin-top: 16px; }
+.ob-need { flex: 1; text-align: right; min-height: 1.45em; }
+.ob-next { flex-wrap: nowrap; }
+
+@media (max-width: 900px) {
+  .ob-card { min-height: 0; }
+}
+
+@media (max-width: 640px) {
+  .ob { padding-bottom: 170px; }
+  .ob .btn, .ob .chip, .ob .choice, .ob .field input { min-height: 44px; }
+  .ob .chip { padding-left: 14px; padding-right: 14px; }
+  .ob .choice-grid { grid-template-columns: 1fr 1fr; }
+  .ob .choice { padding: 10px 12px; }
+  .ob-foot { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; margin: 0; flex-wrap: wrap; gap: 8px;
+    padding: 8px 14px calc(10px + env(safe-area-inset-bottom)); background: var(--bg); border-top: 1px solid var(--line); }
+  .ob-need { order: -1; flex-basis: 100%; text-align: left; }
+  .ob-next { margin-left: auto; flex-wrap: wrap; justify-content: flex-end; }
+  /* Profile (signed in): sit above the bottom tab bar. */
+  .ob-editing .ob-foot { bottom: 65px; }
+  .ob-editing { padding-bottom: 150px; }
+}

@@ -3,6 +3,7 @@ import { Check, Clock, UserRound, Armchair } from 'lucide-react'
 import type { Section } from '../api'
 import { enrollLabel } from '../lib/format'
 import { useApp } from '../state'
+import StarButton from './StarButton'
 
 interface Props {
   course: Section
@@ -24,7 +25,10 @@ export default function CourseCard({ course: c, sectionCount = 1, onOpen, footer
           <div className="course-num">{c.number} · {c.session_name}</div>
           <div className="course-title">{c.title}</div>
         </div>
-        {inPlan && <span className="badge green"><Check className="icon sm" />In plan</span>}
+        <div className="row" style={{ gap: 4, flexWrap: 'nowrap' }}>
+          {inPlan && <span className="badge green"><Check className="icon sm" />In plan</span>}
+          <StarButton courseKey={c.key} title={c.number} />
+        </div>
       </div>
       <div className="meta">
         <span><Clock className="icon sm" />{c.time}{sectionCount > 1 ? ` (+${sectionCount - 1} more)` : ''}</span>

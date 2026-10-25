@@ -9,21 +9,29 @@ export interface Tryout {
   program: string
   year: string // '1' | '2' | 'admit' | ''
   cohort: string
-  ids: string[] // everything on the grid
-  auto: string[] // the part SOM schedules for you (core / required), filled in from official data
+  ids: string[] // everything on the grid, both terms
+  auto: string[] // the part SOM schedules for you (core / required) in both terms, filled in from official data
+  dropped: string[] // assigned courses the student took off their grid, so a refill doesn't put them back
 }
+
+/** The most courses a visitor's week holds (both terms' core plus electives). */
+export const MAX_WEEK = 40
 
 // Default visitor: a first-year MBA in Gold, looking at the current fall term.
 export const DEFAULT_WHO = { term: '202603', program: 'MBA', year: '1', cohort: 'Gold' }
-const EMPTY: Tryout = { ...DEFAULT_WHO, ids: [], auto: [] }
+const EMPTY: Tryout = { ...DEFAULT_WHO, ids: [], auto: [], dropped: [] }
+
+/** "reset": the default visitor with an empty week (the core refills from official data). */
+export const resetTryout = (): Tryout => ({ ...EMPTY })
 
 export function loadTryout(): Tryout {
   try {
     const v = JSON.parse(localStorage.getItem(KEY) || '{}')
     return {
       ...EMPTY, ...v,
-      ids: Array.isArray(v.ids) ? v.ids.slice(0, 20) : [],
+      ids: Array.isArray(v.ids) ? v.ids.slice(0, MAX_WEEK) : [],
       auto: Array.isArray(v.auto) ? v.auto : [],
+      dropped: Array.isArray(v.dropped) ? v.dropped : [],
     }
   } catch {
     return EMPTY

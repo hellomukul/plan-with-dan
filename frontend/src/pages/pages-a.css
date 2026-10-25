@@ -32,6 +32,10 @@
 .timetable .tt-block.clash, .timetable .tt-block.clash:hover { background: var(--red-soft); border-color: rgba(255, 92, 92, 0.6); border-left-color: var(--red); }
 .timetable .tt-block.clash b { color: var(--red); }
 .tt-block .icon.xs { width: 11px; height: 11px; }
+/* Cohort core SOM assigns: dashed outline and a muted left edge, so electives you chose stay the pink ones. */
+.timetable .tt-block.core { background: var(--bg-2); border-style: dashed; border-left: 2px solid var(--muted); }
+.timetable .tt-block.core:hover { background: #1b1b1e; border-left-color: var(--muted); }
+.timetable .tt-block.core.clash, .timetable .tt-block.core.clash:hover { background: var(--red-soft); border-left-color: var(--red); }
 
 /* ------------------------------------------------------------ explore (catalog) */
 .ex-filters { display: flex; flex-direction: column; gap: 12px; }
@@ -111,6 +115,7 @@
 @media (max-width: 1000px) { .cal-layout { grid-template-columns: 1fr; } }
 .cal-title { margin: 0; font-size: 16px; font-weight: 600; min-width: 9.5rem; text-align: center; }
 .cal-day { font: inherit; font-size: 11px; color: inherit; text-align: left; cursor: pointer; width: 100%; transition: border-color 0.12s var(--ease); }
+.cal-month .cal-day { height: 116px; min-height: 0; }  /* fixed: a busy day (3 events + "+N more") never makes a month taller */
 .cal-day:hover { border-color: var(--line-2); }
 .cal-day.sel { border-color: var(--muted); }
 .cal-day.today .num { color: var(--pink-2); }
@@ -125,6 +130,7 @@
 .cal-swatch.exam { background: var(--muted); }
 .cal-swatch.global { background: var(--blue); }
 .cal-swatch.break, .cal-swatch.holiday { background: var(--green); }
+.cal-daylist { height: 168px; overflow-y: auto; overscroll-behavior: contain; }  /* fixed: picking a busy day never pushes the page */
 .cal-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
 .cal-list li { display: flex; gap: 10px; align-items: flex-start; }
 .cal-list .cal-swatch { margin-top: 6px; }
@@ -144,6 +150,7 @@
 @media (max-width: 640px) {
   .cal-month { gap: 3px; }
   .cal-day { padding: 4px; min-height: 54px; }
+  .cal-month .cal-day { height: 60px; }
   /* Tiny screens: events become colour bars; tap the day for details. */
   .cal-month .ev { font-size: 0; height: 4px; padding: 0; border-radius: 2px; }
   .cal-month .ev.class { background: var(--pink); }
@@ -151,13 +158,78 @@
   .cal-month .ev.exam { background: var(--muted); }
   .cal-month .ev.global { background: var(--blue); }
   .cal-month .ev.break, .cal-month .ev.holiday { background: var(--green); }
-  .cal-more { font-size: 9px; padding: 0; }
+  /* "+2" at a readable 11px; "more" stays for screen readers only, so it fits a 48px cell */
+  .cal-more { font-size: 11px; padding: 0; line-height: 1; }
+  .cal-more-word { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
   .cal-feed .input-row { flex-direction: column; }
   .cal-sync-btns .btn { flex: 1 1 calc(50% - 10px); }
 }
 /* Compact timetable (home page hero): fits a phone without sideways scrolling. */
 .tt-scroll.compact .timetable { min-width: 0; }
 .tt-scroll.compact .tt-block { padding: 2px 4px; }
-.tt-scroll.compact .tt-block b { font-size: 10px; }
+.tt-scroll.compact .tt-block b { font-size: 11px; }
 .tt-scroll.compact .tt-block .tt-time, .tt-scroll.compact .tt-block .tt-sess { display: none; }
-.tt-scroll.compact .tt-hour { font-size: 9.5px; }
+.tt-scroll.compact .tt-hour { font-size: 11px; }
+.ex-blocked { margin: 2px 0 0; font-size: 12.5px; color: #ffb3b3; }
+/* the student's own booked appointments: outlined, so they read differently from classes */
+.cal-swatch.personal { background: transparent; border: 2px solid var(--pink-2); }
+.cal-month .ev.personal { background: transparent; border: 1px solid var(--pink-2); color: var(--text); }
+@media (max-width: 640px) { .cal-month .ev.personal { background: var(--pink-2); border: 0; } }
+
+/* home page Dates tab (components/DatesTab.tsx) */
+.dt-foot { display: grid; gap: 6px; margin-top: 12px; }
+.dt-foot p { margin: 0; min-height: 2lh; }  /* same height with or without classes */
+.dt-toggle { display: inline-flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--text); cursor: pointer; min-height: 32px; }
+.dt-toggle input { width: 16px; height: 16px; accent-color: var(--pink); margin: 0; }
+/* Desktop: the Dates tab shares one grid cell with My plan (see .ws-pane), so it fills that height: taller day
+   cells and an "Upcoming" list that runs to the bottom, instead of a half-empty panel with ragged columns. */
+@media (min-width: 901px) {
+  .dt { display: flex; flex-direction: column; }
+  .dt > .cal-layout { flex: 1; align-items: stretch; }
+  .dt > .cal-layout > .card { display: flex; flex-direction: column; }
+  .dt .cal-month { flex: 1; grid-template-rows: auto repeat(6, minmax(88px, 1fr)); }
+  .dt .cal-month .cal-day { height: auto; }  /* rows share the panel height instead */
+  .dt .cal-side { display: flex; flex-direction: column; min-height: 0; }
+  .dt .cal-upcoming-card { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
+  .dt .cal-upcoming-card .cal-list { flex: 1 1 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+}
+/* Phones: no timetable text under 11px (hour labels, times, S1/S2/Core tags). */
+@media (max-width: 640px) {
+  .timetable .tt-hour, .timetable .tt-block .tt-time, .timetable .tt-block .tt-sess, .timetable .tt-block b { font-size: 11px; }
+}
+/* My plan: every term shares one grid cell; only the chosen one is visible, so switching terms keeps the page length. */
+.pl-stack { display: grid; }
+.pl-pane { grid-area: 1 / 1; min-width: 0; display: flex; flex-direction: column; }
+.pl-pane:not(.on), .pl-pane:not(.on) * { visibility: hidden !important; }
+/* Calendar: loading skeleton shaped like the loaded page */
+.cal-skel-month, .cal-skel-day, .cal-skel-upcoming, .cal-skel-sync { display: block; border-radius: var(--radius); }
+.cal-skel-month { height: 856px; }
+.cal-skel-day { height: 229px; }
+.cal-skel-upcoming { height: 476px; }
+.cal-skel-sync { height: 503px; }
+@media (max-width: 1100px) { .cal-skel-month { height: 920px; } .cal-skel-upcoming { height: 549px; } .cal-skel-sync { height: 608px; } }
+@media (max-width: 640px) { .cal-skel-month { height: 631px; } .cal-skel-upcoming { height: 521px; } .cal-skel-sync { height: 997px; } }
+/* Calendar: your appointments, each with Delete (a deleted row stays as "Deleted · Undo") */
+.cal-appt-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; max-height: 360px; overflow-y: auto; overscroll-behavior: contain; }
+.cal-appt-list li { display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 6px 0; border-top: 1px solid var(--line); }
+.cal-appt-list li:first-child { border-top: 0; }
+.cal-appt-list .cal-swatch { align-self: flex-start; margin-top: 8px; }
+.cal-appt-text { flex: 1; min-width: 0; }
+.cal-appt-text .cal-item-title, .cal-appt-text .muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal-appt-list li.past .cal-appt-text { opacity: 0.7; }
+.cal-appt-list li.deleted .cal-appt-text { opacity: 0.55; text-decoration: line-through; }
+.cal-appt-actions { display: inline-flex; align-items: center; gap: 6px; flex: none; }
+.cal-appt-del { flex: none; color: var(--muted); }
+.cal-appt-del:hover { color: var(--red); }
+@media (max-width: 900px) { .cal-appt-list .btn { min-height: 44px; min-width: 44px; } }
+/* My plan on phones: every control is at least 44px tall */
+@media (max-width: 640px) {
+  .pl-termbar .tabs button, .pl-row-controls select, .pl-row-actions .btn, .pl-clash-row .btn, .pl-bid input { min-height: 44px; }
+  .pl-actions .section-label .link-btn { min-height: 44px; min-width: 44px; display: inline-flex; align-items: center; justify-content: flex-end; }
+}
+/* Calendar on phones: 44px targets for month navigation, Today, upcoming dates, the feed link and reset */
+@media (max-width: 640px) {
+  .cal-layout .btn.icon, .cal-layout .btn.sm { min-height: 44px; min-width: 44px; }
+  .cal-upcoming { min-height: 44px; justify-content: center; }
+  .cal-feed input, .cal-feed .btn, .cal-sync .row.end .btn { min-height: 44px; }
+}

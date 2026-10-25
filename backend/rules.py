@@ -54,10 +54,25 @@ CORE_COURSES = [
 
 LDR = {
     "summary": "At least one elective from the approved Leadership Distribution list, any time before graduation.",
+    "focus": "Electives on leadership in a particular industry, or on the major ethical and societal challenges leaders face.",
     "how_flagged": "Courses carrying the MGLD attribute in SOM's public course feed (our inference; confirm on the internal list).",
-    "petition": "Petitions go to Academic Affairs & Student Life.",
+    "petition": ("For a course that isn't on the list, contact Academic Affairs & Student Life to start a review by the "
+                 "director of core curriculum."),
+    "examples": ["Interpersonal Dynamics", "Strategic Leadership across Sectors"],  # named on the Leadership & Teams page
     "source": SOURCES["curriculum"],
+    "focus_source": "https://som.yale.edu/programs/mba/curriculum/leadership-teams",
 }
+
+# MBA grades (Bulletin, MBA degree requirements, checked 2026-10-25). A forced distribution; only the top two
+# grades are reported on the transcript.
+GRADING = [
+    {"grade": "High Honors", "share": "up to the top 10%", "transcript": True},
+    {"grade": "Honors", "share": "next 25%", "transcript": True},
+    {"grade": "Proficient", "share": "next 55%", "transcript": False},
+    {"grade": "Pass", "share": "lowest 10% in core, about 5% in electives", "transcript": False},
+    {"grade": "Fail", "share": "absolute standard, no minimum", "transcript": False},
+]
+PASS_FAIL_CAP_UNITS = {"MBA": 23.5, "MBA-JOINT": 16.5}  # most Pass/Fail units allowed across core and electives
 
 GSA_DAYS = 10  # Global Studies Account: funded days at entry, never replenished
 
@@ -189,6 +204,71 @@ CALENDAR_ENDS = {
 }
 
 # Make-up days: a weekday that runs another day's schedule (date -> day code it follows).
+# ---------------------------------------------------------------- registrar: 2026-27 course auction
+# From the SOM Registrar's email to the MBA Class of 2028 (Oct 14, 2026). It went to first-year MBAs only, so
+# these dates and the round rules are shown to first-year MBA (and joint-degree) students only. Exact round dates
+# aren't in the email: we never guess them. No staff names or meeting links are stored.
+REGISTRAR_SOURCE = "SOM Registrar email to the MBA Class of 2028, Oct 14, 2026"
+AUCTION = {
+    "opens": "2026-11-09", "opens_time": "8:30 a.m.",
+    "closes": "2027-01-04", "closes_time": "8:30 a.m.",
+    "rounds": [
+        "First-years bid on International Experience (IE), Global Network Week (GNW) and Global Network online "
+        "courses (SNOC) in rounds 1–2.",
+        "Electives are bid in rounds 2–3.",
+    ],
+    "global": [
+        "GNW round 1 clears by Dec 1.",
+        "The drop deadline for GNW and IE is Dec 14, 8:30 a.m.",
+        "SNOC decisions come by Dec 14.",
+        "GNW is 1.5 units; an IE is 4 units.",
+    ],
+    "add_drop": "Spring add/drop runs in Yale Hub from Jan 5, not in the auction. The body-to-body swap form opens Jan 5.",
+    "exchange": "Exchange auction: Feb 8. Round 1 runs Feb 10–17, round 2 Feb 22–Mar 1.",
+    "sessions": [
+        {"date": "2026-11-02", "title": "Global studies & course auction presentation", "time": "12:00–12:45", "where": "Room 2410"},
+        {"date": "2026-11-11", "title": "Registrar office hours", "time": "12:00–12:45", "where": "Zoom (link in the registrar's email)"},
+    ],
+    "policies": [
+        "Independent study is MGT 690: up to 4 units, no bid points.",
+        "You can't audit a core course.",
+        "A Yale College course counts 1 credit = 4 SOM units.",
+        "At most one Law School course per term.",
+        "Grades: High Honors (HH), Honors (H), Proficient (PR), Pass (P), Fail (F).",
+    ],
+    "audience": "First-year MBA students (Class of 2028)",
+    "source": REGISTRAR_SOURCE,
+}
+AUCTION_DATES = [
+    ("2026-11-02", "Global studies & course auction presentation, 12:00–12:45, room 2410", "milestone"),
+    ("2026-11-09", "Course auction opens (8:30 a.m.)", "deadline"),
+    ("2026-11-11", "Registrar office hours on Zoom, 12:00–12:45", "milestone"),
+    ("2026-12-01", "GNW round 1 results due", "deadline"),
+    ("2026-12-14", "GNW and IE drop deadline (8:30 a.m.); SNOC decisions due", "deadline"),
+    ("2027-01-04", "Course auction closes (8:30 a.m.)", "deadline"),
+    ("2027-01-05", "Body-to-body swap form opens (spring add/drop is in Yale Hub, not the auction)", "deadline"),
+    ("2027-02-08", "Exchange auction", "deadline"),
+    ("2027-02-10", "Exchange auction round 1 (through Feb 17)", "deadline"),
+    ("2027-02-22", "Exchange auction round 2 (through Mar 1)", "deadline"),
+]
+AUCTION_ENDS = {"2027-02-10": "2027-02-17", "2027-02-22": "2027-03-01"}
+
+
+def auction_applies(program: str | None, year: str | None) -> bool:
+    """The registrar's auction email went to first-year MBAs (Class of 2028) only."""
+    return (program or "MBA") in ("MBA", "MBA-JOINT") and year == "1"
+
+
+def calendar_for(program: str | None, year: str | None) -> list[tuple[str, str, str]]:
+    """The shared academic calendar, plus the auction dates for first-year MBAs, in date order."""
+    rows = list(CALENDAR) + (AUCTION_DATES if auction_applies(program, year) else [])
+    return sorted(rows, key=lambda r: r[0])
+
+
+def calendar_end(day: str) -> str:
+    return CALENDAR_ENDS.get(day) or AUCTION_ENDS.get(day) or day
+
+
 MAKEUP_DAYS = {"2027-01-29": "M"}
 
 # Days with no classes, used to add EXDATEs to calendar feeds.

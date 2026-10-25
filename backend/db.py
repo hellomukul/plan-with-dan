@@ -10,7 +10,7 @@ import json
 from datetime import datetime, timezone
 from typing import Any, Iterator, Optional
 
-from sqlalchemy import event, inspect, text
+from sqlalchemy import UniqueConstraint, event, inspect, text
 from sqlmodel import Field, Session, SQLModel, create_engine
 
 from config import DATA_DIR, DATABASE_URL
@@ -29,9 +29,42 @@ class User(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     email: str = Field(index=True, unique=True)
     name: str = ""
-    password_hash: str
+    password_hash: str  # "" for accounts that only sign in with Google or Microsoft
     cal_token: str = Field(index=True)
     created_at: datetime = Field(default_factory=utcnow)
+    # True once Google or Microsoft has vouched for this email (password sign-up never verifies it).
+    email_verified: bool = False
+
+
+class OAuthIdentity(SQLModel, table=True):
+    """A Google or Microsoft account linked to a Dan account. No provider tokens are stored."""
+
+    __table_args__ = (UniqueConstraint("provider", "subject", name="uq_oauth_provider_subject"),)
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(index=True, foreign_key="user.id")
+    provider: str = Field(index=True)  # google | microsoft
+    subject: str  # the provider's stable account id (the ID token's `sub`)
+    email: str = ""  # the email the provider reported when it was linked
+    email_verified: bool = False
+    created_at: datetime = Field(default_factory=utcnow)
+    last_login_at: datetime = Field(default_factory=utcnow)
+
+
+class OAuthState(SQLModel, table=True):
+    """One in-flight Google/Microsoft sign-in: lives 10 minutes, used once.
+
+    Keyed by a hash of the `state` sent to the provider, and tied to the browser that started it by a
+    hash of a random HttpOnly cookie, so a stolen or forged callback URL can't sign anyone in.
+    """
+
+    state_hash: str = Field(primary_key=True)
+    browser_hash: str
+    provider: str
+    code_verifier: str  # PKCE
+    nonce: str
+    intent: str = "signup"  # signup | login | calendar | link
+    user_id: Optional[int] = None  # set when a signed-in student is linking a provider
+    created_at: datetime = Field(default_factory=utcnow, index=True)
 
 
 class AuthSession(SQLModel, table=True):
@@ -222,8 +255,33 @@ class ChatMemory(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=utcnow)
 
 
-USER_TABLES = (AuthSession, Profile, PlanItem, GlobalChoice, ChatMessage, ChatMemory, AuditEvent, RecommendationRun,
-               DeskState, DeskBrief, FitDismissal, ActionLog)
+class ShortlistItem(SQLModel, table=True):
+    """A course the student starred to compare. Keyed by offering, not section: section choice comes later."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(index=True, foreign_key="user.id")
+    course_key: str = Field(index=True)  # catalog offering key
+    note: str = ""  # the student's private note ("heard it's heavy")
+    rank: int = 0  # the student's order of preference (lower = more wanted)
+    created_at: datetime = Field(default_factory=utcnow)
+
+
+class PersonalEvent(SQLModel, table=True):
+    """Something the student booked outside class (a coach appointment, an interview room), on their calendar."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(index=True, foreign_key="user.id")
+    title: str
+    date: str  # ISO date, New York time
+    start_min: int  # minutes after midnight
+    end_min: int
+    location: str = ""
+    note: str = ""
+    created_at: datetime = Field(default_factory=utcnow)
+
+
+USER_TABLES = (AuthSession, OAuthIdentity, Profile, PlanItem, GlobalChoice, ChatMessage, ChatMemory, AuditEvent, RecommendationRun,
+               DeskState, DeskBrief, FitDismissal, ActionLog, ShortlistItem, PersonalEvent)
 
 
 def _make_engine():

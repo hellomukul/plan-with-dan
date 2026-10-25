@@ -9,6 +9,7 @@ import { api, type SafetyEvent, type UsageResponse } from '../api'
 import { Bar, Empty, Spinner } from '../components/ui'
 import { tokens, usd } from '../lib/format'
 import './pages-b.css'
+import './usage.css'
 
 type Health = Awaited<ReturnType<typeof api.health>>
 type ByFeature = Awaited<ReturnType<typeof api.usageAll>>['by_feature']
@@ -16,7 +17,7 @@ type ByFeature = Awaited<ReturnType<typeof api.usageAll>>['by_feature']
 const FEATURES: Record<string, string> = {
   chat: 'Ask Dan',
   news: 'AI news',
-  recommend: 'Find my courses',
+  recommend: 'Elihu (find courses)',
   desk: "Dan's Desk brief",
 }
 const featureLabel = (f: string) => FEATURES[f] ?? f
@@ -110,7 +111,7 @@ export default function Usage() {
   }
 
   const head = (
-    <div className="page-head">
+    <div className="page-head us-head">
       <div>
         <h1>Cost and safety</h1>
         <p>Every AI call is metered: tokens, dollars and the guardrails that fired. Only the scale calculator is an estimate.</p>
@@ -119,7 +120,21 @@ export default function Usage() {
     </div>
   )
 
-  if (!data) return <>{head}<div className="card"><Spinner label="Reading the meters…" /></div></>
+  if (!data) {
+    // Shaped like the loaded page (spend, recent runs, all students, safety), so nothing jumps when it arrives.
+    return (
+      <div aria-busy="true">
+        {head}
+        <span className="sr-only"><Spinner label="Reading the meters…" /></span>
+        <div aria-hidden="true">
+          <span className="skeleton us-skel us-skel-hero" />
+          <span className="skeleton us-skel us-skel-runs mt-lg" />
+          <span className="skeleton us-skel us-skel-all mt-lg" />
+          <div className="grid two mt-lg"><span className="skeleton us-skel us-skel-safety" /><span className="skeleton us-skel us-skel-safety" /></div>
+        </div>
+      </div>
+    )
+  }
   if (!data.usage && !data.all && !data.events) {
     return (
       <>
@@ -213,7 +228,7 @@ function RecentRuns({ runs }: { runs: UsageResponse['runs'] }) {
     <section className="card mt-lg" aria-labelledby="runs-h">
       <div className="section-label" id="runs-h"><span className="pb-label-icon"><Receipt className="icon sm" aria-hidden="true" />My recent runs</span></div>
       {runs.length === 0 ? (
-        <Empty icon={<Inbox className="icon lg" style={{ color: 'var(--faint)' }} />} title="No AI runs yet">Ask Dan something or hit “Find my courses”, and each run's receipt lands here.</Empty>
+        <Empty icon={<Inbox className="icon lg" style={{ color: 'var(--faint)' }} />} title="No AI runs yet">Ask Dan something or ask Elihu to find courses, and each run's receipt lands here.</Empty>
       ) : (
         <div className="table-wrap">
           <table className="table">
@@ -363,16 +378,16 @@ function AcrossStudents({ rows }: { rows: ByFeature }) {
 /* ------------------------------------------------------------------ safety */
 function SafetyLog({ events }: { events: SafetyEvent[] | null }) {
   return (
-    <div className="grid two mt-lg" style={{ alignItems: 'start' }}>
-      <section className="card" aria-labelledby="safety-h">
+    <div className="grid two mt-lg us-safety-row">
+      <section className="card us-safety" aria-labelledby="safety-h">
         <div className="section-label" id="safety-h"><span className="pb-label-icon"><ShieldCheck className="icon sm" aria-hidden="true" />My safety log</span></div>
         <p className="small muted">The last 50 times a guardrail fired on your account. Blocked prompts are logged with the reason and length only, never the text you typed.</p>
         {events === null ? (
           <p className="small error-text">Couldn't load the safety log.</p>
         ) : events.length === 0 ? (
-          <Empty icon={<ShieldCheck className="icon lg" style={{ color: 'var(--green)' }} />} title="All quiet">No guardrail has needed to step in for you yet.</Empty>
+          <div className="us-safety-body"><Empty icon={<ShieldCheck className="icon lg" style={{ color: 'var(--green)' }} />} title="All quiet">No guardrail has needed to step in for you yet.</Empty></div>
         ) : (
-          <ul className="pb-events">
+          <ul className="pb-events us-safety-body" tabIndex={0} aria-label="Safety events">
             {events.map((ev, i) => {
               const meta = EVENT_LABELS[ev.kind] ?? { label: ev.kind.replace(/_/g, ' '), icon: Info, tone: 'gray' }
               const Icon = meta.icon

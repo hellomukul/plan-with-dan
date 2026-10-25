@@ -1,0 +1,37 @@
+/* Course explorer page: the prompt strip above the explorer and Elihu's box inside the course list.
+   Both are fixed-height, so showing, swapping or dismissing them never changes the page length. */
+.xp .page-head { margin-bottom: 14px; }
+
+.xp-strip { container-type: inline-size; display: flex; align-items: center; gap: 10px; height: 52px; box-sizing: border-box; margin-bottom: 14px;
+  padding: 0 8px 0 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg-2); overflow: hidden; }
+.xp-strip.nudge { border-color: var(--pink-line); background: var(--pink-soft); }
+.xp-strip-icon { flex: none; color: var(--pink-2); }
+.xp-strip-text { flex: 1; min-width: 0; margin: 0; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.xp-strip-actions { flex: none; display: flex; align-items: center; gap: 6px; }
+.xp-strip-chip { white-space: nowrap; }
+.xp-strip-x { color: var(--muted); }
+/* show as many suggestions as fit on one line, never wrap */
+@container (max-width: 1060px) { .xp-strip-chip.n2 { display: none; } }
+@container (max-width: 860px) { .xp-strip-chip.n1 { display: none; } }
+@container (max-width: 660px) { .xp-strip-chip.n0 { display: none; } }
+
+/* Elihu's box: a small, quiet row between two courses in the list */
+.cx-list > li.cx-slot { padding: 2px 0; }
+.xp-elihu { width: 100%; height: 56px; box-sizing: border-box; display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; align-items: center; gap: 12px;
+  padding: 0 12px; border: 1px dashed var(--line-2); border-radius: 10px; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer;
+  overflow: hidden; transition: border-color 0.15s var(--ease), background 0.15s var(--ease); }
+.xp-elihu:hover, .xp-elihu:focus-visible { border-color: var(--pink-line); background: var(--bg-2); }
+.xp-elihu .elihu { margin-top: -2px; }
+.xp-elihu-text { display: grid; min-width: 0; line-height: 1.3; }
+.xp-elihu-q { font-size: 13.5px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.xp-elihu-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.xp-elihu-go { font-size: 12.5px; font-weight: 500; color: var(--pink-2); white-space: nowrap; }
+
+@media (max-width: 900px) {
+  .xp-strip { height: calc(2lh + 26px); align-items: center; line-height: 1.4; padding-right: 6px; }
+  .xp-strip-text { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; font-size: 13px; }
+  .xp-strip-actions .btn { min-height: 44px; }
+  .xp-strip-x.btn.icon { width: 44px; height: 44px; }
+  .xp-strip-chip { display: none; }
+  .xp-elihu { height: 60px; }
+}

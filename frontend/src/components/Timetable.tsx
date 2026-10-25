@@ -86,7 +86,7 @@ export default function Timetable({ sections, clashIds = new Set(), onOpen, comp
                   className={`tt-block ${clash ? 'clash' : ''}`}
                   style={{ top, height: Math.max(compact ? 16 : 22, bottom - top - 2), left: `calc(${lane * w}% + 3px)`, right: 'auto', width: `calc(${w}% - 6px)` }}
                   onClick={() => onOpen?.(s)}
-                  title={`${s.number} §${s.section} ${s.title}\n${clock(s.start_min)}–${clock(s.end_min)}${s.room ? ` · ${s.room}` : ''}${clash ? '\nTime clash' : ''}`}
+                  title={`${s.number} §${s.section} ${s.title}\n${clock(s.start_min)}–${clock(s.end_min)}${s.room ? ` · ${s.room}` : ''}${s.exam ? `\nFinal exam: ${s.exam}` : ''}${clash ? '\nTime clash' : ''}`}
                 >
                   <b>{clash && <TriangleAlert className="icon xs" aria-label="Time clash" />}{s.number}</b>
                   <span className="tt-time">{clock(s.start_min).replace(/ (AM|PM)$/, '')}–{clock(s.end_min)}</span>

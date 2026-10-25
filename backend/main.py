@@ -28,7 +28,8 @@ from sqlmodel import Session, func, select  # noqa: E402
 
 import auth  # noqa: E402
 from auth import current_user, limiter  # noqa: E402
-from catalog import TERM_NAMES, TOPIC_RULES, get_catalog  # noqa: E402
+import som_feed  # noqa: E402
+from catalog import CATALOG_PATH, LIVE_PATH, TERM_NAMES, TOPIC_RULES, data_path, get_catalog  # noqa: E402
 from config import (  # noqa: E402
     DAILY_BUDGET_USD, MODEL_NAME, PUBLIC_MESSAGES_PER_DAY, ROOT, RUN_BUDGET_USD, ai_available,
 )
@@ -48,10 +49,16 @@ from planning import (  # noqa: E402
     units_by_term, week_review,
 )
 from rules import (  # noqa: E402
-    COHORT_SECTIONS, CALENDAR, CALENDAR_ENDS, CORE_COURSES, DEGREE, GLOBAL_WEEKS, GSA_DAYS, GSR_OPTIONS, LDR, SOURCES, gsr_courses,
+    CALENDAR, CALENDAR_ENDS, CORE_COURSES, DEGREE, GLOBAL_WEEKS, GSA_DAYS, GSR_OPTIONS, LDR, SOURCES, gsr_courses,
 )
 from safety import screen_input, spent_today  # noqa: E402
 from seed import seed_sample_bids  # noqa: E402
+
+def _reload_catalog() -> None:
+    """New live-feed data landed: rebuild the catalog so the next request sees it."""
+    get_catalog.cache_clear()
+    get_catalog()
+
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
@@ -61,6 +68,7 @@ async def lifespan(_app: FastAPI):
             "DATABASE_URL is not set on a hosted platform: accounts are stored on a disk that is wiped on every "
             "deploy or restart. Set DATABASE_URL to a Postgres URL (e.g. Neon) before inviting anyone.")
     get_catalog()
+    som_feed.start_refresher(LIVE_PATH, CATALOG_PATH, _reload_catalog)
     seed_sample_bids()
     auth.purge_expired_sessions()
     yield
@@ -154,7 +162,7 @@ def programs_public():
 def _data_as_of() -> str:
     """When the course data was last refreshed from SOM's public feed."""
     stamp = ROOT / "data" / "last_updated.json"
-    feed = ROOT / "data" / "yale_som_classes.json"
+    feed = data_path()
     dates = []
     try:
         dates.append(json.loads(stamp.read_text()).get("refreshed", ""))
@@ -191,6 +199,7 @@ def starter_week(program: str = "MBA", year: str = "", cohort: str = "", term: s
     today = date.today()
     ids: list[str] = []
     notes: list[str] = []
+    done: dict = {}  # core this cohort has already finished this term (Fall-1), keyed by course number
 
     def live(sec) -> bool:
         return sec.visible and not sec.ended(today)
@@ -198,25 +207,27 @@ def starter_week(program: str = "MBA", year: str = "", cohort: str = "", term: s
     if prog["base"] == "MBA" and year == "admit":
         # Admitted, not yet enrolled: show a real first-year week as an example (cohorts are assigned at orientation).
         example = cohort or "Gold"
-        for number, by_cohort in COHORT_SECTIONS.items():
-            for o in cat.offering_for_number(number, "202603"):
-                ids += [x.id for x in o.sections if x.section == by_cohort.get(example) and x.is_core and x.visible]
+        ids += [x.id for x in cat.cohort_core("202603", example)]
         notes.append(f"Example: the Fall 2026 first-year core for the {example} cohort. Your cohort and sections "
                      "are assigned at orientation; electives come later.")
         return {"program": program, "term": "202603", "ids": list(dict.fromkeys(ids)), "notes": notes, "example": True}
     if prog["base"] == "MBA":
         if year == "1":
-            if term == "202603":
-                if not cohort:
-                    notes.append("Pick your cohort to see your fall core sections.")
-                for number, by_cohort in COHORT_SECTIONS.items():
-                    for o in cat.offering_for_number(number, term):
-                        ids += [x.id for x in o.sections if x.section == by_cohort.get(cohort) and x.is_core and live(x)]
-                if cohort:
-                    notes.append("Fall core for your cohort; session-1 courses that have ended aren't shown.")
+            mine = cat.cohort_core(term, cohort)
+            ids += [x.id for x in mine if not x.ended(today)]
+            done.update({x.number: x for x in mine if x.ended(today)})
+            season = "fall" if term == "202603" else "spring"
+            if not cohort:
+                notes.append(f"Pick your cohort to see your {season} core sections.")
+            elif done:
+                notes.append(f"{season.title()}-1 core is done and delivered ({', '.join(sorted(done))}); its "
+                             f"{sum(x.units for x in done.values()):g} units count toward this term. "
+                             f"Your {season.title()}-2 core is on the grid.")
+            elif mine:
+                notes.append(f"{season.title()} core for the {cohort} cohort, from SOM's course feed.")
             else:
-                untimed = core_load({"program": program, "year": "1"}, term, cat)["units"]
-                notes.append(f"Your {untimed:g} units of spring core count automatically, but SOM hasn't published "
+                units = core_load({"program": program, "year": "1"}, term, cat)["units"]
+                notes.append(f"Your {units:g} units of {season} core count automatically, but SOM hasn't published "
                              "their times by cohort, so they aren't on the grid. Add electives below.")
         elif year == "2":
             notes.append("Second year is all electives: search and add below.")
@@ -247,8 +258,13 @@ def starter_week(program: str = "MBA", year: str = "", cohort: str = "", term: s
     else:
         notes.append("Nothing is pre-scheduled for your program here. Search and add courses below.")
     ids = list(dict.fromkeys(ids))
-    untimed = core_load({"program": program, "year": year}, term, cat)["units"] if prog["base"] == "MBA" and year == "1" and term == "202701" else 0
-    return {"program": program, "term": term, "ids": ids, "notes": notes, "untimed_units": untimed}
+    # Core that counts but can't be placed: the cohort isn't picked, or SOM hasn't mapped it yet.
+    untimed = 0
+    if prog["base"] == "MBA" and year == "1" and not ids and not done:
+        untimed = core_load({"program": program, "year": year}, term, cat)["units"]
+    return {"program": program, "term": term, "ids": ids, "notes": notes, "untimed_units": untimed,
+            "done_units": sum(x.units for x in done.values()),
+            "done": [{"number": x.number, "title": x.title, "units": x.units} for x in done.values()]}
 
 
 # ------------------------------------------------------------------ profile

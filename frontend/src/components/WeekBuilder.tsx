@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Check, Download, Plus, Search, TriangleAlert, X } from 'lucide-react'
 import { api, type ProgramInfo, type Section } from '../api'
 import Timetable, { sectionsClash } from './Timetable'
-import { TERM_NAMES, prettyDate } from '../lib/format'
+import { TERM_NAMES, prettyDate, shortExam } from '../lib/format'
 import { saveTryout, type Tryout } from '../lib/tryout'
 import { useApp } from '../state'
 
@@ -28,6 +28,7 @@ export default function WeekBuilder({ t, setT, programs, dataAsOf, onSave, showW
   const [note, setNote] = useState('')
   const [example, setExample] = useState(false)
   const [untimed, setUntimed] = useState(0)  // assigned core with no published times (MBA spring)
+  const [doneUnits, setDoneUnits] = useState(0)  // core already finished this term (MBA Fall-1), still counts
   const first = useRef(true)
   useEffect(() => { saveTryout(t) }, [t])
 
@@ -46,6 +47,7 @@ export default function WeekBuilder({ t, setT, programs, dataAsOf, onSave, showW
       setNote(r.notes[0] ?? '')
       setExample(Boolean(r.example))
       setUntimed(r.untimed_units ?? 0)
+      setDoneUnits(r.done_units ?? 0)
       setT((v) => {
         const mine = v.ids.filter((id) => !v.auto.includes(id))
         return { ...v, auto: r.ids, ids: [...r.ids, ...mine.filter((id) => !r.ids.includes(id))].slice(0, 20) }
@@ -80,9 +82,13 @@ export default function WeekBuilder({ t, setT, programs, dataAsOf, onSave, showW
   picked.forEach((a, i) => picked.slice(i + 1).forEach((b) => {
     if (sectionsClash(a, b)) { clashIds.add(a.id); clashIds.add(b.id); clashes.push(`${a.number} and ${b.number}`) }
   }))
-  const units = picked.reduce((n, s) => n + s.units, 0) + untimed
+  const units = picked.reduce((n, s) => n + s.units, 0) + untimed + doneUnits
   const tba = picked.filter((s) => s.start_min == null || !s.days.length)
-  const minimum = prog?.min_units && !(isMba && t.year === '2' && term === '202701') ? prog.min_units : null
+  // A term already under way hides its finished courses. MBA first years get those counted back (doneUnits);
+  // for anyone else the count is partial, so don't check it against the minimum.
+  const underway = (code: string) => sections.some((s) => s.term === code && s.ends && s.ends < today())
+  const minimum = prog?.min_units && !(underway(term) && !doneUnits) && !(isMba && t.year === '2' && term === '202701') ? prog.min_units : null
+  const termLabel = (code: string) => (code === '202603' && underway(code) ? 'Fall-2 2026' : TERM_NAMES[code])
   const sectionsOf = (key: string) => sections.filter((s) => s.key === key && open(s))
 
   const add = (s: Section) => {
@@ -135,12 +141,15 @@ export default function WeekBuilder({ t, setT, programs, dataAsOf, onSave, showW
           ? <span className="small faint">Example week · Fall 2026</span>
           : (
             <div className="tabs wb-tabs" role="tablist" aria-label="Term">
-              {(['202701', '202603'] as const).map((code) => (
-                <button key={code} type="button" className={t.term === code ? 'on' : ''} onClick={() => setT((v) => ({ ...v, term: code }))}>{TERM_NAMES[code]}</button>
+              {(['202603', '202701'] as const).map((code) => (
+                <button key={code} type="button" className={t.term === code ? 'on' : ''} onClick={() => setT((v) => ({ ...v, term: code }))}>{termLabel(code)}</button>
               ))}
             </div>
           )}
-        <span className="mono small">{units} units{untimed ? ` (incl. ${untimed} core)` : ''}{minimum ? ` of ${minimum} min` : ''}</span>
+        <span className="mono small">
+          {units} units{untimed ? ` (incl. ${untimed} core)` : ''}{doneUnits ? ` (incl. ${doneUnits} done in Fall-1)` : ''}
+          {minimum ? (units < minimum ? ` · minimum ${minimum}, add ${minimum - units} more` : ` · minimum ${minimum} met`) : ''}
+        </span>
       </div>
       {note && <p className={`small wb-note ${example ? 'example' : ''}`}>{note}</p>}
 
@@ -172,7 +181,10 @@ export default function WeekBuilder({ t, setT, programs, dataAsOf, onSave, showW
             const auto = t.auto.includes(s.id)
             return (
               <li key={s.id} className={clashIds.has(s.id) ? 'clash' : ''}>
-                <span className="wb-picked-name"><span className="course-num">{s.number}</span> {s.title}</span>
+                <span className="wb-picked-name" title={[s.room, s.exam && `Final exam: ${s.exam}`].filter(Boolean).join(' · ')}>
+                  <span className="course-num">{s.number}</span> {s.title}
+                  {(s.room.trim() || s.exam) && <span className="faint"> · {[s.room.trim(), shortExam(s.exam)].filter(Boolean).join(' · ')}</span>}
+                </span>
                 {auto && <span className="wb-tag">{isMba || t.program === 'EMBA' ? 'core' : 'required'}</span>}
                 {!auto && options.length > 1 && (
                   <select className="lp-select sm" value={s.id} onChange={(e) => swap(s.id, e.target.value)} aria-label={`Section of ${s.number}`}>
@@ -190,7 +202,7 @@ export default function WeekBuilder({ t, setT, programs, dataAsOf, onSave, showW
         {clashes.length
           ? <span className="lp-clash"><TriangleAlert className="icon sm" />{clashes[0]} meet at the same time{clashes.length > 1 ? ` (+${clashes.length - 1} more)` : ''}. Try another section.</span>
           : picked.length > 0 ? <span className="pa-ok"><Check className="icon sm" /> No time clashes</span>
-            : <span className="faint">Pick your program above, then add a course.</span>}
+            : <span className="faint">{untimed ? 'Your core is counted above. Search for an elective to add it to the grid.' : 'Pick your program above, then add a course.'}</span>}
       </div>
       <div className="row wb-actions">
         <button type="button" className="btn primary sm" onClick={onSave} disabled={!picked.length}>Save to a free plan</button>

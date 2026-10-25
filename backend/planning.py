@@ -15,7 +15,7 @@ from typing import Iterable
 
 from catalog import DAY_ORDER, Catalog, Offering, Section, clock
 import programs
-from rules import COHORT_SECTIONS, DEGREE, GSA_DAYS, GSR_OPTIONS, gsr_courses
+from rules import DEGREE, GSA_DAYS, GSR_OPTIONS, gsr_courses
 
 PASSING_MINUTES = 15
 MIN_REPORTS = 3  # hide bid statistics until at least this many real reports exist
@@ -209,14 +209,7 @@ def core_load(profile: dict, term: str, catalog: Catalog) -> dict:
         s = o.lead
         if s.term == term and s.is_core and s.visible:
             numbers.setdefault(s.number, s.units)
-    cohort = profile.get("cohort") or ""
-    sections = []
-    for number in numbers:
-        sec_id = COHORT_SECTIONS.get(number, {}).get(cohort)
-        if not sec_id:
-            continue
-        for o in catalog.offering_for_number(number, term):
-            sections += [x for x in o.sections if x.section == sec_id and x.is_core]
+    sections = [s for s in catalog.cohort_core(term, profile.get("cohort") or "") if s.number in numbers]
     return {
         "units": round(sum(numbers.values()), 1),
         "courses": sorted(numbers),

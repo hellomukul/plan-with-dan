@@ -39,6 +39,7 @@ export default function CourseDrawer({ courseKey, onClose }: { courseKey: string
                 <b>Section {s.section}</b> <span className="muted">· {s.time}</span>
                 <div className="small muted">{s.room || 'Room TBA'} · {s.faculty.join(', ') || 'Instructor TBA'}</div>
                 {s.starts && <div className="small faint">{s.starts} → {s.ends}</div>}
+                {s.exam && <div className="small faint">Final exam: {s.exam}</div>}
               </div>
               {user ? (
                 plannedIds.has(s.id)

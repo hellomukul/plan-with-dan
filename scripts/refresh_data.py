@@ -1,18 +1,25 @@
 #!/usr/bin/env python3
-"""Refresh the course data from CSV exports.
+"""Refresh the committed course snapshot, data/yale_som_classes.json.
 
-Export from https://som.yale.edu/elective-core-courses (one export per term is
-fine — pass them all), then:
+The running server already refreshes itself from SOM's live feed (see
+backend/som_feed.py). This rebuilds the committed fallback it starts from.
+
+From the live feed (preferred: adds cohorts, rooms and core exam slots):
+
+    python3 scripts/refresh_data.py --live
+
+From CSV exports, if the feed is ever unavailable. Export from
+https://som.yale.edu/elective-core-courses (one export per term is fine — pass
+them all), then:
 
     python3 scripts/refresh_data.py ~/Downloads/courseslist-*.csv
 
 Duplicate exports of the same term are harmless; rows are de-duplicated on
-Course ID + Section + TermCode. Both data/yale_som_classes.json (served by the
-API) and data/yale_som.db (searched by the agent) are rewritten, with faculty
-bios carried across from the existing database so they are not lost.
+Course ID + Section + TermCode. Faculty bios are carried across from the current
+snapshot so they are not lost. data/yale_som.db is rewritten too if it exists.
 
-Nothing is written until every file has parsed, so a bad export leaves the
-current data alone.
+Nothing is written until every source has parsed, so a bad export or a broken
+feed leaves the current data alone.
 """
 
 from __future__ import annotations
@@ -27,6 +34,8 @@ from datetime import date
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "backend"))
+import som_feed  # noqa: E402
 JSON_PATH = ROOT / "data" / "yale_som_classes.json"
 DB_PATH = ROOT / "data" / "yale_som.db"
 STAMP_PATH = ROOT / "data" / "last_updated.json"
@@ -58,6 +67,28 @@ COLUMN_MAP = {
 REQUIRED = ["Course ID", "Course Number", "Course Title", "TermCode", "Section"]
 
 
+def write_db(merged: list[dict]) -> None:
+    """The older agent search database, kept in step when it exists."""
+    con = sqlite3.connect(DB_PATH)
+    cols = [c[1] for c in con.execute("PRAGMA table_info(courses)")]
+    con.execute("DELETE FROM courses")
+    con.execute("DELETE FROM sqlite_sequence WHERE name='courses'")
+    insert_cols = [c for c in cols if c != "id"]
+    stmt = (
+        f"INSERT INTO courses ({','.join(insert_cols)}) "
+        f"VALUES ({','.join('?' * len(insert_cols))})"
+    )
+    for r in merged:
+        values = []
+        for c in insert_cols:
+            src = "faculty_bio" if c == "faculty_bio" else COLUMN_MAP.get(c)
+            values.append(r.get(src, "") if src else "")
+        con.execute(stmt, values)
+    con.commit()
+    con.close()
+    print(f"  wrote {DB_PATH.relative_to(ROOT)}")
+
+
 def read_csv(path: Path) -> list[dict]:
     with path.open(encoding="utf-8-sig", newline="") as fh:
         rows = list(csv.DictReader(fh))
@@ -69,14 +100,10 @@ def read_csv(path: Path) -> list[dict]:
     return rows
 
 
-def main(argv: list[str]) -> int:
-    paths = [Path(p).expanduser() for p in argv]
-    if not paths:
-        raise SystemExit(__doc__)
+def read_exports(paths: list[Path]) -> list[dict]:
     for p in paths:
         if not p.exists():
             raise SystemExit(f"no such file: {p}")
-
     merged: list[dict] = []
     seen: set[tuple[str, str, str]] = set()
     for p in paths:
@@ -90,6 +117,20 @@ def main(argv: list[str]) -> int:
             merged.append(r)
             added += 1
         print(f"  {p.name}: {len(rows)} rows, {added} new")
+    return merged
+
+
+def main(argv: list[str]) -> int:
+    if not argv:
+        raise SystemExit(__doc__)
+    previous = json.loads(JSON_PATH.read_text(encoding="utf-8")) if JSON_PATH.exists() else []
+    if argv == ["--live"]:
+        merged = som_feed.fetch_rows(previous)
+        if not som_feed.looks_complete(merged, previous):
+            raise SystemExit(f"live feed looks incomplete ({len(merged)} rows vs {len(previous)}); nothing written")
+        print(f"  live feed: {len(merged)} sections")
+    else:
+        merged = read_exports([Path(p).expanduser() for p in argv])
 
     terms = Counter(r["TermCode"] for r in merged)
     print(f"\n  merged: {len(merged)} rows across {len(terms)} term(s): {dict(terms)}")
@@ -102,61 +143,15 @@ def main(argv: list[str]) -> int:
         if target.exists():
             shutil.copy(target, target.with_suffix(target.suffix + ".bak"))
 
-    con = sqlite3.connect(DB_PATH)
-    cols = [c[1] for c in con.execute("PRAGMA table_info(courses)")]
-
-    # The export has no faculty_bio column, so bios only exist in the database.
-    # Carry them into BOTH outputs — the API serves the JSON, and dropping them
-    # there silently empties "About the instructor" across the site.
-    bios: dict[tuple[str, str], str] = {}
-    by_name: dict[str, str] = {}
-    for num, fac, bio in con.execute(
-        "SELECT course_number, faculty_1, faculty_bio FROM courses"
-    ):
-        if bio:
-            bios[(num or "").strip(), (fac or "").strip()] = bio
-            by_name.setdefault((fac or "").strip(), bio)
-
-    restored = 0
-    for r in merged:
-        name = (r.get("Faculty 1") or "").strip()
-        key = ((r.get("Course Number") or "").strip(), name)
-        bio = bios.get(key) or by_name.get(name, "")
-        r["faculty_bio"] = bio
-        if bio:
-            restored += 1
-
+    # Neither source has faculty bios; carry them over from the current snapshot.
+    restored = som_feed.carry_bios(merged, previous)
     JSON_PATH.write_text(
         json.dumps(merged, ensure_ascii=False, indent=1), encoding="utf-8"
     )
     print(f"\n  wrote {JSON_PATH.relative_to(ROOT)} ({restored} rows kept a bio)")
 
-    con.execute("DELETE FROM courses")
-    con.execute("DELETE FROM sqlite_sequence WHERE name='courses'")
-    insert_cols = [c for c in cols if c != "id"]
-    stmt = (
-        f"INSERT INTO courses ({','.join(insert_cols)}) "
-        f"VALUES ({','.join('?' * len(insert_cols))})"
-    )
-    for r in merged:
-        values = []
-        for c in insert_cols:
-            if c == "faculty_bio":
-                key = (
-                    (r.get("Course Number") or "").strip(),
-                    (r.get("Faculty 1") or "").strip(),
-                )
-                values.append(bios.get(key, ""))
-            else:
-                src = COLUMN_MAP.get(c)
-                values.append(r.get(src, "") if src else "")
-        con.execute(stmt, values)
-    con.commit()
-    kept = con.execute(
-        "SELECT COUNT(*) FROM courses WHERE faculty_bio != ''"
-    ).fetchone()[0]
-    con.close()
-    print(f"  wrote {DB_PATH.relative_to(ROOT)} ({kept} faculty bios carried over)")
+    if DB_PATH.exists():
+        write_db(merged)
 
     STAMP_PATH.write_text(
         json.dumps(

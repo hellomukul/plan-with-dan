@@ -3,6 +3,12 @@ export const DAY_NAMES: Record<string, string> = { M: 'Mon', T: 'Tue', W: 'Wed',
 export const TERM_NAMES: Record<string, string> = { '202603': 'Fall 2026', '202701': 'Spring 2027' }
 export const PLANNING_TERM = '202701'
 
+/** "Wednesday, March 3, 2027 8:00-12:00 noon" -> "Final Wed, Mar 3". Empty when there's no exam slot. */
+export function shortExam(exam?: string): string {
+  const m = exam?.match(/^(\w{3})\w*,\s+(\w{3})\w*\s+(\d{1,2})/)
+  return m ? `Final ${m[1]}, ${m[2]} ${m[3]}` : ''
+}
+
 export function clock(min: number | null | undefined): string {
   if (min == null) return 'TBA'
   const h = Math.floor(min / 60)

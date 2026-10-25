@@ -6,7 +6,7 @@ import { CalendarDays, Download, ExternalLink, Wrench, GraduationCap, Compass, L
 import type { ProgramsInfo } from '../api'
 import WeekBuilder from './WeekBuilder'
 import { prettyDate, relDays, daysUntil } from '../lib/format'
-import type { Tryout } from '../lib/tryout'
+import { DEFAULT_WHO, type Tryout } from '../lib/tryout'
 
 const SHORT: Record<string, { label: string; article: string }> = {
   MBA: { label: 'MBA', article: 'an' }, 'MBA-JOINT': { label: 'MBA joint-degree', article: 'an' },
@@ -103,7 +103,7 @@ export default function Workspace({ t, setT, info, onSave, onSignup }: Props) {
               </select>
             </>
           )}
-          <button type="button" className="link-btn small" onClick={() => setT((v) => ({ ...v, program: 'MBA', year: '', cohort: '', ids: v.ids.filter((id) => !v.auto.includes(id)), auto: [] }))}>reset</button>
+          <button type="button" className="link-btn small" onClick={() => setT((v) => ({ ...v, ...DEFAULT_WHO, ids: v.ids.filter((id) => !v.auto.includes(id)), auto: [] }))}>reset</button>
         </div>
         <div className="ws-tabs" role="tablist" aria-label="Workspace">
           {TABS.map((x) => (

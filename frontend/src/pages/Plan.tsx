@@ -9,7 +9,7 @@ import { api, type Clash, type PlanItem, type PlanResponse, type Section } from 
 import CourseDrawer from '../components/CourseDrawer'
 import Timetable, { sectionsClash } from '../components/Timetable'
 import { Bar, Empty, Spinner } from '../components/ui'
-import { DAYS, DAY_NAMES, PLANNING_TERM, TERM_NAMES } from '../lib/format'
+import { DAYS, DAY_NAMES, PLANNING_TERM, TERM_NAMES, shortExam } from '../lib/format'
 import { useApp } from '../state'
 import './pages-a.css'
 
@@ -442,6 +442,7 @@ function PlanRow({ item, busy, run, onOpen }: { item: PlanItem; busy: boolean; r
           <span><Clock className="icon sm" /><span className="mono">{shortTime(s)}</span></span>
           <span className="mono">{units(s.units)} units</span>
           {s.room && <span><MapPin className="icon sm" />{s.room}</span>}
+          {s.exam && <span title={`Final exam: ${s.exam}`}>{shortExam(s.exam)}</span>}
           {item.added_by === 'dan' && <span className="badge gray">Dan's pick</span>}
         </span>
       </button>

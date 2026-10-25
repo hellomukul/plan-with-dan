@@ -276,7 +276,7 @@ export default function Home() {
             <div className="section-label"><span>Your plan</span><button className="link-btn small" onClick={() => go('plan')}>Open</button></div>
             <div className="meter">
               <span>Spring units{spring?.core_units ? ` (incl. ${spring.core_units} core)` : ''}</span>
-              <span className="mono">{springUnits} / {unitGoal}{minApplies ? ' min' : ' max'}</span>
+              <span className="mono">{springUnits} / {unitGoal}{minApplies ? ' minimum' : ' maximum'}</span>
               <Bar pct={(springUnits / unitGoal) * 100} tone={springUnits > (springTerm?.max_units ?? 24) ? 'amber' : minApplies && springUnits >= unitGoal ? 'lime' : ''} />
               {prog?.mba_rules === false ? (
                 <>

@@ -37,6 +37,8 @@ export interface Section {
   programs: string[]
   tracks?: string[]
   audiences?: string[]  // program codes whose students can plan this section
+  cohort?: string  // MBA core: the cohort this section is for
+  exam?: string  // MBA core: the scheduled final exam, e.g. "Wednesday, March 3, 2027 8:00-12:00 noon"
 }
 
 export interface Prefs { no_before?: number; fridays_free?: boolean; avoid_days?: string[]; max_units?: number; workload?: string }
@@ -366,7 +368,8 @@ export const api = {
   importPlan: (courseIds: string[]) => request<{ added: number }>('POST', '/api/plan/import', { course_ids: courseIds }),
   programs: () => request<ProgramsInfo>('GET', '/api/programs'),
   starterWeek: (q: { program: string; year: string; cohort: string; term: string }) =>
-    request<{ program: string; term: string; ids: string[]; notes: string[]; example?: boolean; untimed_units?: number }>('GET',
+    request<{ program: string; term: string; ids: string[]; notes: string[]; example?: boolean; untimed_units?: number;
+      done_units?: number; done?: { number: string; title: string; units: number }[] }>('GET',
       `/api/starter-week?${new URLSearchParams(q).toString()}`),
   chatMemory: () => request<{ facts: string[]; summary: string; updated_at: string | null }>('GET', '/api/chat/memory'),
   forgetMemory: (fact?: string) => request<{ facts: string[] }>('POST', '/api/chat/memory/forget', { fact: fact ?? null }),

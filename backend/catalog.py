@@ -14,16 +14,19 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import date
 from functools import lru_cache
+from pathlib import Path
 from typing import Iterable
 
 from config import DATA_DIR
 
-CATALOG_PATH = DATA_DIR / "yale_som_classes.json"
+CATALOG_PATH = DATA_DIR / "yale_som_classes.json"  # committed snapshot: the fallback
+LIVE_PATH = DATA_DIR / "som_live.json"  # written by som_feed's background refresh; preferred when present
 
 TERM_NAMES = {"202603": "Fall 2026", "202701": "Spring 2027"}
 SESSION_NAMES = {
@@ -116,6 +119,16 @@ def _email(value: object) -> str:
     raw = str(value or "").strip().lower()
     found = re.match(r"[a-z0-9._%+-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)*?\.(?:edu|com|org|net|gov)", raw)
     return found.group(0) if found else ""
+
+
+def _exam(raw: object) -> str:
+    """Keep the exam field only when it is an actual slot ("Wednesday, March 3, 2027 8:00-12:00 noon").
+
+    For most courses SOM uses it for internal notes ("no 2025-2026", "n/a"), which are not exam dates.
+    """
+    text = _clean(raw)
+    months = r"(?:January|February|March|April|May|June|July|August|September|October|November|December)"
+    return text if re.search(rf"{months}\s+\d{{1,2}},\s+20\d\d", text) and len(text) < 120 else ""
 
 
 def _date(raw: object) -> date | None:
@@ -274,6 +287,8 @@ class Section:
     programs: list[str] = field(default_factory=list)
     tracks: list[str] = field(default_factory=list)  # MMS tracks this section is designated for
     audiences: list[str] = field(default_factory=list)  # program codes that can plan it
+    cohort: str = ""  # MBA core: the cohort this section is for (live feed only)
+    exam: str = ""  # MBA core: the scheduled final exam, when SOM has published one
 
     @property
     def offering_key(self) -> str:
@@ -351,6 +366,8 @@ class Section:
             "programs": self.programs,
             "tracks": self.tracks,
             "audiences": self.audiences,
+            "cohort": self.cohort,
+            "exam": self.exam,
         }
 
 
@@ -397,6 +414,8 @@ def _row_to_section(row: dict, aliases: dict[str, str]) -> Section:
         new_course=_clean(row.get("New Course")).lower() in ("1", "yes", "true"),
         visible=_clean(row.get("Visible")) != "0",
     )
+    section.cohort = _clean(row.get("Cohort")).title()
+    section.exam = _exam(row.get("Final Exam")) if section.any_core else ""
     section.topics = infer_topics(title, description)
     section.programs = programs_for(section.category, section.course_type)
     section.tracks = mms_tracks_for(section.category, section.course_type)
@@ -469,6 +488,20 @@ class Catalog:
 
     def offering(self, key: str) -> Offering | None:
         return self.offerings.get(key)
+
+    def cohort_core(self, term: str, cohort: str) -> list[Section]:
+        """The MBA core sections a cohort sits in this term.
+
+        Read from the live feed's cohort field; when the data has none for this term (a CSV snapshot),
+        fall back to the hand-entered fall table in rules.COHORT_SECTIONS.
+        """
+        if not cohort:
+            return []
+        core = [s for s in self.sections if s.term == term and s.is_core and s.visible]
+        if any(s.cohort for s in core):
+            return [s for s in core if s.cohort == cohort]
+        from rules import COHORT_SECTIONS
+        return [s for s in core if COHORT_SECTIONS.get(s.number, {}).get(cohort) == s.section]
 
     def offering_for_number(self, number: str, term: str | None = None) -> list[Offering]:
         want = _clean(number).upper()
@@ -575,6 +608,17 @@ def card_text(o: Offering, max_desc: int = 320) -> str:
     return " | ".join(parts)
 
 
+def data_path() -> Path:
+    """Where the catalog is read from: the live-feed cache when it exists, else the committed snapshot.
+
+    SOM_LIVE_FEED=0 pins the snapshot (tests, offline runs)."""
+    live = os.getenv("SOM_LIVE_FEED", "1") != "0" and LIVE_PATH.exists()
+    return LIVE_PATH if live else CATALOG_PATH
+
+
 @lru_cache(maxsize=1)
 def get_catalog() -> Catalog:
-    return Catalog(json.loads(CATALOG_PATH.read_text(encoding="utf-8")))
+    try:
+        return Catalog(json.loads(data_path().read_text(encoding="utf-8")))
+    except (OSError, ValueError):  # a damaged cache must never take the site down
+        return Catalog(json.loads(CATALOG_PATH.read_text(encoding="utf-8")))

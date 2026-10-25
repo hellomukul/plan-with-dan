@@ -34,3 +34,8 @@ output/
 .claude/
 data/*.local.txt
 backups/
+
+# Live course feed cache (rebuilt by the server from som.yale.edu)
+data/som_live.json
+data/som_live.tmp
+data/*.bak

@@ -13,7 +13,9 @@ export interface Tryout {
   auto: string[] // the part SOM schedules for you (core / required), filled in from official data
 }
 
-const EMPTY: Tryout = { term: '202701', program: 'MBA', year: '', cohort: '', ids: [], auto: [] }
+// Default visitor: a first-year MBA in Gold, looking at the current fall term.
+export const DEFAULT_WHO = { term: '202603', program: 'MBA', year: '1', cohort: 'Gold' }
+const EMPTY: Tryout = { ...DEFAULT_WHO, ids: [], auto: [] }
 
 export function loadTryout(): Tryout {
   try {

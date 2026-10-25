@@ -14,6 +14,7 @@ sys.path.insert(0, str(ROOT / "backend"))
 # Offline by default. Set TEST_DATABASE_URL to run the same suite against an EMPTY Postgres database.
 os.environ["DATABASE_URL"] = os.getenv("TEST_DATABASE_URL") or "sqlite:///" + str(ROOT / "data" / "test_app.db")
 os.environ["PORTKEY_API_KEY"] = ""
+os.environ["SOM_LIVE_FEED"] = "0"  # tests run on the committed snapshot, never the network
 os.environ["OPENAI_API_KEY"] = ""
 
 import pytest  # noqa: E402
@@ -590,9 +591,44 @@ def test_starter_week_prefills_what_som_schedules(client):
     admit = fresh.get("/api/starter-week?program=MBA&year=admit").json()
     assert admit["example"] and len(admit["ids"]) >= 6 and admit["term"] == "202603"
     spring = fresh.get("/api/starter-week?program=MBA&year=1&cohort=Gold&term=202701").json()
-    assert spring["ids"] == [] and spring["untimed_units"] == 13
+    # Spring core comes from the feed's cohort field: on the grid with times, nothing left "untimed"
+    spring_secs = [get_catalog().by_id[i] for i in spring["ids"]]
+    assert {s.number for s in spring_secs} == {"MGT 408", "MGT 420", "MGT 421", "MGT 422", "MGT 423", "MGT 425", "MGT 430"}
+    assert spring["untimed_units"] == 0 and sum(s.units for s in spring_secs) == 13
+    assert all(s.meeting and s.cohort == "Gold" for s in spring_secs)
+    assert any(s.exam.startswith("Wednesday, March 3, 2027") for s in spring_secs)
+    # Fall: finished (Fall-1) core comes back as done and counted, never on the grid alongside live Fall-2 core
+    fall = fresh.get("/api/starter-week?program=MBA&year=1&cohort=Gold&term=202603").json()
+    on_grid = {get_catalog().by_id[i].number for i in fall["ids"]}
+    assert fall["done_units"] == sum(d["units"] for d in fall["done"])
+    assert not on_grid & {d["number"] for d in fall["done"]} and on_grid | {d["number"] for d in fall["done"]}
     mam = fresh.get("/api/starter-week?program=MAM&term=202701").json()
     assert "No required" in mam["notes"][0]
     ics = fresh.post("/api/ics/preview", json={"course_ids": sr["ids"]})
     assert ics.status_code == 200 and b"BEGIN:VCALENDAR" in ics.content
     assert fresh.get("/api/programs").json()["data_as_of"]
+
+
+def test_live_feed_rows_and_cohort_fallback():
+    import json
+
+    import som_feed
+    from catalog import Catalog, _exam
+    from rules import COHORT_SECTIONS
+    # A feed item becomes a CSV-shaped row: same column names, '|' types become ',' types, cohort and exam kept
+    row = som_feed.to_row({"courseID": "1", "courseNumber": "MGT 420", "courseTitle": "The Workforce", "termCode": "202701",
+                           "section": "03", "courseType": "EMBA|Core", "cohort": "Gold", "daysTimes": "M  W 1:00 PM-2:20 PM",
+                           "finalExamPresentation": "Wednesday, March 3, 2027 8:00-12:00 noon", "room": "EVANS 2410"})
+    assert row["Course Type"] == "EMBA,Core" and row["Cohort"] == "Gold" and row["Room"] == "EVANS 2410"
+    assert row["Daytimes"] == "M  W 1:00 PM-2:20 PM" and parse_meeting(row["Daytimes"]).days == ("M", "W")
+    # Only real exam slots survive; SOM's internal notes in the same field don't
+    assert _exam("Friday, March 5, 2027 9:00-12:00 noon") and not _exam("no 2025-2026") and not _exam("n/a")
+    # Without cohort data (a CSV snapshot), fall core still resolves from the hand-entered table
+    rows = [{k: v for k, v in r.items() if k != "Cohort"} for r in json.loads(Path(ROOT / "data" / "yale_som_classes.json").read_text())]
+    gold_fall = Catalog(rows).cohort_core("202603", "Gold")
+    assert {s.number: s.section for s in gold_fall} == {n: m["Gold"] for n, m in COHORT_SECTIONS.items()}
+    # ...and the feed's cohort field agrees with that table (the feed also maps MGT 401, which the table never had)
+    from_feed = {s.number: s.section for s in get_catalog().cohort_core("202603", "Gold")}
+    assert {n: from_feed.get(n) for n in COHORT_SECTIONS} == {n: m["Gold"] for n, m in COHORT_SECTIONS.items()}
+    # A truncated feed is rejected rather than replacing good data
+    assert not som_feed.looks_complete(rows[:50], rows) and som_feed.looks_complete(rows, rows)

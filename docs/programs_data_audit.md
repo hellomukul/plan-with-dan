@@ -49,10 +49,10 @@ The "Spring 2027 courses" column counts offerings visible to that program in the
 6. **Internal-only data:**
    - The official Leadership course list. The app infers it from the MGLD flag.
    - Auction dates, point budgets and clearing prices.
-   - Spring core section assignments by cohort. The feed only maps the fall core, so spring core units count but spring core times don't.
 7. **2027–28 courses** aren't published yet, so second-years and MBA planners can't plan beyond Spring 2027.
 
 ## How to keep it current
 
-- Run `python scripts/refresh_data.py` when SOM publishes a new term.
+- The server refreshes itself from SOM's live feed (`som.yale.edu/courses/session-items/<term>`) at startup and every 12 hours, into `data/som_live.json`. That feed adds each core section's cohort (fall and spring), its room and its final-exam slot. If the feed is down or looks incomplete, the server keeps serving the committed snapshot.
+- Run `python scripts/refresh_data.py --live` to rebuild the committed snapshot from the feed, or pass CSV exports from som.yale.edu/elective-core-courses if the feed is ever unavailable.
 - Re-check `backend/programs.py` against the new Bulletin each August. Every fact there has its source URL beside it.

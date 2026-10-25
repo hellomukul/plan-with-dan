@@ -42,7 +42,7 @@ cp .env.example .env    # then paste your PORTKEY_API_KEY (or OPENAI_API_KEY)
 uvicorn backend.main:app --port 8000
 ```
 
-**5.** Open **http://localhost:8000**, click **Create account**, and answer the 5-question quiz.
+**5.** Open **http://localhost:8000**, click **Sign up**, and answer the 5 quick profile steps (about a minute).
 
 **Notes**
 - The database is a local SQLite file (`data/app.db`) and is created automatically on first run.
@@ -73,7 +73,7 @@ Sessions last 30 days and renew while in use. App updates that add database fiel
 ```bash
 python -m pytest -q
 ```
-There are 136 tests covering:
+There are 138 tests covering:
 - safety: injection blocking, invented-course removal and spend caps
 - accounts and web security: login enumeration, CSRF and the CSP header
 - planning rules: clash logic, spring core units, the 16-unit window, non-MBA programs, Global Studies data, the make-up day, and planned-vs-done requirements
@@ -103,16 +103,18 @@ The dev UI runs on http://127.0.0.1:5173 and forwards `/api` to `API_PORT` (defa
 
 | Feature | What a student gets |
 |---|---|
-| **Public home page** | Dan, inline in the hero: program-aware starter questions answered instantly from a server cache, a live status line, and a calm visitor cap of 15 questions per device per day. Below it is an "I'm an MBA first year in Blue" picker driving four tabs, all without an account. **My plan** pre-fills what SOM schedules for you; then you add electives and check clashes, units and the calendar file. **Dates** has every remaining date and a calendar download. **Tools** has official links and a glossary. **Requirements** has your program's rules with sources. Then Straight answers and a 4-card account pitch. See `docs/landing_v3_brainstorm.md`. |
+| **Public home page** | Dan, inline in the hero: program-aware starter questions answered instantly from a server cache, a live status line, and a calm visitor cap of 15 questions per device per day. Below it is an "I'm an MBA first year in Blue" picker driving four tabs, all without an account. **Your week** pre-fills what SOM schedules for you; then you add electives and check clashes, units and the calendar file. **Dates** has every remaining date and a calendar download. **Get help** has official links and a glossary. **Requirements** has your program's rules with sources. Then Straight answers and a 4-card account pitch. See `docs/landing_v3_brainstorm.md`. |
 | **Dan's Desk** (home) | A 2–3 sentence brief written by the Chief of Staff agent *only* from decision cards that code computes (clashes, the 16-unit minimum, SOM deadlines, Global Studies, Leadership, bid split). Each card has a due date, a cited source, and approve / snooze / done. Below it: **best fits**, ranked in code with a label (Strong fit / Good fit / Worth a look), up to two reasons, demand shown separately, "Not for me", and a "Why?" panel quoting the course description. A side pane shows what's next, plan meters and an **undoable action log**. |
 | 🎓 **Every SOM program** | Rules from the 2026–27 Yale Bulletin for the full-time MBA, joint-degree MBA, MBA for Executives, MAM, every MMS track (Asset Management, Global Business & Society, Systemic Risk, Technology Management, Public Education Management), and PhD students. Each program gets its own course eligibility, unit limits, required-course checklist and calendar. Gaps in the official data are listed in `docs/programs_data_audit.md`. |
-| ✨ **Find my courses** | A 5-step quiz (program, background, interests, short- and long-term goals, schedule vibe) leads to a shortlist of real courses. Each pick comes with a reason, a quoted line from the course description, a clash check, and backups in the same slot. |
+| ✨ **Course picks** | Tell Elihu, Dan's course-picking owl, what you want from SOM. He ranks real courses for that goal across every quarter you have left (through Spring 2028), each with a reason and a quoted line from the course description. You tick what to keep and add them in one click (undoable). Clashes and time-preference breaks are flagged on the card; 2027–28 courses are labelled as expected from this year's offerings; a "Beyond SOM" list suggests matching courses at other Yale schools. |
+| 🏛️ **Other Yale schools** | 1,140 courses SOM students can take at GSAS, Environment, Public Health and Jackson, from the public Yale Bulletin, in their own Course explorer tab with a violet school badge and the cross-registration rules. Add one to your plan as an outside course (you type the time, then it's clash-checked). SOM courses taught with another school carry a teal "Taught with" badge. |
+| ✅ **Requirements** | Progress towards the degree, Leadership (every MGLD-flagged course), Global Studies, and a Pass/Fail budget from grades you log. Import courses you've taken from a Yale Hub screenshot. |
 | 🐶 **Dan, on every page** | A floating chat with the bulldog in the corner of every page, including the public home page. Signed-in students get the full plan-aware Dan. Visitors can ask about courses, programs or AI news without an account: nothing is stored, each IP gets 15 questions a day, and all visitors share a $1/day budget (`PUBLIC_MESSAGES_PER_DAY`, `PUBLIC_DAILY_BUDGET_USD`). |
 | 🐶 **Ask Dan** | Chat that routes each question to one specialist: Course Scout, Planner, Bid Coach, Career Coach or SOM Guide. Specialists use tools that read real data and can offer one-click "add to plan" buttons.<ul><li>**Personal:** every answer sees your program, goals and plan.</li><li>**Memory:** Dan remembers the whole conversation. Older turns are folded into a summary by a Memory Keeper agent, and lasting facts about you are kept. You can see and delete those facts.</li><li>**Honest:** when the catalog and the sourced Yale facts base don't cover a question, Dan says "I don't know" and links the official page.</li></ul> |
 | 📰 **AI News Desk** | Answers about current AI news using web search, with sources, and finishes with the SOM course where you can learn the topic. |
 | 🗓️ **My plan** | A weekly timetable with session-1 and session-2 views, clash detection based on real session dates, section switching, a unit check (16-unit minimum, approval needed above 24), and status tracking (planned, bidding, enrolled, completed). |
 | 🌍 **Global studies** | Every way to meet the GSR (IE, GNW, SNOC, GSE, exchange), checked against your 10 funded GSA days, with the matching courses and key dates. |
-| 🎯 **Bid coach** | Splits a points budget by priority and seat demand. Students report their own bid outcomes so real history builds up (demo rows are clearly labelled **SAMPLE**). |
+| 🎯 **Bidding** | Splits a points budget by priority and seat demand. Students report their own bid outcomes so real history builds up; a course's outcomes stay hidden until five students report it. "Swap a seat" checks a body-to-body swap against your plan and drafts the post. |
 | 📆 **Calendar** | A month view of classes and SOM deadlines, plus one private subscription link for Google, Outlook and Apple Calendar, or an .ics download. |
 | 🧾 **Cost & safety** | Token counts and dollars for every run, daily budgets, and a log of every safety event. |
 | **Privacy and data** | What's stored and where AI requests go (Portkey → OpenAI), one-click export of all your data, and password-confirmed account deletion. |
@@ -170,7 +172,8 @@ frontend/          React + Vite + TypeScript (dist/ is committed)
 data/              SOM course data (public course directory, Oct 2026)
 scripts/           refresh_data.py, enrich_from_som_feed.py
 tests/             pytest suite
-docs/              research notes, evidence log, submission checklist
+docs/              research notes, evidence log, user feedback review
+Final Project Submission/   report.html, slides.html (submitted on Canvas), their sources and evidence
 ```
 
 ## What I added to the lecture 8 base

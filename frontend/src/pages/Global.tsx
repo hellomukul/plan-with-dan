@@ -6,7 +6,7 @@ import {
   AlertTriangle, ArrowDown, Check, ChevronDown, Circle, CircleDot, Compass, ExternalLink, Globe, GraduationCap, Monitor, Plane, Plus, Sprout, X,
   type LucideIcon,
 } from 'lucide-react'
-import { api, auctionApplies, type AuctionInfo, type GlobalChoice, type GsrOption, type ProgramInfo, type RequirementsResponse } from '../api'
+import { api, auctionApplies, type AuctionInfo, type GlobalChoice, type GradesResponse, type GsrOption, type ProgramInfo, type RequirementsResponse } from '../api'
 import CourseDrawer from '../components/CourseDrawer'
 import { Empty, Spinner } from '../components/ui'
 import { daysUntil, prettyDate, quarterDates, relDays, termName } from '../lib/format'
@@ -624,8 +624,73 @@ export default function Global() {
         )}
       </section>
 
+      <PassFailBudget />
+
       {drawerKey && <CourseDrawer courseKey={drawerKey} onClose={() => { setDrawerKey(null); void load() }} />}
     </>
+  )
+}
+
+/** Pass/Fail budget (student feedback: "log your grades, so you can see how many more pass credits you can have").
+    The cap is from the Bulletin; the grades are only the ones the student types in, kept private to them. */
+function PassFailBudget() {
+  const { toast } = useApp()
+  const [g, setG] = useState<GradesResponse | null>(null)
+  const [saving, setSaving] = useState<string | null>(null)
+  useEffect(() => { api.grades().then(setG).catch(() => setG(null)) }, [])
+  if (!g) return null
+  const save = async (number: string, grade: string) => {
+    setSaving(number)
+    try { setG(await api.saveGrades({ [number]: grade })) } catch (e) { toast((e as Error).message, 'bad') } finally { setSaving(null) }
+  }
+  const pct = g.cap_units ? Math.min(100, (100 * g.used_units) / g.cap_units) : 0
+  const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1))
+  return (
+    <section className="card pad-lg mt-lg gl-pf" id="grades" aria-labelledby="pf-h">
+      <div className="gl-pf-head">
+        <div>
+          <h2 id="pf-h">Pass/Fail budget</h2>
+          <p className="muted small" style={{ margin: 0 }}>
+            {g.cap_units != null
+              ? <>Across core and electives, at most <b>{fmt(g.cap_units)} units</b> can be graded Pass or Fail. Log your grades to see what’s left.</>
+              : <>Your program has no Pass/Fail unit cap in the Bulletin that Dan models. You can still keep track of your grades here.</>}
+          </p>
+        </div>
+        {g.cap_units != null && (
+          <div className="gl-pf-meter" aria-label={`${fmt(g.used_units)} of ${fmt(g.cap_units)} Pass/Fail units used`}>
+            <span className="gl-pf-num"><b>{fmt(g.left_units ?? 0)}</b> units left</span>
+            <span className="bar"><span style={{ width: `${pct}%` }} /></span>
+            <span className="faint small">{fmt(g.used_units)} of {fmt(g.cap_units)} used</span>
+          </div>
+        )}
+      </div>
+      {g.rows.length === 0 ? (
+        <p className="muted small" style={{ marginBottom: 0 }}>No finished courses yet. Core you’ve completed shows here automatically; add other courses you’ve taken in <a href="#/profile">Profile and goals</a>.</p>
+      ) : (
+        <div className="table-wrap">
+          <table className="table gl-pf-table">
+            <thead><tr><th scope="col">Course</th><th scope="col" className="pb-right">Units</th><th scope="col">Your grade</th></tr></thead>
+            <tbody>
+              {g.rows.map((r) => (
+                <tr key={r.number}>
+                  <td><span className="mono">{r.number}</span> <span className="muted">{r.title}</span>{r.source === 'core' && <span className="badge gray" style={{ marginLeft: 6 }}>Core</span>}</td>
+                  <td className="pb-right mono">{r.units != null ? fmt(r.units) : '—'}</td>
+                  <td>
+                    <select value={r.grade} disabled={saving === r.number} onChange={(e) => void save(r.number, e.target.value)} aria-label={`Grade for ${r.number}`}>
+                      <option value="">Not logged</option>
+                      {Object.entries(g.grades).map(([code, name]) => <option key={code} value={code}>{name}</option>)}
+                    </select>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p className="faint small" style={{ marginBottom: 0 }}>
+        Private to your account, and never sent to the AI. Grade rules: <a href={g.source} target="_blank" rel="noreferrer">MBA degree requirements (Bulletin)</a>.
+      </p>
+    </section>
   )
 }
 

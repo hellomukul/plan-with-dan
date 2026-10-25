@@ -1,7 +1,7 @@
-import { useRef, useState } from 'react'
-import type { Section } from '../api'
+import { useEffect, useRef, useState } from 'react'
+import { api, type BidCourse, type Section } from '../api'
 import StarButton from './StarButton'
-import { X } from 'lucide-react'
+import { ExternalLink, Gavel, ListChecks, X } from 'lucide-react'
 import { enrollLabel, prettyDate } from '../lib/format'
 import { displayName } from '../lib/faculty'
 import { addDropClosed } from '../lib/eligibility'
@@ -9,6 +9,7 @@ import QuarterPill from './QuarterPill'
 import NextYearAction from './NextYearAction'
 import { useApp } from '../state'
 import { Overlay } from './ui'
+import { gradedOn } from '../lib/workload'
 import '../pages/pages-a.css'
 
 /** Full details for one offering (all its sections) with add-to-plan per section. */
@@ -24,6 +25,15 @@ export default function CourseDrawer({ courseKey, onClose }: { courseKey: string
     try { await addCourse(id) } finally { pending.current = false; setAdding(null) }
   }
   const rows = sections.filter((s) => s.key === courseKey).sort((a, b) => a.section.localeCompare(b.section))
+  const number = rows[0]?.number ?? ''
+  // Past bid outcomes for this course (signed in only): the same pooled numbers as Bidding and Shortlist compare.
+  const [bid, setBid] = useState<BidCourse | null | undefined>(undefined)
+  useEffect(() => {
+    if (!user || !number) return
+    let alive = true
+    api.bids(number).then((r) => { if (alive) setBid(r.courses.find((x) => x.course_number === number) ?? null) }).catch(() => { if (alive) setBid(null) })
+    return () => { alive = false }
+  }, [user, number])
   if (!rows.length) return null
   const c: Section = rows[0]
   const enrol = enrollLabel(c.enrollment)
@@ -89,6 +99,29 @@ export default function CourseDrawer({ courseKey, onClose }: { courseKey: string
         ))}
       </div>
 
+      {/* Seats and bidding (student feedback: see bids while comparing) */}
+      <h4 className="mt-lg">Seats and bidding</h4>
+      <div className="cd-facts">
+        <span><b>{c.limit ? `${c.limit} seats` : 'Seats not published'}</b> · {enrol.text}</span>
+        {!user ? <span className="faint">Sign in to see past winning bids from classmates.</span>
+          : bid === undefined ? <span className="skeleton cd-skel" aria-hidden="true" />
+          : !bid || !bid.reports ? <span className="faint">No bid reports yet for {c.number}. <button type="button" className="link-btn small" onClick={() => go('bids')}>Report yours on Bidding</button></span>
+          : bid.too_few ? <span className="faint">{bid.reports} classmate report{bid.reports === 1 ? '' : 's'} so far; numbers show once five students report.</span>
+          : <span>{bid.sample_only ? <span className="badge gray">Sample</span> : null} Median winning bid <b>{bid.median_winning_bid ?? '—'}</b> pts{bid.highest_losing_bid != null ? ` · highest losing ${bid.highest_losing_bid}` : ''} · {bid.reports} report{bid.reports === 1 ? '' : 's'} <button type="button" className="link-btn small" onClick={() => go('bids')}><Gavel className="icon xs" /> Bidding</button></span>}
+      </div>
+
+      {/* What it's graded on, from the description (student feedback: workload, exam vs project) */}
+      <h4 className="mt">How it’s graded</h4>
+      {(() => {
+        const graded = gradedOn(`${c.description} ${c.prerequisite}`, rows.some((r) => !!r.exam))
+        return graded.length ? (
+          <div className="cd-facts">
+            <span className="row" style={{ gap: 6 }}><ListChecks className="icon sm faint" aria-hidden="true" />{graded.map((g) => <span key={g} className="badge gray">{g}</span>)}</span>
+            <span className="faint small">Mentioned in the course description or exam schedule; the syllabus has the weights.</span>
+          </div>
+        ) : <p className="faint small" style={{ margin: 0 }}>The description doesn’t say. The syllabus (below) or the instructor will.</p>
+      })()}
+
       <h4 className="mt-lg">What it covers</h4>
       <p className="muted" style={{ whiteSpace: 'pre-line' }}>{c.description || 'No description published yet.'}</p>
       {c.prerequisite && <p><b>Prerequisite:</b> <span className="muted">{c.prerequisite}</span></p>}
@@ -100,6 +133,9 @@ export default function CourseDrawer({ courseKey, onClose }: { courseKey: string
       )}
       <div className="row mt">
         {c.syllabus && <a className="btn sm" href={c.syllabus} target="_blank" rel="noreferrer">Syllabus ↗</a>}
+        {/* Official evaluations are behind Yale login, so we link rather than copy (student feedback: peer feedback) */}
+        <a className="btn sm" href="https://som.yale.edu/myportal/courses/course-evaluations" target="_blank" rel="noreferrer"
+          title="SOM's course evaluations (Yale login)">Course evaluations<ExternalLink className="icon xs" aria-hidden="true" /></a>
         {c.emails[0] && <a className="btn sm" href={`mailto:${c.emails[0]}`}>Email instructor</a>}
       </div>
     </Overlay>

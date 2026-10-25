@@ -2,7 +2,7 @@
    Honesty rule: SOM doesn't publish clearing prices. Rows marked sample_only are illustrative SAMPLE data. */
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { AlertTriangle, CalendarClock, Check, Inbox, Info, Search, Send, ShoppingBag, X } from 'lucide-react'
-import { api, auctionApplies, type AuctionInfo, type BidCourse, type BidSplit } from '../api'
+import { api, auctionApplies, type AuctionInfo, type BidCourse, type BidSplit, type SwapCheck } from '../api'
 import { Bar, Empty, SampleBanner, Spinner } from '../components/ui'
 import { daysUntil, quarterLabel, relDays, TERM_NAMES } from '../lib/format'
 import HandsomeDan from '../mascots/HandsomeDan'
@@ -38,7 +38,97 @@ export default function Bids() {
       <AuctionSection />
       <SplitSection />
       <HistoryAndReport />
+      <SwapSection />
     </div>
+  )
+}
+
+/* ------------------------------------------------------------------ body-to-body swaps (student feedback, Oct 25) */
+
+/** Plan a body-to-body swap: pick a course you'd give up and the one you want; Dan checks the new one fits your
+    week (plan, core and outside courses), shows the units and requirement changes, and drafts a post for classmates.
+    Facts about the form come from the registrar's email; the tips are labelled as tips, not rules. */
+function SwapSection() {
+  const { plan, sections, toast, profile } = useApp()
+  const program = profile?.program || 'MBA'
+  const mine = (plan?.items ?? []).filter((i) => !i.expected && !i.section.core && (i.section.term === '202701' || i.section.term === '202603'))
+  const [give, setGive] = useState<number | ''>('')
+  const [want, setWant] = useState('')
+  const [res, setRes] = useState<SwapCheck | null>(null)
+  const [busy, setBusy] = useState(false)
+  const giveItem = mine.find((i) => i.id === give)
+  const options = useMemo(() => {
+    if (!giveItem) return []
+    const seen = new Set<string>()
+    return sections.filter((x) => x.term === giveItem.section.term && !x.core && x.number !== giveItem.section.number && (x.programs ?? []).includes(program))
+      .filter((x) => (seen.has(x.number) ? false : (seen.add(x.number), true)))
+      .sort((a, b) => a.number.localeCompare(b.number, undefined, { numeric: true }))
+  }, [sections, giveItem, program])
+  const check = async () => {
+    if (!giveItem || !want) return
+    setBusy(true)
+    try { setRes(await api.swapCheck(giveItem.id, want)) } catch (e) { toast((e as Error).message, 'bad'); setRes(null) } finally { setBusy(false) }
+  }
+  const fitting = res?.sections.filter((x) => x.fits) ?? []
+  const post = res ? `Swap? I have ${res.give.number} ${res.give.title} (§${res.give.section}, ${res.give.time}) and I'm looking for ${res.want.number} ${res.want.title}${fitting.length ? ` (§${fitting.map((x) => x.section).join(' or §')})` : ''}. DM me if you'd trade!` : ''
+  const copy = async () => { try { await navigator.clipboard.writeText(post); toast('Copied. Paste it in your class channel.', 'good') } catch { toast('Couldn’t copy; select the text instead.', 'bad') } }
+  return (
+    <section className="card pad-lg mt-lg bd-swap" aria-labelledby="swap-h">
+      <h2 id="swap-h" className="pb-h2"><span className="pb-step" aria-hidden="true">4</span>Swap a seat</h2>
+      <p className="muted" style={{ marginTop: 0 }}>
+        Didn’t get a course? The registrar’s <b>body-to-body swap form</b> lets you trade a seat with a classmate. It opens <b>Jan 5</b> on the{' '}
+        <a href="https://portal.som.yale.edu/" target="_blank" rel="noreferrer">SOM student portal</a> (Yale login). Plan the trade here first.
+      </p>
+      {!mine.length ? (
+        <p className="faint small" style={{ marginBottom: 0 }}>Add this year’s courses to your plan first; then pick one you’d trade away.</p>
+      ) : (
+        <div className="bd-swap-form">
+          <label className="field">I’d give up
+            <select value={give} onChange={(e) => { setGive(e.target.value ? Number(e.target.value) : ''); setWant(''); setRes(null) }}>
+              <option value="">Pick a course in your plan</option>
+              {mine.map((i) => <option key={i.id} value={i.id}>{i.section.number} {i.section.title} · {i.section.term_name}</option>)}
+            </select>
+          </label>
+          <label className="field">For
+            <select value={want} disabled={!giveItem} onChange={(e) => { setWant(e.target.value); setRes(null) }}>
+              <option value="">{giveItem ? `A course in ${giveItem.section.term_name}` : 'Pick what you’d give up first'}</option>
+              {options.map((x) => <option key={x.number} value={x.number}>{x.number} {x.title}</option>)}
+            </select>
+          </label>
+          <button type="button" className="btn primary" onClick={() => void check()} disabled={!giveItem || !want || busy} aria-busy={busy}>{busy ? 'Checking…' : 'Check the swap'}</button>
+        </div>
+      )}
+      {res && (
+        <div className="bd-swap-res">
+          <div className="bd-swap-facts">
+            <span>{fitting.length ? <span className="badge green">{fitting.length === res.sections.length ? 'Fits your week' : `${fitting.length} of ${res.sections.length} sections fit your week`}</span> : <span className="badge red">Clashes with your week</span>}</span>
+            <ul className="bd-swap-secs">
+              {res.sections.map((x) => (
+                <li key={x.id} className={x.fits ? 'ok' : 'no'}><b>§{x.section}</b> {x.time}{x.fits ? ' · fits' : ` · clashes with ${x.clash_with.join(', ')}`}</li>
+              ))}
+            </ul>
+            <span className="small">Units in {res.term_name}: {res.units_before} → <b>{res.units_after}</b>{res.min_units && res.units_after < res.min_units ? <span className="amber-text"> · under the {res.min_units}-unit minimum</span> : ''}</span>
+            {(res.give.ldr && !res.want.ldr) && <span className="small amber-text">You’d give up a Leadership (LDR) course.</span>}
+            {(res.give.gsr && !res.want.gsr) && <span className="small amber-text">You’d give up a Global Studies course.</span>}
+          </div>
+          <label className="field">Post for classmates
+            <textarea readOnly rows={3} value={post} onFocus={(e) => e.currentTarget.select()} />
+          </label>
+          <div className="row">
+            <button type="button" className="btn sm" onClick={() => void copy()}>Copy the post</button>
+            <button type="button" className="btn sm ghost" onClick={() => window.dispatchEvent(new CustomEvent('dan:ask', { detail: `I want to swap ${res.give.number} for ${res.want.number}. How should I approach the body-to-body swap?` }))}>Ask Dan about this swap</button>
+          </div>
+        </div>
+      )}
+      <details className="bd-swap-tips mt">
+        <summary className="small">Tips for finding a swap (from students, not SOM rules)</summary>
+        <ul className="small muted">
+          <li>Check the swap fits your week before you post. A trade that clashes with your core helps no one.</li>
+          <li>Courses with high winning bids (Bid history above) are easier to trade away than to trade into.</li>
+          <li>Post early, say exactly which sections work for you, and keep your plan updated once you’ve traded.</li>
+        </ul>
+      </details>
+    </section>
   )
 }
 

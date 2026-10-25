@@ -100,6 +100,8 @@ export interface PlanItem {
 export interface QuarterInfo { key: string; label: string; units: number; courses: string[] }
 export interface PlanTermInfo {
   name: string; units: number; elective_units: number; core_units: number; core_times_known: boolean
+  /** units of courses taken outside SOM this term: shown apart, not in SOM's totals */
+  outside_units?: number
   conflicts: Clash[]; review: { days_on_campus: string[]; notes: Note[] }
   /** the term's two quarters (half-term courses) and the full-term courses that run through both */
   quarters?: QuarterInfo[]; full_term?: { units: number; courses: string[] }
@@ -125,11 +127,18 @@ export interface Progress {
   notes: string[]
 }
 
+/** A course outside SOM the student added by hand (another Yale school). */
+export interface OutsideCourse {
+  id: number; school: string; number: string; title: string; units: number; term: string
+  days: string[]; start_min: number | null; end_min: number | null; section: Section
+}
+
 export interface PlanResponse {
   items: PlanItem[]
+  outside?: OutsideCourse[]
   terms: Record<string, PlanTermInfo>
   /** the terms this student can plan, in order (first-year MBAs: Fall 2026 → Spring 2028) */
-  planning_terms?: { code: string; name: string; expected: boolean }[]
+  planning_terms?: { code: string; name: string; expected: boolean; can_add?: boolean }[]
   progress: Progress
 }
 
@@ -223,6 +232,27 @@ export interface RecPick {
 }
 
 /** Course package: a goal in the student's words → courses ranked by usefulness, placed across every quarter left. */
+/** Body-to-body swap planner: does the course you want fit if you give one up? */
+export interface SwapCheck {
+  give: { number: string; title: string; section: string; time: string; units: number; ldr: boolean; gsr: boolean }
+  want: { number: string; title: string; units: number; ldr: boolean; gsr: boolean; seats: number | null }
+  term: string; term_name: string; units_before: number; units_after: number; min_units: number | null
+  sections: { id: string; section: string; time: string; quarter: string; fits: boolean; clash_with: string[] }[]
+  form: { opens: string; where: string; url: string }
+}
+
+/** Pass/Fail budget: finished courses with the grades the student chose to log. */
+export interface GradesResponse {
+  program: string
+  cap_units: number | null
+  used_units: number
+  left_units: number | null
+  graded: number
+  rows: { number: string; title: string; units: number | null; source: 'core' | 'taken' | 'plan'; grade: string }[]
+  grades: Record<string, string>
+  source: string
+}
+
 export interface PackageOption {
   term: string
   term_name: string
@@ -518,6 +548,15 @@ export const api = {
     request<{ ok: boolean; id: number; action_id?: number; expected?: boolean; unchanged?: boolean }>('POST', '/api/plan', { course_id, added_by, target_term }),
   updatePlan: (id: number, patch: { status?: PlanItem['status']; bid_points?: number; course_id?: string }) =>
     request<{ ok: boolean; action_id?: number }>('PATCH', `/api/plan/${id}`, patch),
+  addOutside: (c: { school: string; number: string; title: string; units: number; term: string; days: string[]; start_min: number | null; end_min: number | null }) =>
+    request<{ ok: boolean; course: OutsideCourse; clashes: Clash[] }>('POST', '/api/outside', c),
+  removeOutside: (id: number) => request<{ ok: boolean }>('DELETE', `/api/outside/${id}`),
+  grades: () => request<GradesResponse>('GET', '/api/grades'),
+  swapCheck: (giveItemId: number, want: string) => request<SwapCheck>('POST', '/api/swap/check', { give_item_id: giveItemId, want }),
+  readCourses: (image: string) => request<{ courses: { number: string; title: string; grade: string; known: boolean; already: boolean }[]; note: string; usage: Usage; run_id: string }>('POST', '/api/profile/read-courses', { image }),
+  importCourses: (courses: { number: string; grade: string }[]) => request<{ ok: boolean; added: string[]; completed: string[] }>('POST', '/api/profile/import-courses', { courses }),
+  saveGrades: (grades: Record<string, string>) => request<GradesResponse>('PUT', '/api/grades', { grades }),
+  movePlanItem: (id: number, toTerm: string) => request<{ ok: boolean; unchanged?: boolean; action_id?: number; term?: string }>('POST', `/api/plan/${id}/move`, { to_term: toTerm }),
   removeFromPlan: (id: number) => request<{ ok: boolean; action_id?: number }>('DELETE', `/api/plan/${id}`),
   actions: () => request<{ actions: ActionEntry[] }>('GET', '/api/actions'),
   undo: (actionId: number) => request<{ ok: boolean; detail?: string }>('POST', `/api/actions/${actionId}/undo`, {}),

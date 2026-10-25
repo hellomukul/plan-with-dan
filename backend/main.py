@@ -7,6 +7,8 @@ then open http://localhost:8000
 
 from __future__ import annotations
 
+import base64
+import binascii
 import json
 import logging
 import os
@@ -35,7 +37,7 @@ import auth  # noqa: E402
 from auth import client_ip, current_user, limiter  # noqa: E402
 import som_feed  # noqa: E402
 from catalog import (  # noqa: E402
-    CATALOG_PATH, LIVE_PATH, NEXT_YEAR, PLAN_TERMS, TERM_NAMES, TOPIC_RULES, Section, clock, data_path, get_catalog, project,
+    CATALOG_PATH, LIVE_PATH, NEXT_YEAR, PLAN_TERMS, TERM_NAMES, TOPIC_RULES, Meeting, Offering, Section, clock, data_path, get_catalog, project,
     quarter_label, term_name,
 )
 import config  # noqa: E402
@@ -47,17 +49,18 @@ from crew.chat import run_turn, stream_turn  # noqa: E402
 from crew.desk import apply_states, brief as desk_brief, scan as desk_scan, set_state as set_desk_state  # noqa: E402
 from crew.recommender import recommend  # noqa: E402
 from crew.package import PACKAGE_TERM, build_package  # noqa: E402
+from crew.importer import read_courses  # noqa: E402
 from fit import FitContext, best_fits  # noqa: E402
 from db import (  # noqa: E402
     USER_TABLES, ActionLog, AuditEvent, BidReport, ChatMemory, ChatMessage, DeskBrief, DeskState, FitDismissal, GlobalChoice,
-    PersonalEvent, ShortlistItem,
+    OutsideCourse, PersonalEvent, ShortlistItem,
     PlanItem, Profile, RecommendationRun, UsageLog, User, get_db, init_db, log_audit, storage_info, utcnow,
 )
 from ics import build_calendar, google_template_link, meeting_dates  # noqa: E402
 from programs import CODES as PROGRAM_CODES, PROGRAMS  # noqa: E402
 from shortlist import MAX_SHORTLIST, compare as compare_shortlist  # noqa: E402
 from planning import (
-    min_units, max_units, add_drop_closed, planning_terms,  # noqa: E402
+    min_units, max_units, add_drop_closed, best_section, planning_terms,  # noqa: E402
     PlanRow, bid_stats, conflicts, core_load, effective_gsa_used, gsa_check, requirement_progress, suggest_bids,
     units_by_term, week_review,
 )
@@ -486,10 +489,12 @@ def get_plan(user: User = Depends(current_user), db: Session = Depends(get_db)):
         })
     by_term: dict[str, dict] = {}
     plannable = planning_terms(profile)
+    outside = _outside(db, user.id)
     terms = {r.section.term for r in rows} | ({"202701"} if profile.get("year") == "1" else set()) | set(plannable)
     for term in sorted(terms):
         secs = [r.section for r in rows if r.section.term == term]
         core = core_load(profile, term, cat)
+        outside_secs = [_outside_section(o) for o in outside if o.term == term]
         everything = secs + core["sections"]
         season = "fall" if term.endswith("03") else "spring"
         quarters = []
@@ -505,8 +510,9 @@ def get_plan(user: User = Depends(current_user), db: Session = Depends(get_db)):
             "elective_units": sum(s.units for s in secs),
             "core_units": core["units"],
             "core_times_known": core["times_known"],
-            "conflicts": conflicts(secs + core["sections"]),
-            "review": week_review(secs + core["sections"]),
+            "conflicts": conflicts(secs + core["sections"] + outside_secs),
+            "review": week_review(secs + core["sections"] + outside_secs),
+            "outside_units": round(sum(x.units for x in outside_secs), 1),
             # SOM terms have two quarters (sessions); full-term courses run through both
             "quarters": quarters,
             "full_term": {"units": round(sum(x.units for x in full), 1), "courses": [x.number for x in full]},
@@ -515,8 +521,12 @@ def get_plan(user: User = Depends(current_user), db: Session = Depends(get_db)):
         }
     return {
         "items": out_items,
+        "outside": [_outside_api(o) for o in outside],
         "terms": by_term,
-        "planning_terms": [{"code": t, "name": term_name(t), "expected": t not in TERM_NAMES} for t in plannable],
+        # can_add: a this-year term only takes new courses while some section is still before its add/drop deadline
+        "planning_terms": [{"code": t, "name": term_name(t), "expected": t not in TERM_NAMES,
+                            "can_add": t not in TERM_NAMES or any(sec.term == t and not sec.any_core and not add_drop_closed(sec)
+                                                                  for sec in cat.sections)} for t in plannable],
         "progress": _with_empty_terms(requirement_progress(profile, rows, cat, _globals(db, user.id)), profile, plannable),
     }
 
@@ -693,6 +703,296 @@ def delete_plan(item_id: DbId, user: User = Depends(current_user), db: Session =
     return {"ok": True, "action_id": action_id}
 
 
+def _outside_section(o: OutsideCourse) -> Section:
+    """An outside-SOM course as a Section, so the timetable and clash checks treat it like any other class."""
+    days = tuple(json.loads(o.days or "[]"))
+    meeting = Meeting(days, o.start_min, o.end_min) if days and o.start_min is not None and o.end_min is not None else None
+    season = "fall" if o.term.endswith("03") else "spring"
+    return Section(id=f"x{o.id}", number=o.number or o.school or "Outside", title=o.title, term=o.term, session=season, starts=None, ends=None,
+                   meeting=meeting, room="", units=o.units, section="", faculty=[], emails=[], category="Outside SOM", course_type="",
+                   enrollment="outside", limit=None, attributes=[], prerequisite="", description=f"{o.school or 'Outside SOM'} course you added.",
+                   syllabus="", bio="", new_course=False, visible=True)
+
+
+def _outside(db: Session, user_id: int) -> list[OutsideCourse]:
+    return db.exec(select(OutsideCourse).where(OutsideCourse.user_id == user_id).order_by(OutsideCourse.id)).all()
+
+
+def _outside_api(o: OutsideCourse) -> dict:
+    return {"id": o.id, "school": o.school, "number": o.number, "title": o.title, "units": o.units, "term": o.term,
+            "days": json.loads(o.days or "[]"), "start_min": o.start_min, "end_min": o.end_min, "section": _outside_section(o).to_api()}
+
+
+class OutsideIn(BaseModel):
+    school: str = Field("", max_length=40)
+    number: str = Field("", max_length=16)
+    title: str = Field(min_length=2, max_length=120)
+    units: float = Field(ge=0, le=8)
+    term: Literal["202603", "202701", "202703", "202801"]
+    days: list[Literal["M", "T", "W", "Th", "F"]] = Field(default_factory=list, max_length=5)
+    start_min: Optional[int] = Field(None, ge=6 * 60, le=23 * 60)
+    end_min: Optional[int] = Field(None, ge=6 * 60, le=23 * 60)
+
+    @model_validator(mode="after")
+    def _times(self):
+        if (self.start_min is None) != (self.end_min is None) or (self.start_min is not None and self.end_min <= self.start_min):
+            raise ValueError("Give both a start and an end time, with the end after the start.")
+        if self.number and not re.match(r"^[A-Za-z&]{2,6} ?\d{2,5}[A-Za-z]?$", self.number.strip()):
+            raise ValueError("Course number should look like ENGL 3450.")
+        return self
+
+
+@app.get("/api/outside")
+def list_outside(user: User = Depends(current_user), db: Session = Depends(get_db)):
+    return {"courses": [_outside_api(o) for o in _outside(db, user.id)]}
+
+
+@app.post("/api/outside")
+def add_outside(body: OutsideIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    profile = (db.get(Profile, user.id) or Profile(user_id=user.id)).as_dict()
+    if body.term not in planning_terms(profile):
+        raise HTTPException(400, f"{term_name(body.term)} isn't a term you can plan.")
+    if len(_outside(db, user.id)) >= 12:
+        raise HTTPException(400, "That's 12 outside courses already.")
+    o = OutsideCourse(user_id=user.id, school=body.school.strip(), number=" ".join(body.number.upper().split()), title=body.title.strip(),
+                      units=round(body.units * 2) / 2, term=body.term, days=json.dumps(body.days), start_min=body.start_min, end_min=body.end_min)
+    db.add(o)
+    db.commit()
+    db.refresh(o)
+    sec = _outside_section(o)
+    _, rows = _plan_rows(db, user.id)
+    others = [r.section for r in rows if r.section.term == o.term] + core_load(profile, o.term, get_catalog())["sections"]
+    clashes = [c for c in conflicts(others + [sec]) if sec.id in (c["a_id"], c["b_id"])]
+    return {"ok": True, "course": _outside_api(o), "clashes": clashes}
+
+
+@app.delete("/api/outside/{course_id}")
+def remove_outside(course_id: DbId, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    o = db.get(OutsideCourse, course_id)
+    if not o or o.user_id != user.id:
+        raise HTTPException(404, "Not in your plan.")
+    db.delete(o)
+    db.commit()
+    return {"ok": True}
+
+
+GRADE_CODES = {"HH": "High Honors", "H": "Honors", "PR": "Proficient", "P": "Pass", "F": "Fail"}
+
+
+def _finished_courses(db: Session, user_id: int, profile: dict) -> list[dict]:
+    """Courses this student has finished: first-year core that has ended, courses listed as taken, and plan items
+    marked completed. One row per course number, with its units from the catalog when known."""
+    cat = get_catalog()
+    rows: dict[str, dict] = {}
+
+    def add(number: str, source: str, units: float | None = None, title: str = "") -> None:
+        number = " ".join(number.split()).upper()
+        if not number or number in rows:
+            return
+        offs = cat.offering_for_number(number)
+        rows[number] = {"number": number, "title": title or (offs[0].lead.title if offs else ""),
+                        "units": units if units is not None else (offs[0].lead.units if offs else None), "source": source}
+
+    for term in ("202603", "202701"):
+        core = core_load(profile, term, cat)
+        for sec in core["sections"]:
+            if sec.ended():
+                add(sec.number, "core", sec.units, sec.title)
+    for number in profile.get("completed", []):
+        add(number, "taken")
+    _, plan_rows = _plan_rows(db, user_id)
+    for r in plan_rows:
+        if r.status == "completed":
+            add(r.section.number, "plan", r.section.units, r.section.title)
+    return sorted(rows.values(), key=lambda x: x["number"])
+
+
+def _grades_payload(db: Session, user_id: int) -> dict:
+    prof = db.get(Profile, user_id) or Profile(user_id=user_id)
+    profile = prof.as_dict()
+    grades = json.loads(prof.grades or "{}")
+    rows = _finished_courses(db, user_id, profile)
+    for r in rows:
+        r["grade"] = grades.get(r["number"], "")
+    cap = PASS_FAIL_CAP_UNITS.get(profile.get("program") or "MBA")
+    used = round(sum((r["units"] or 0) for r in rows if r["grade"] in ("P", "F")), 1)
+    return {"program": profile.get("program") or "MBA", "cap_units": cap, "used_units": used,
+            "left_units": round(cap - used, 1) if cap is not None else None,
+            "graded": sum(1 for r in rows if r["grade"]), "rows": rows, "grades": GRADE_CODES,
+            "source": SOURCES["requirements"]}
+
+
+class ScreenshotIn(BaseModel):
+    image: str = Field(min_length=100, max_length=MAX_BODY_BYTES)  # a data: URL (the browser shrinks it to a JPEG first)
+
+
+@app.post("/api/profile/read-courses")
+@limiter.limit("6/minute")
+async def read_courses_from_screenshot(request: Request, body: ScreenshotIn, user: User = Depends(current_user),
+                                       db: Session = Depends(get_db)):
+    """Read course numbers (and any clearly shown grades) from a screenshot. Saves nothing; the image isn't stored."""
+    m = re.match(r"^data:(image/(?:png|jpeg|webp));base64,(.+)$", body.image, re.S)
+    if not m:
+        raise HTTPException(422, "Send a PNG, JPEG or WebP screenshot.")
+    try:
+        data = base64.b64decode(m.group(2), validate=True)
+    except (ValueError, binascii.Error):
+        raise HTTPException(422, "That image couldn't be read.")
+    prof = db.get(Profile, user.id) or Profile(user_id=user.id)
+    already = {" ".join(x.split()).upper() for x in prof.as_dict().get("completed", [])}
+    return await read_courses(db, user.id, data, m.group(1), already)
+
+
+class ImportCoursesIn(BaseModel):
+    courses: list[dict[str, str]] = Field(min_length=1, max_length=60)
+
+
+@app.post("/api/profile/import-courses")
+def import_courses(body: ImportCoursesIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Add the courses the student confirmed to 'courses taken', with any grades they kept."""
+    prof = db.get(Profile, user.id) or Profile(user_id=user.id)
+    completed = list(prof.as_dict().get("completed", []))
+    have = {" ".join(x.split()).upper() for x in completed}
+    grades = json.loads(prof.grades or "{}")
+    added = []
+    for c in body.courses:
+        number = " ".join(str(c.get("number", "")).upper().split())
+        if not re.match(r"^[A-Z&]{2,5} \d{3,4}[A-Z]?$", number):
+            raise HTTPException(422, f"{number or 'A course'} isn't a course number like MGT 402.")
+        if number not in have and len(completed) < 60:
+            completed.append(number); have.add(number); added.append(number)
+        if c.get("grade") in GRADE_CODES:
+            grades[number] = c["grade"]
+    prof.completed, prof.grades = json.dumps(completed), json.dumps(grades)
+    db.add(prof)
+    db.commit()
+    return {"ok": True, "added": added, "completed": completed}
+
+
+@app.get("/api/grades")
+def get_grades(user: User = Depends(current_user), db: Session = Depends(get_db)):
+    return _grades_payload(db, user.id)
+
+
+class GradesIn(BaseModel):
+    grades: dict[str, Literal["", "HH", "H", "PR", "P", "F"]] = Field(max_length=80)
+
+
+@app.put("/api/grades")
+def put_grades(body: GradesIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    prof = db.get(Profile, user.id) or Profile(user_id=user.id)
+    allowed = {r["number"] for r in _finished_courses(db, user.id, prof.as_dict())}
+    current = json.loads(prof.grades or "{}")
+    for number, grade in body.grades.items():
+        number = " ".join(number.split()).upper()
+        if number not in allowed:
+            raise HTTPException(400, f"{number} isn't one of your finished courses.")
+        if grade:
+            current[number] = grade
+        else:
+            current.pop(number, None)
+    prof.grades = json.dumps(current)
+    db.add(prof)
+    db.commit()
+    return _grades_payload(db, user.id)
+
+
+SAME_SEASON = {"202603": "202703", "202703": "202603", "202701": "202801", "202801": "202701"}
+
+
+class MoveIn(BaseModel):
+    to_term: Literal["202603", "202701", "202703", "202801"]
+
+
+@app.post("/api/plan/{item_id}/move")
+def move_plan_item(item_id: DbId, body: MoveIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Move a course between this year and next year in the same season (Fall 2026 <-> Fall 2027, Spring 2027 <->
+    Spring 2028). Next year: an expected course from this year's section. This year: a section still open to add that
+    fits the week. Logged with undo."""
+    with _one_at_a_time(user.id):
+        item = db.get(PlanItem, item_id)
+        if not item or item.user_id != user.id:
+            raise HTTPException(404, "Not in your plan.")
+        cat = get_catalog()
+        sec = cat.by_id.get(item.course_id)
+        if not sec:
+            raise HTTPException(404, "That course is no longer in the catalog.")
+        here = item.target_term or sec.term
+        if body.to_term == here:
+            return {"ok": True, "unchanged": True}
+        if SAME_SEASON.get(here) != body.to_term:
+            raise HTTPException(422, f"{sec.number} runs in the {'fall' if here.endswith('03') else 'spring'}, so it can only move to "
+                                     f"{term_name(SAME_SEASON.get(here, here))}.")
+        profile = (db.get(Profile, user.id) or Profile(user_id=user.id)).as_dict()
+        program = profile.get("program") or "MBA"
+        if body.to_term not in planning_terms(profile):
+            raise HTTPException(400, f"{term_name(body.to_term)} isn't a term you can plan.")
+        before = {"course_id": item.course_id, "target_term": item.target_term, "status": item.status, "bid_points": item.bid_points}
+        if body.to_term in ("202703", "202801"):
+            item.target_term, item.status, item.bid_points = body.to_term, "planned", None  # expected: this year's section
+        else:
+            others = [r.section for r in _plan_rows(db, user.id)[1] if r.section.term == body.to_term and r.section.id != sec.id]
+            week = others + core_load(profile, body.to_term, cat)["sections"]
+            off = cat.offerings.get(sec.offering_key)
+            live = [x for x in (off.sections if off else []) if x.open_to(program) and not x.closed and not x.ended()
+                    and not add_drop_closed(x)]
+            pick = best_section(Offering(sec.offering_key, live), week, {}, program) if live else None
+            if not pick:
+                raise HTTPException(400, f"No section of {sec.number} is still open to add in {term_name(body.to_term)}"
+                                         + (" without a clash." if live else "."))
+            item.course_id, item.target_term = pick.id, ""
+        db.add(item)
+        db.commit()
+        action_id = _log_action(db, user.id, "move", f"Moved {sec.number} to {term_name(body.to_term)}",
+                                {"item_id": item.id, "before": before, "after": {"course_id": item.course_id, "target_term": item.target_term}})
+        return {"ok": True, "action_id": action_id, "term": body.to_term}
+
+
+class SwapCheckIn(BaseModel):
+    give_item_id: int
+    want: str = Field(min_length=3, max_length=16)  # a course number, e.g. "MGT 611"
+
+
+@app.post("/api/swap/check")
+def swap_check(body: SwapCheckIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Body-to-body swap planner: if I give up this course for that one, does the new one fit my week (plan and core)
+    in the same term, and what happens to my units, Leadership and Global flags? Changes nothing."""
+    item = db.get(PlanItem, body.give_item_id)
+    if not item or item.user_id != user.id or item.target_term:
+        raise HTTPException(404, "Pick a course from this year's plan to give up.")
+    cat = get_catalog()
+    give = cat.by_id.get(item.course_id)
+    if not give:
+        raise HTTPException(404, "That course is no longer in the catalog.")
+    profile = (db.get(Profile, user.id) or Profile(user_id=user.id)).as_dict()
+    program = profile.get("program") or "MBA"
+    number = " ".join(body.want.upper().split())
+    offs = [o for o in cat.offering_for_number(number, give.term) if o.sections_for(program)]
+    if not offs:
+        raise HTTPException(404, f"{number} isn't offered to {program} students in {term_name(give.term)}.")
+    _, rows = _plan_rows(db, user.id)
+    week = [r.section for r in rows if r.section.term == give.term and r.section.id != give.id]
+    week += core_load(profile, give.term, cat)["sections"]
+    week += [_outside_section(o) for o in _outside(db, user.id) if o.term == give.term]
+    sections = []
+    for sec in offs[0].sections_for(program):
+        hits = [h for h in conflicts(week + [sec]) if sec.id in (h["a_id"], h["b_id"])]
+        sections.append({"id": sec.id, "section": sec.section, "time": sec.time_label, "quarter": quarter_label(sec.session, sec.term),
+                         "fits": not hits, "clash_with": sorted({h["a"] if h["b_id"] == sec.id else h["b"] for h in hits})})
+    want = offs[0].lead
+    term_units = sum(x.units for x in week if not x.is_core and x.enrollment != "outside") + core_load(profile, give.term, cat)["units"]
+    return {
+        "give": {"number": give.number, "title": give.title, "section": give.section, "time": give.time_label, "units": give.units,
+                 "ldr": give.counts_for_ldr, "gsr": give.counts_for_gsr},
+        "want": {"number": want.number, "title": want.title, "units": want.units, "ldr": want.counts_for_ldr, "gsr": want.counts_for_gsr,
+                 "seats": want.limit},
+        "term": give.term, "term_name": term_name(give.term),
+        "units_before": round(term_units + give.units, 1), "units_after": round(term_units + want.units, 1),
+        "min_units": min_units(profile, give.term), "sections": sections,
+        "form": {"opens": "2027-01-05", "where": "SOM student portal (Yale login)", "url": "https://portal.som.yale.edu/"},
+    }
+
+
 @app.get("/api/actions")
 def list_actions(user: User = Depends(current_user), db: Session = Depends(get_db)):
     rows = db.exec(select(ActionLog).where(ActionLog.user_id == user.id).order_by(ActionLog.id.desc()).limit(20)).all()
@@ -730,6 +1030,15 @@ def undo_action(action_id: DbId, user: User = Depends(current_user), db: Session
         db.add(PlanItem(user_id=user.id, course_id=sec.id, status=data.get("status", "planned"),
                         bid_points=data.get("bid_points"), added_by=data.get("added_by", "student"),
                         target_term=data.get("target_term", "")))
+    elif a.action == "move":
+        item = db.get(PlanItem, data.get("item_id"))
+        after = data.get("after", {})
+        if not item or item.user_id != user.id or (item.course_id, item.target_term) != (after.get("course_id"), after.get("target_term")):
+            return {"ok": False, "detail": "That course has changed since, so there's nothing to undo."}
+        before = data.get("before", {})
+        item.course_id, item.target_term = before.get("course_id", item.course_id), before.get("target_term", "")
+        item.status, item.bid_points = before.get("status", item.status), before.get("bid_points")
+        db.add(item)
     elif a.action == "event_add":
         ev = db.get(PersonalEvent, data.get("event_id"))
         if not ev or ev.user_id != user.id or ("title" in data and (ev.title, ev.date) != (data["title"], data.get("date"))):

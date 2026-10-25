@@ -56,3 +56,16 @@
 .bd-page .pb-prio-wrap + .pb-prio-wrap { border-top: 1px solid var(--line); }
 .bd-page .bd-quarter { margin: 0; padding: 10px 12px 0; }
 .bd-next { margin: 4px 0 0; }
+
+/* Swap a seat (student feedback, Oct 25) */
+.bd-swap-form { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 10px 12px; align-items: end; }
+.bd-swap-res { display: grid; gap: 10px; margin-top: 14px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg-2); }
+.bd-swap-facts { display: grid; gap: 6px; }
+.bd-swap-res textarea { resize: none; font-size: 13.5px; }
+.bd-swap-tips summary { cursor: pointer; color: var(--muted); }
+.bd-swap-tips ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 4px; }
+.amber-text { color: var(--amber); }
+@media (max-width: 760px) { .bd-swap-form { grid-template-columns: minmax(0, 1fr); } .bd-swap-form .btn, .bd-swap-tips summary { min-height: 44px; } }
+.bd-swap-secs { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; font-size: 13px; color: var(--muted); }
+.bd-swap-secs li.ok b { color: var(--green); }
+.bd-swap-secs li.no { color: var(--faint); }

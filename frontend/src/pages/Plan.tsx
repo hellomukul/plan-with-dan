@@ -5,15 +5,16 @@
    Calm style: status colour only where it means something, and every change comes back with an Undo toast. */
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import {
-  ArrowRight, BookOpen, CalendarPlus, Check, CircleAlert, Clock, Compass, History, Info, MapPin, Plus, RotateCcw, Search, Sparkles,
-  TriangleAlert, X,
+  ArrowRight, ArrowRightLeft, BookOpen, Building2, CalendarPlus, Check, CircleAlert, Clock, Compass, History, Info, MapPin, Plus, RotateCcw, Search, Sparkles,
+  Ellipsis, TriangleAlert, X,
 } from 'lucide-react'
-import { api, type ActionEntry, type Clash, type PlanItem, type PlanResponse, type Section } from '../api'
+import { api, type ActionEntry, type Clash, type OutsideCourse, type PlanItem, type PlanResponse, type Section } from '../api'
 import CourseDrawer from '../components/CourseDrawer'
 import Timetable, { sectionsClash } from '../components/Timetable'
-import { Empty, Spinner } from '../components/ui'
+import { Empty, Overlay, Spinner } from '../components/ui'
 import { scoreOffering } from '../lib/courseSearch'
 import { DAYS, DAY_NAMES, NEXT_YEAR, PLANNING_TERM, QUARTER_SHORT, TERM_NAMES, quarterLabel, shortExam, termName as baseTermName } from '../lib/format'
+import { addDropClosed } from '../lib/eligibility'
 import { useApp } from '../state'
 import './pages-a.css'
 import './plan-actions.css'
@@ -322,16 +323,75 @@ function Chip({ e, onOpen, expected }: { e: Entry; onOpen: (key: string) => void
       </button>
     )
   }
-  return (
+  const chip = (
     <button type="button" className={`py-chip${e.core ? ' core' : ''}${expected ? ' exp' : ''}`} onClick={() => onOpen(s.key)}
       title={`${s.number} ${s.title} · ${units(s.units)} units${e.core ? ' · your core, assigned by SOM' : ''}${expected ? ' · expected, times TBA' : ''}`}>
       <span className="py-chip-top">
         <span className="py-chip-num">{s.number}</span>
-        {e.core && <span className="py-chip-tag">Core</span>}
+        {e.core ? <span className="py-chip-tag">Core</span> : <span className="py-chip-tag mine">{expected ? 'Expected' : 'Elective'}</span>}
         <span className="py-chip-u">{units(s.units)}</span>
       </span>
       <span className="py-chip-title">{s.title}</span>
     </button>
+  )
+  return e.item ? <span className="py-chip-wrap">{chip}<ChipMenu item={e.item} s={s} /></span> : chip
+}
+
+const SAME_SEASON: Record<string, string> = { '202603': '202703', '202703': '202603', '202701': '202801', '202801': '202701' }
+
+/** "⋯" on a course you planned: move it to the same season next (or this) year, or take it out. Both can be undone.
+    (Student feedback: "since I'm over for Fall 27, drop some".) */
+function ChipMenu({ item, s }: { item: PlanItem; s: Section }) {
+  const { plan, refreshPlan, toast, undoToast, sections } = useApp()
+  const [open, setOpen] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const ref = useRef<HTMLSpanElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const close = (ev: MouseEvent | KeyboardEvent) => {
+      if (ev instanceof KeyboardEvent ? ev.key === 'Escape' : !ref.current?.contains(ev.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', close)
+    document.addEventListener('keydown', close)
+    return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', close) }
+  }, [open])
+  const here = item.target_term || s.term
+  const other = SAME_SEASON[here]
+  // Next year takes any course of the same season (expected); this year only while one of its sections is still
+  // before add/drop closes (e.g. not a Fall-1 course once Fall-1 has ended).
+  const canMove = !!other && (plan?.planning_terms ?? []).some((t) => t.code === other && t.can_add !== false)
+    && (other === '202703' || other === '202801'
+      || sections.some((x) => x.key === s.key && x.term === other && !x.core && !addDropClosed(x) && !(x.ends && x.ends < new Date().toISOString().slice(0, 10))))
+  const run = async (fn: () => Promise<{ action_id?: number }>, ok: string) => {
+    if (busy) return
+    setBusy(true)
+    try {
+      const r = await fn()
+      await refreshPlan()
+      undoToast(ok, r.action_id)
+    } catch (err) {
+      toast((err as Error).message, 'bad')
+    } finally {
+      setBusy(false); setOpen(false)
+    }
+  }
+  return (
+    <span className="py-chip-more" ref={ref}>
+      <button type="button" className="py-chip-dots" aria-haspopup="menu" aria-expanded={open} aria-label={`Move or remove ${s.number}`}
+        onClick={() => setOpen((v) => !v)}><Ellipsis className="icon sm" aria-hidden="true" /></button>
+      {open && (
+        <span className="py-chip-menu" role="menu">
+          {canMove && (
+            <button type="button" role="menuitem" disabled={busy} onClick={() => void run(() => api.movePlanItem(item.id, other), `Moved ${s.number} to ${baseTermName(other)}`)}>
+              <ArrowRightLeft className="icon sm" aria-hidden="true" />Move to {baseTermName(other)}
+            </button>
+          )}
+          <button type="button" role="menuitem" className="danger" disabled={busy} onClick={() => void run(() => api.removeFromPlan(item.id), `Removed ${s.number}`)}>
+            <X className="icon sm" aria-hidden="true" />Remove from plan
+          </button>
+        </span>
+      )}
+    </span>
   )
 }
 
@@ -410,6 +470,16 @@ function Overview({ plan, terms, years, coreByTerm, cohortSet, termName, isExpec
         </div>
       )}
       <DegreeCard plan={plan} terms={terms} base={base} termName={termName} isExpected={isExpected} year={year} go={go} />
+      {/* Core is assigned by SOM, electives are yours: the legend for the chips below (student feedback, Oct 25) */}
+      <div className="py-key-row">
+      <ul className="py-key" aria-label="What the colours mean">
+        {year === '1' && <li><span className="py-swatch core" aria-hidden="true" />Core, assigned by SOM</li>}
+        <li><span className="py-swatch mine" aria-hidden="true" />Your electives</li>
+        {terms.some(isExpected) && <li><span className="py-swatch exp" aria-hidden="true" />Expected for 2027–28 · times TBA</li>}
+        {(plan.outside ?? []).length > 0 && <li><span className="py-swatch out" aria-hidden="true" />Outside SOM</li>}
+      </ul>
+      <OutsideAdd terms={terms} termName={termName} />
+      </div>
 
       {years.map((y) => {
         const ts = terms.filter((t) => academicYear(t) === y)
@@ -444,8 +514,9 @@ function Overview({ plan, terms, years, coreByTerm, cohortSet, termName, isExpec
                     </div>
                     <QuarterBoard term={t} entries={termEntries(plan, t, core)} missingCore={missingCore > 0.05 ? missingCore : 0}
                       expected={texp} cohortSet={cohortSet} onOpen={onOpen} go={go} />
+                    <OutsideChips list={(plan.outside ?? []).filter((o) => o.term === t)} />
                     <footer className="py-term-foot">
-                      <span className="faint small">Running total <span className="mono py-run">{units(running[t])}</span> / {target}</span>
+                      <span className="faint small">Progress towards degree <span className="mono py-run">{units(running[t])}</span> / {target}</span>
                       <button type="button" className="btn sm ghost py-open" onClick={() => setTab(t)}>
                         {texp ? <><Plus className="icon sm" />Plan courses</> : <>See the week<ArrowRight className="icon sm" /></>}
                       </button>
@@ -553,7 +624,8 @@ function TermPane({ plan, term, active, core, termName, year, busy, run, onOpen,
   const [view, setView] = useState<SessionView>('all')
   const info = plan.terms[term]
   const items = plan.items.filter((i) => i.section.term === term)
-  const shown = [...items.map((i) => i.section), ...core].filter((s) => inSessionView(s, view))
+  const outside = (plan.outside ?? []).filter((o) => o.term === term).map((o) => o.section)
+  const shown = [...items.map((i) => i.section), ...core, ...outside].filter((s) => inSessionView(s, view))
   const shownIds = new Set(shown.map((s) => s.id))
   const coreIds = useMemo(() => new Set(core.map((s) => s.id)), [core])
   const conflicts = info?.conflicts ?? []
@@ -1028,5 +1100,121 @@ function PlanRow({ item, busy, run, onOpen }: { item: PlanItem; busy: boolean; r
         </div>
       </div>
     </div>
+  )
+}
+
+
+/* ---------------------------------------------------------------- courses outside SOM (student feedback, Oct 25) */
+
+const DAY_OPTS = ['M', 'T', 'W', 'Th', 'F'] as const
+const SCHOOLS = ['GSAS', 'Yale College', 'Law School', 'Jackson School', 'School of Public Health', 'Engineering & Applied Science', 'Environment', 'Divinity', 'Other']
+const toMin = (t: string) => (t ? Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5)) : null)
+
+/** Outside-SOM courses in one term: shown with their units apart from SOM's totals, each removable. */
+function OutsideChips({ list }: { list: OutsideCourse[] }) {
+  const { refreshPlan, toast } = useApp()
+  if (!list.length) return null
+  const total = list.reduce((n, o) => n + o.units, 0)
+  const remove = async (o: OutsideCourse) => {
+    try { await api.removeOutside(o.id); await refreshPlan(); toast(`Removed ${o.number || o.title}`) } catch (e) { toast((e as Error).message, 'bad') }
+  }
+  return (
+    <div className="py-outside">
+      <span className="py-full-label"><span>Outside SOM · not in SOM’s unit totals</span><span className="mono">{units(total)} u</span></span>
+      {list.map((o) => (
+        <span key={o.id} className="py-chip-wrap">
+          <span className="py-chip out" title={`${o.school ? `${o.school} · ` : ''}${o.title}${o.section.time ? ` · ${o.section.time}` : ''}`}>
+            <span className="py-chip-top">
+              <span className="py-chip-num">{o.number || o.school || 'Outside'}</span>
+              <span className="py-chip-tag out">{o.school || 'Outside SOM'}</span>
+              <span className="py-chip-u">{units(o.units)}</span>
+            </span>
+            <span className="py-chip-title">{o.title}</span>
+          </span>
+          <span className="py-chip-more">
+            <button type="button" className="py-chip-dots" aria-label={`Remove ${o.number || o.title}`} onClick={() => void remove(o)}><X className="icon sm" aria-hidden="true" /></button>
+          </span>
+        </span>
+      ))}
+    </div>
+  )
+}
+
+/** "Add a course from outside SOM": school, number, title, units, term, days and time. It joins the term, the
+    timetable and the clash check; how its units count toward the MBA is the registrar's call, and we say so. */
+function OutsideAdd({ terms, termName }: { terms: string[]; termName: (t: string) => string }) {
+  const { refreshPlan, toast } = useApp()
+  const [open, setOpen] = useState(false)
+  const [f, setF] = useState({ school: 'GSAS', number: '', title: '', units: '4', term: terms.find((t) => t === '202701') ?? terms[0] ?? '', days: [] as string[], start: '', end: '' })
+  const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+    if (f.title.trim().length < 2) { setError('Add the course title.'); return }
+    if (!!f.start !== !!f.end || (f.start && f.end <= f.start)) { setError('Give both a start and an end time, with the end after the start.'); return }
+    if ((f.start || f.end) && !f.days.length) { setError('Pick the days it meets.'); return }
+    setSaving(true)
+    try {
+      const r = await api.addOutside({ school: f.school, number: f.number.trim(), title: f.title.trim(), units: Number(f.units) || 0, term: f.term,
+        days: f.days, start_min: toMin(f.start), end_min: toMin(f.end) })
+      await refreshPlan()
+      toast(r.clashes.length ? `Added, but it clashes with ${r.clashes.map((c) => (c.a_id === r.course.section.id ? c.b : c.a)).join(', ')}` : `Added ${r.course.number || r.course.title} to ${termName(f.term)}`,
+        r.clashes.length ? 'bad' : 'good')
+      setOpen(false)
+      setF((x) => ({ ...x, number: '', title: '', days: [], start: '', end: '' }))
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setSaving(false)
+    }
+  }
+  return (
+    <>
+      <button type="button" className="btn sm ghost" onClick={() => setOpen(true)}><Building2 className="icon sm" aria-hidden="true" />Add a course from outside SOM</button>
+      {open && (
+        <Overlay onClose={() => setOpen(false)} center>
+          <form className="py-out-form" onSubmit={(e) => void save(e)}>
+            <div className="row between"><h3 style={{ margin: 0 }}>Add a course from outside SOM</h3>
+              <button type="button" className="btn icon ghost" aria-label="Close" onClick={() => setOpen(false)}><X className="icon" /></button></div>
+            <p className="muted small" style={{ margin: 0 }}>For a class at another Yale school. It joins your term, your timetable and the clash check. Its units show apart from SOM’s totals: ask the registrar how they count toward your degree.</p>
+            <div className="py-out-grid">
+              <label className="field">School
+                <select value={f.school} onChange={(e) => setF({ ...f, school: e.target.value })}>{SCHOOLS.map((x) => <option key={x}>{x}</option>)}</select>
+              </label>
+              <label className="field">Course number (optional)
+                <input value={f.number} maxLength={16} placeholder="e.g. ENGL 3450" onChange={(e) => setF({ ...f, number: e.target.value })} />
+              </label>
+            </div>
+            <label className="field">Title
+              <input value={f.title} maxLength={120} required placeholder="e.g. Shakespeare: Comedies and Romances" onChange={(e) => setF({ ...f, title: e.target.value })} />
+            </label>
+            <div className="py-out-grid">
+              <label className="field">Term
+                <select value={f.term} onChange={(e) => setF({ ...f, term: e.target.value })}>{terms.map((t) => <option key={t} value={t}>{termName(t)}</option>)}</select>
+              </label>
+              <label className="field">Units
+                <input type="number" min={0} max={8} step={0.5} value={f.units} onChange={(e) => setF({ ...f, units: e.target.value })} />
+              </label>
+            </div>
+            <fieldset className="py-out-days"><legend className="small muted">Days (optional)</legend>
+              {DAY_OPTS.map((d) => (
+                <button key={d} type="button" className={`chip ${f.days.includes(d) ? 'on' : ''}`} aria-pressed={f.days.includes(d)}
+                  onClick={() => setF({ ...f, days: f.days.includes(d) ? f.days.filter((x) => x !== d) : [...f.days, d] })}>{d}</button>
+              ))}
+            </fieldset>
+            <div className="py-out-grid">
+              <label className="field">Starts<input type="time" value={f.start} onChange={(e) => setF({ ...f, start: e.target.value })} /></label>
+              <label className="field">Ends<input type="time" value={f.end} onChange={(e) => setF({ ...f, end: e.target.value })} /></label>
+            </div>
+            <p className="small error-text py-out-err" role={error ? 'alert' : undefined}>{error || '\u00a0'}</p>
+            <div className="row" style={{ justifyContent: 'flex-end' }}>
+              <button type="button" className="btn ghost" onClick={() => setOpen(false)}>Cancel</button>
+              <button type="submit" className="btn primary" disabled={saving} aria-busy={saving}>{saving ? 'Adding…' : 'Add to my plan'}</button>
+            </div>
+          </form>
+        </Overlay>
+      )}
+    </>
   )
 }

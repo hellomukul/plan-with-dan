@@ -46,8 +46,8 @@ def clash(a: Section, b: Section) -> dict | None:
     if lo >= hi:
         return None
     return {
-        "a": f"{a.number} §{a.section}",
-        "b": f"{b.number} §{b.section}",
+        "a": f"{a.number} §{a.section}" if a.section else a.number,  # outside-SOM courses have no section
+        "b": f"{b.number} §{b.section}" if b.section else b.number,
         "a_id": a.id,
         "b_id": b.id,
         "day": shared[0],

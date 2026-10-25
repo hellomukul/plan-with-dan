@@ -240,3 +240,8 @@
   .cal-upcoming { min-height: 44px; justify-content: center; }
   .cal-feed input, .cal-feed .btn, .cal-sync .row.end .btn { min-height: 44px; }
 }
+
+/* Course details: seats and bidding, how it's graded (student feedback, Oct 25) */
+.cd-facts { display: grid; gap: 6px; font-size: 13.5px; color: var(--muted); }
+.cd-facts b { color: var(--text); font-weight: 600; }
+.cd-skel { display: block; height: 1lh; width: 60%; }

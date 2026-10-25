@@ -7,6 +7,7 @@ import { importTryout, loadTryout, type Tryout } from '../lib/tryout'
 import { calendarIntentFresh } from '../components/AuthDialog'
 import './onboarding.css'
 import { PACKAGE_GOAL_KEY } from '../lib/elihu'
+import ScreenshotImport from '../components/ScreenshotImport'
 
 const PROGRAMS = [
   { v: 'MBA', label: 'Full-time MBA', big: <GraduationCap className="icon lg" /> },
@@ -287,6 +288,7 @@ export default function Onboarding({ editing = false }: { editing?: boolean }) {
               <input value={completedText} maxLength={600} onChange={(e) => setCompletedText(e.target.value)} placeholder="e.g. MGT 402, MGT 403, MGT 525"
                 aria-invalid={courses.bad.length > 0} aria-describedby="ob-courses-msg" />
             </label>
+            <ScreenshotImport onAdded={(nums) => setCompletedText((t) => [...new Set([...parseCourses(t).codes, ...nums])].join(', '))} />
             <p id="ob-courses-msg" className={`small ob-courses-msg ${courses.bad.length ? 'error-text' : 'muted'}`} role={courses.bad.length ? 'alert' : undefined}>
               {courses.bad.length ? `These don’t look like course numbers: ${courses.bad.join(', ')}. Use the form MGT 402.`
                 : notInCatalog.length ? `Not in this year’s SOM catalog: ${notInCatalog.join(', ')}. Keep it only if you took it in an earlier year.` : '\u00a0'}

@@ -187,6 +187,11 @@ kbd { font-family: var(--mono); font-size: 11px; padding: 1px 6px; border-radius
 label.field { display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; color: var(--muted); font-weight: 500; }
 input, textarea, select { font: inherit; color: var(--text); background: var(--bg-2); border: 1px solid var(--line-2); border-radius: 8px; padding: 8px 11px; width: 100%; outline: none; transition: border-color 0.12s var(--ease); }
 input:focus, textarea:focus, select:focus { border-color: var(--pink-line); }
+/* Dropdown lists are drawn by the operating system; on some Windows setups they ignore color-scheme and come out
+   light-on-light or dark-on-dark (student feedback). Give the options their own colours so every list is readable. */
+select option, select optgroup { background-color: #1c1c1f; color: #ededef; }
+select option:checked { background-color: #286dc0; color: #ffffff; }
+select option:disabled { color: #85858f; }
 textarea { resize: vertical; min-height: 76px; }
 input[type='checkbox'], input[type='radio'] { width: auto; accent-color: var(--pink); }
 input[type='range'] { accent-color: var(--pink); padding: 0; }
@@ -418,3 +423,13 @@ input[type='range'] { accent-color: var(--pink); padding: 0; }
 .more-item .icon { margin-top: 2px; }
 .more-text { display: grid; gap: 1px; min-width: 0; }
 .more-hint { font-size: 12px; color: var(--faint); font-weight: 400; line-height: 1.35; }
+
+/* Import courses from a screenshot (Profile) */
+.si { display: grid; gap: 6px; justify-items: start; margin: 4px 0 6px; }
+.si-list { display: grid; gap: 10px; width: 100%; padding: 12px 14px; }
+.si-list ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; max-height: 320px; overflow-y: auto; }
+.si-list label { display: flex; align-items: center; gap: 10px; padding: 6px 2px; font-size: 13px; cursor: pointer; flex-wrap: wrap; }
+.si-list label.is-done { opacity: 0.7; cursor: default; }
+.si-list input[type='checkbox'] { width: auto; }
+.si-title { color: var(--muted); min-width: 0; }
+@media (max-width: 640px) { .si-list label { min-height: 44px; } .si .btn { min-height: 44px; } }

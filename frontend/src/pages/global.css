@@ -135,3 +135,13 @@
   .gl-skel-gsa { height: 402px; }
   .gl-skel-opt { height: 380px; }
 }
+
+/* Pass/Fail budget (student feedback, Oct 25) */
+.gl-pf { display: grid; gap: 14px; scroll-margin-top: 16px; }
+.gl-pf-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px 24px; flex-wrap: wrap; }
+.gl-pf-head h2 { margin: 0 0 4px; font-size: 18px; }
+.gl-pf-head p { max-width: 560px; }
+.gl-pf-meter { display: grid; gap: 6px; min-width: 220px; }
+.gl-pf-num b { font-family: var(--mono); font-size: 22px; color: var(--text); }
+.gl-pf-table select { width: auto; min-width: 150px; padding: 5px 8px; font-size: 13px; }
+@media (max-width: 640px) { .gl-pf-table select { min-height: 44px; } .gl-pf-meter { min-width: 0; width: 100%; } }

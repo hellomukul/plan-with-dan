@@ -143,6 +143,28 @@ def search_catalog(ctx: RunContext[StudentContext], query: str, term: Term = "20
     return fence("\n".join(card_text(o, 260) for o, _ in hits), "som_catalog")
 
 
+def ldr_courses(ctx: RunContext[StudentContext], term: Term = "any") -> str:
+    """Every elective flagged for the Leadership Distribution Requirement (LDR), open to this student's program.
+
+    Use this for any question about LDR or leadership electives, and list every course it returns.
+
+    Args:
+        term: 202603 = Fall 2026, 202701 = Spring 2027, any = both (default).
+    """
+    if not _log(ctx, "ldr_courses", term=term):
+        return LOOP_MSG
+    program = _program(ctx.deps)
+    pool = [o for o in ctx.deps.catalog.eligible(None if term == "any" else term, program=program, today=ctx.deps.today)
+            if o.lead.counts_for_ldr]
+    if not pool:
+        return f"No LDR-flagged courses open to {program} students{'' if term == 'any' else ' in ' + term_name(term)}."
+    pool.sort(key=lambda o: (o.lead.term, o.lead.session, o.lead.number))
+    lines = [f"{len(pool)} LDR-flagged courses ({LDR['how_flagged']} {LDR['petition']})"]
+    lines += [card_text(o, 160) for o in pool]
+    text = "\n".join(lines)
+    return fence(text, "som_catalog", limit=len(text) + 100)  # the whole list, never cut short
+
+
 def course_details(ctx: RunContext[StudentContext], key_or_number: str) -> str:
     """Full details for one course: every section, time, room, seats, faculty, prerequisites.
 
@@ -393,10 +415,10 @@ def suggest_bid_split(ctx: RunContext[StudentContext], budget: int, must_haves: 
         "\n(Heuristic: weights priority, seat count and any reported winning bids. Not a guarantee.)"
 
 
-CATALOG_TOOLS = [search_catalog, course_details, check_fit, find_alternates, suggest_add, my_profile_and_plan, yale_facts]
-PLANNER_TOOLS = [my_profile_and_plan, plan_review, requirements_status, global_options, upcoming_dates,
+CATALOG_TOOLS = [search_catalog, ldr_courses, course_details, check_fit, find_alternates, suggest_add, my_profile_and_plan, yale_facts]
+PLANNER_TOOLS = [my_profile_and_plan, plan_review, requirements_status, global_options, upcoming_dates, ldr_courses,
                  check_fit, find_alternates, course_details, search_catalog, suggest_add, yale_facts]
 BID_TOOLS = [my_profile_and_plan, bid_history, suggest_bid_split, course_details, yale_facts]
 CAREER_TOOLS = [my_profile_and_plan, search_catalog, course_details, suggest_add, check_fit, yale_facts]
-GUIDE_TOOLS = [yale_facts, upcoming_dates, requirements_status, my_profile_and_plan, search_catalog]
+GUIDE_TOOLS = [yale_facts, upcoming_dates, requirements_status, my_profile_and_plan, search_catalog, ldr_courses]
 NEWS_TOOLS = [search_catalog]

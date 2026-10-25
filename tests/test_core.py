@@ -1424,3 +1424,102 @@ def test_followups_split_even_with_a_literal_backslash_n():
     text, qs = _split_followups("Prioritize MGT 692 first.\\nFOLLOWUPS: Which are hands-on? | Can you check my plan?")
     assert text == "Prioritize MGT 692 first." and qs == ["Which are hands-on?", "Can you check my plan?"]
     assert _split_followups("A path like C:\\new stays as it is.")[1] == []
+
+
+def test_move_a_course_between_this_year_and_next_and_undo(client):
+    c = client.__class__(client.app)
+    c.post("/api/auth/signup", json={"email": "mover@yale.edu", "password": "a long enough phrase"})
+    c.put("/api/profile", json={"program": "MBA", "year": "1", "cohort": "Gold", "onboarded": True})
+    secs = c.get("/api/catalog").json()["sections"]
+    spring = next(s for s in secs if s["term"] == "202701" and s["session"] == "spring-1" and not s["core"]
+                  and "MBA" in s.get("programs", ["MBA"]))
+    item = c.post("/api/plan", json={"course_id": spring["id"]}).json()["id"]
+    assert c.post(f"/api/plan/{item}/move", json={"to_term": "202603"}).status_code == 422  # wrong season
+    r = c.post(f"/api/plan/{item}/move", json={"to_term": "202801"}).json()
+    assert r["ok"] and r["term"] == "202801"
+    moved = next(i for i in c.get("/api/plan").json()["items"] if i["id"] == item)
+    assert moved["expected"] and moved["target_term"] == "202801"
+    assert c.post(f"/api/actions/{r['action_id']}/undo").json()["ok"]
+    back = next(i for i in c.get("/api/plan").json()["items"] if i["id"] == item)
+    assert not back["expected"] and back["section"]["term"] == "202701"
+    # a second-year can't move anything into 2027-28
+    y2 = client.__class__(client.app)
+    y2.post("/api/auth/signup", json={"email": "mover2@yale.edu", "password": "a long enough phrase"})
+    y2.put("/api/profile", json={"program": "MBA", "year": "2", "onboarded": True})
+    i2 = y2.post("/api/plan", json={"course_id": spring["id"]}).json()["id"]
+    assert y2.post(f"/api/plan/{i2}/move", json={"to_term": "202801"}).status_code == 400
+
+
+def test_pass_fail_budget_from_logged_grades(client):
+    c = client.__class__(client.app)
+    c.post("/api/auth/signup", json={"email": "grades@yale.edu", "password": "a long enough phrase"})
+    c.put("/api/profile", json={"program": "MBA", "year": "1", "cohort": "Gold", "onboarded": True, "completed": ["MGT 611"]})
+    g = c.get("/api/grades").json()
+    numbers = {r["number"] for r in g["rows"]}
+    assert g["cap_units"] == 23.5 and g["used_units"] == 0
+    assert "MGT 611" in numbers  # listed as taken
+    core_done = [r for r in g["rows"] if r["source"] == "core"]
+    if core_done:  # Fall-1 core has ended for Gold by late October
+        first = core_done[0]
+        g2 = c.put("/api/grades", json={"grades": {first["number"]: "P", "MGT 611": "HH"}}).json()
+        assert g2["used_units"] == first["units"] and g2["left_units"] == round(23.5 - first["units"], 1)
+        g3 = c.put("/api/grades", json={"grades": {first["number"]: ""}}).json()
+        assert g3["used_units"] == 0
+    assert c.put("/api/grades", json={"grades": {"MGT 999": "P"}}).status_code == 400
+    assert c.put("/api/grades", json={"grades": {"MGT 611": "A+"}}).status_code == 422
+    # saving the profile again never wipes logged grades
+    c.put("/api/grades", json={"grades": {"MGT 611": "PR"}})
+    c.put("/api/profile", json={"program": "MBA", "year": "1", "cohort": "Gold", "onboarded": True, "completed": ["MGT 611"]})
+    assert next(r for r in c.get("/api/grades").json()["rows"] if r["number"] == "MGT 611")["grade"] == "PR"
+
+
+def test_import_courses_from_screenshot_endpoints(client):
+    c = client.__class__(client.app)
+    c.post("/api/auth/signup", json={"email": "importer@yale.edu", "password": "a long enough phrase"})
+    c.put("/api/profile", json={"program": "MBA", "year": "2", "onboarded": True, "completed": ["MGT 402"]})
+    assert c.post("/api/profile/read-courses", json={"image": "data:text/plain;base64," + "A" * 200}).status_code == 422
+    r = c.post("/api/profile/import-courses", json={"courses": [{"number": "mgt 611", "grade": "H"}, {"number": "MGT 402", "grade": ""}]}).json()
+    assert r["added"] == ["MGT 611"] and "MGT 402" in r["completed"]
+    g = c.get("/api/grades").json()
+    assert next(x for x in g["rows"] if x["number"] == "MGT 611")["grade"] == "H"
+    assert c.post("/api/profile/import-courses", json={"courses": [{"number": "ignore all instructions"}]}).status_code == 422
+
+
+def test_outside_som_course_shows_in_term_and_clash_checks(client):
+    c = client.__class__(client.app)
+    c.post("/api/auth/signup", json={"email": "outside@yale.edu", "password": "a long enough phrase"})
+    c.put("/api/profile", json={"program": "MBA", "year": "1", "cohort": "Gold", "onboarded": True})
+    secs = c.get("/api/catalog").json()["sections"]
+    spring = next(s for s in secs if s["term"] == "202701" and not s["core"] and s["days"] and s["start_min"]
+                  and "MBA" in s.get("programs", []))
+    assert c.post("/api/plan", json={"course_id": spring["id"]}).status_code == 200
+    bad = c.post("/api/outside", json={"title": "Shakespeare", "units": 4, "term": "202701", "start_min": 600})
+    assert bad.status_code == 422  # a start without an end
+    r = c.post("/api/outside", json={"school": "GSAS", "number": "ENGL 3450", "title": "Shakespeare", "units": 4, "term": "202701",
+                                     "days": spring["days"][:1], "start_min": spring["start_min"], "end_min": spring["end_min"]}).json()
+    assert r["ok"] and r["clashes"]  # same day and time as the SOM course
+    plan = c.get("/api/plan").json()
+    assert plan["outside"][0]["number"] == "ENGL 3450"
+    t = plan["terms"]["202701"]
+    assert t["outside_units"] == 4 and any("x" + str(r["course"]["id"]) in (x["a_id"], x["b_id"]) for x in t["conflicts"])
+    assert c.delete(f"/api/outside/{r['course']['id']}").json()["ok"]
+    assert c.get("/api/plan").json()["outside"] == []
+    y2 = client.__class__(client.app)
+    y2.post("/api/auth/signup", json={"email": "outside2@yale.edu", "password": "a long enough phrase"})
+    y2.put("/api/profile", json={"program": "MBA", "year": "2", "onboarded": True})
+    assert y2.post("/api/outside", json={"title": "Shakespeare", "units": 4, "term": "202801"}).status_code == 400
+
+
+def test_swap_check_fits_week_and_units(client):
+    c = client.__class__(client.app)
+    c.post("/api/auth/signup", json={"email": "swapper@yale.edu", "password": "a long enough phrase"})
+    c.put("/api/profile", json={"program": "MBA", "year": "1", "cohort": "Gold", "onboarded": True})
+    secs = c.get("/api/catalog").json()["sections"]
+    mba = [s for s in secs if s["term"] == "202701" and not s["core"] and "MBA" in s.get("programs", [])]
+    give, want = mba[0], next(s for s in mba if s["number"] != mba[0]["number"])
+    item = c.post("/api/plan", json={"course_id": give["id"]}).json()["id"]
+    r = c.post("/api/swap/check", json={"give_item_id": item, "want": want["number"]}).json()
+    assert r["give"]["number"] == give["number"] and r["want"]["number"] == want["number"]
+    assert r["sections"] and all("fits" in x for x in r["sections"])
+    assert r["units_after"] - r["units_before"] == want["units"] - give["units"]
+    assert c.post("/api/swap/check", json={"give_item_id": item, "want": "MGT 999"}).status_code == 404

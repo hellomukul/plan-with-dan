@@ -89,6 +89,8 @@ class Profile(SQLModel, table=True):
     completed: str = "[]"  # JSON list of course numbers already taken
     prefs: str = "{}"  # JSON: no_before, fridays_free, max_units, workload
     gsa_days_used: int = 0
+    # JSON {"MGT 402": "P", ...}: grades the student chose to log, for the Pass/Fail budget. Never shared or sent to AI.
+    grades: str = "{}"
     onboarded: bool = False
     updated_at: datetime = Field(default_factory=utcnow)
 
@@ -285,6 +287,23 @@ class PersonalEvent(SQLModel, table=True):
     created_at: datetime = Field(default_factory=utcnow)
 
 
+class OutsideCourse(SQLModel, table=True):
+    """A course the student takes outside SOM (another Yale school), entered by hand: shown in their term, on the
+    timetable and in clash checks; its units are shown apart from SOM's totals."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(index=True, foreign_key="user.id")
+    school: str = ""  # e.g. "GSAS", "Yale College", "Law"
+    number: str = ""  # e.g. "ENGL 3450"
+    title: str
+    units: float = 0.0
+    term: str  # 202603 | 202701 | 202703 | 202801
+    days: str = "[]"  # JSON list of M/T/W/Th/F
+    start_min: Optional[int] = None
+    end_min: Optional[int] = None
+    created_at: datetime = Field(default_factory=utcnow)
+
+
 class ActivityDay(SQLModel, table=True):
     """One row per student per New York day they used the app signed in: daily/weekly active counts for the owner."""
 
@@ -295,7 +314,7 @@ class ActivityDay(SQLModel, table=True):
 
 
 USER_TABLES = (AuthSession, OAuthIdentity, Profile, PlanItem, GlobalChoice, ChatMessage, ChatMemory, AuditEvent, RecommendationRun,
-               DeskState, DeskBrief, FitDismissal, ActionLog, ShortlistItem, PersonalEvent, ActivityDay)
+               DeskState, DeskBrief, FitDismissal, ActionLog, ShortlistItem, PersonalEvent, ActivityDay, OutsideCourse)
 
 
 def _make_engine():

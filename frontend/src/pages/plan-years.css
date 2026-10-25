@@ -31,8 +31,8 @@
 .py-seg.now, .py-sw.now { background: var(--accent-fill); }
 .py-seg.base, .py-sw.base { background: #52525b; }
 .py-seg.exp, .py-sw.exp { background: var(--pink-soft); box-shadow: inset 0 0 0 1px var(--pink-line); }
-.py-legend { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 18px; font-size: 12.5px; color: var(--muted); }
-.py-legend li { display: inline-flex; align-items: center; gap: 6px; }
+.py-key { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 18px; font-size: 12.5px; color: var(--muted); }
+.py-key li { display: inline-flex; align-items: center; gap: 6px; }
 .py-legend .mono { color: var(--text); }
 .py-sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; flex: none; }
 .py-sw.left { border: 1px solid var(--line-2); background: var(--card-2); }
@@ -156,3 +156,48 @@ div.py-chip { cursor: default; }
 @media (max-width: 640px) { .py-chip.line { min-height: 44px; } }
 /* "Courses in <term>" sits clear of the cards above (.section-label's own margin otherwise wins over .mt-lg) */
 .pl-pane > .section-label.mt-lg { margin-top: 22px; }
+
+/* Core vs your electives (student feedback, Oct 25): core stays grey and dashed; electives you chose carry the blue
+   accent and an "Elective" tag; next year's expected electives keep the accent, dashed. A legend sits above. */
+.py-chip:not(.core):not(.exp) { border-left: 3px solid var(--pink); background: linear-gradient(90deg, rgba(99, 170, 255, 0.08), transparent 60%), var(--card-2); }
+.py-chip.exp { border-left: 3px dashed var(--pink); }
+.py-chip-tag.mine { color: var(--pink-2); border-color: var(--pink-line); }
+.py-legend { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 12.5px; color: var(--muted); }
+.py-legend li { display: inline-flex; align-items: center; gap: 8px; }
+.py-swatch { width: 22px; height: 14px; border-radius: 4px; border: 1px solid var(--line-2); background: var(--bg-2); }
+.py-swatch.core { border-style: dashed; border-left: 3px solid var(--muted); }
+.py-swatch.mine { border-left: 3px solid var(--pink); background: rgba(99, 170, 255, 0.12); }
+.py-swatch.exp { border-style: dashed; border-left: 3px dashed var(--pink); background: transparent; }
+
+/* "⋯" on a planned course: move to the same season next/this year, or remove (student feedback, Oct 25) */
+.py-chip-wrap { position: relative; display: block; min-width: 0; }
+.py-chip-wrap .py-chip { padding-right: 30px; }
+.py-chip-more { position: absolute; top: 4px; right: 4px; }
+.py-chip-dots { width: 24px; height: 24px; display: grid; place-items: center; border-radius: 6px; border: 0; background: transparent; color: var(--faint); cursor: pointer; }
+.py-chip-dots:hover, .py-chip-dots[aria-expanded='true'] { background: var(--card); color: var(--text); }
+.py-chip-dots:focus-visible { outline: 2px solid var(--pink); outline-offset: 1px; }
+.py-chip-menu { position: absolute; top: calc(100% + 4px); right: 0; z-index: 20; display: grid; min-width: 200px; padding: 4px;
+  background: var(--card-2); border: 1px solid var(--line-2); border-radius: 10px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45); }
+.py-chip-menu button { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 0; border-radius: 7px; background: none; color: var(--text);
+  font: inherit; font-size: 13px; text-align: left; cursor: pointer; white-space: nowrap; }
+.py-chip-menu button:hover:not(:disabled) { background: var(--card); }
+.py-chip-menu button.danger { color: #ffb3b3; }
+@media (max-width: 640px) {
+  .py-chip-wrap .py-chip { padding-right: 46px; }
+  .py-chip-more { top: 1px; right: 1px; }
+  .py-chip-dots { width: 44px; height: 44px; }
+  .py-chip-menu button { min-height: 44px; }
+}
+
+/* Courses outside SOM (student feedback, Oct 25): teal accent, their own band, units apart from SOM's totals */
+.py-key-row { display: flex; align-items: center; justify-content: space-between; gap: 8px 16px; flex-wrap: wrap; }
+.py-swatch.out { border-left: 3px solid var(--blue); background: var(--blue-soft); }
+.py-outside { display: grid; gap: 6px; margin-top: 8px; padding: 8px; border: 1px dashed var(--line-2); border-radius: 8px; }
+.py-chip.out { cursor: default; border-left: 3px solid var(--blue); background: linear-gradient(90deg, var(--blue-soft), transparent 60%), var(--card-2); }
+.py-chip-tag.out { color: var(--blue); border-color: rgba(95, 212, 196, 0.4); }
+.py-out-form { display: grid; gap: 12px; min-width: min(520px, 86vw); }
+.py-out-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.py-out-days { border: 0; padding: 0; margin: 0; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.py-out-days legend { margin-bottom: 6px; width: 100%; }
+.py-out-err { margin: 0; min-height: 1lh; }
+@media (max-width: 640px) { .py-out-grid { grid-template-columns: minmax(0, 1fr); } .py-out-days .chip, .py-out-form .btn { min-height: 44px; } }

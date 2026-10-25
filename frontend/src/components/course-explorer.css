@@ -212,3 +212,33 @@
   .cx.page .cx-more-btn { width: 100%; }
   .cx-more-pop, .cx-more-pop.right { left: 0; right: 0; width: auto; }
 }
+
+/* ---- Quarters: one small mono pill everywhere a course is browsed (QuarterPill) ---- */
+.q-pill { display: inline-flex; align-items: center; height: 18px; box-sizing: border-box; padding: 0 7px; border-radius: 999px; border: 1px solid var(--line-2);
+  background: var(--bg-2); color: var(--muted); font-family: var(--mono); font-size: 10.5px; font-weight: 500; letter-spacing: 0; line-height: 1; white-space: nowrap;
+  vertical-align: 1px; }
+.q-pill.full { border-style: dashed; }  /* full term: runs through both quarters */
+.cx-card-kicker { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cx-sec-line .q-pill { margin-right: 2px; }
+.cx-row-meta .q-pill { margin-right: 6px; }
+/* Quarter filter: a segmented control next to the term one; on phones a 3 × 2 grid of full-size targets. */
+.cx-qseg button { white-space: nowrap; }
+
+/* ---- 2027-28: plan an expected course (NextYearAction) ---- */
+.nx { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 12px; border: 1px dashed var(--line-2); border-radius: 10px; }
+.nx.on { border-style: solid; border-color: var(--pink-line); background: var(--pink-soft); }
+.nx-text { flex: 1 1 240px; min-width: 0; line-height: 1.5; }
+.nx-text b { font-weight: 500; color: var(--text); }
+.nx-text b .icon.xs { width: 12px; height: 12px; vertical-align: -1px; color: var(--pink-2); }
+.nx-btn { flex: none; white-space: nowrap; }
+.cx-nx-hint { margin: 0; }
+
+@media (max-width: 900px) {
+  .cx .nx-btn, .cd-nx .nx-btn, .cx .cx-nx-hint .link-btn { min-height: 44px; }
+  .cx .cx-nx-hint .link-btn { display: inline-flex; align-items: center; margin: -12px 0; }
+}
+@media (max-width: 560px) {
+  .cx .cx-qseg { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; box-sizing: border-box; }
+  .cx .cx-qseg button { justify-content: center; padding-left: 4px; padding-right: 4px; }
+}
+.cx-sec-time { display: inline-block; max-width: 100%; }  /* "M W 1:00 PM–2:20 PM" moves under the quarter pill as a whole, never split */

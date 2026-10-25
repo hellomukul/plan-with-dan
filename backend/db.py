@@ -115,6 +115,9 @@ class PlanItem(SQLModel, table=True):
     bid_points: Optional[int] = None
     added_by: str = "student"  # student | dan (accepted recommendation)
     added_at: datetime = Field(default_factory=utcnow)
+    # "" = the section itself (a published term). "202703"/"202801" = an expected course next year: course_id is this
+    # year's section of the same course and quarter, used as the template (see catalog.project).
+    target_term: str = ""
 
 
 class GlobalChoice(SQLModel, table=True):

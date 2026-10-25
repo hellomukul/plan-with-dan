@@ -29,6 +29,13 @@
 .tt-block .tt-sess {
   align-self: flex-start; font-family: var(--mono); font-size: 9.5px; padding: 0 5px; border-radius: 4px; border: 1px solid var(--line-2); color: var(--muted);
 }
+.timetable .tt-block { container-type: inline-size; }
+.tt-block .tt-sess { max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.tt-block .tt-sess-short { display: none; }
+@container (max-width: 78px) {
+  .tt-block .tt-sess-full { display: none; }
+  .tt-block .tt-sess-short { display: inline; }
+}
 .timetable .tt-block.clash, .timetable .tt-block.clash:hover { background: var(--red-soft); border-color: rgba(255, 92, 92, 0.6); border-left-color: var(--red); }
 .timetable .tt-block.clash b { color: var(--red); }
 .tt-block .icon.xs { width: 11px; height: 11px; }

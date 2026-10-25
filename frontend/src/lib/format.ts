@@ -3,6 +3,42 @@ export const DAY_NAMES: Record<string, string> = { M: 'Mon', T: 'Tue', W: 'Wed',
 export const TERM_NAMES: Record<string, string> = { '202603': 'Fall 2026', '202701': 'Spring 2027' }
 export const PLANNING_TERM = '202701'
 
+/** Terms a student can plan. 2027-28 isn't published yet: those plans are expected courses (times TBA). */
+export const PLAN_TERMS: Record<string, string> = { ...TERM_NAMES, '202703': 'Fall 2027', '202801': 'Spring 2028' }
+/** a published term → the same season one year later */
+export const NEXT_YEAR: Record<string, '202703' | '202801'> = { '202603': '202703', '202701': '202801' }
+export const termName = (code: string) => PLAN_TERMS[code] ?? code
+
+/** SOM terms have two quarters (sessions): Fall-1 + Fall-2 and Spring-1 + Spring-2; full-term courses span both. */
+export const QUARTER_SHORT: Record<string, string> = {
+  'fall-1': 'Fall-1', 'fall-2': 'Fall-2', fall: 'Fall full term',
+  'spring-1': 'Spring-1', 'spring-2': 'Spring-2', spring: 'Spring full term',
+}
+/** "Fall-2" (short badge) or "Fall-2 2027" (with the calendar year) */
+export function quarterLabel(session: string, term?: string): string {
+  const q = QUARTER_SHORT[session] ?? session
+  return term ? `${q} ${termName(term).split(' ').pop()}` : q
+}
+/** the quarters a section occupies (a full-term course counts in both of its term's quarters) */
+export function quartersOf(session: string): string[] {
+  return session === 'fall' ? ['fall-1', 'fall-2'] : session === 'spring' ? ['spring-1', 'spring-2'] : [session]
+}
+
+/** When each half-term quarter's classes run this year, read from the catalog (the most common first and last class
+    date of its sections, so one odd section can't move it): { 'spring-1': { starts: '2027-01-19', ends: '2027-03-02' } }.
+    Full-term sessions and expected 2027-28 courses (no dates yet) are left out. */
+export function quarterDates(sections: { session: string; starts: string | null; ends: string | null; projected?: boolean }[]): Record<string, { starts: string; ends: string }> {
+  const tally: Record<string, [Map<string, number>, Map<string, number>]> = {}
+  for (const x of sections) {
+    if (x.projected || !/-[12]$/.test(x.session) || !x.starts || !x.ends) continue
+    const [a, b] = (tally[x.session] ??= [new Map(), new Map()])
+    a.set(x.starts, (a.get(x.starts) ?? 0) + 1)
+    b.set(x.ends, (b.get(x.ends) ?? 0) + 1)
+  }
+  const mode = (m: Map<string, number>) => [...m].sort((p, q) => q[1] - p[1] || p[0].localeCompare(q[0]))[0][0]
+  return Object.fromEntries(Object.entries(tally).map(([k, [a, b]]) => [k, { starts: mode(a), ends: mode(b) }]))
+}
+
 /** "Wednesday, March 3, 2027 8:00-12:00 noon" -> "Final Wed, Mar 3". Empty when there's no exam slot. */
 export function shortExam(exam?: string): string {
   const m = exam?.match(/^(\w{3})\w*,\s+(\w{3})\w*\s+(\d{1,2})/)

@@ -1,21 +1,27 @@
-/* My plan: saved courses, requirement progress, weekly timetable, clashes and fixes.
-   Calm style: bars for progress, status colour only where it means something, and every
-   change (remove, switch section, status) comes back with an Undo toast. */
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+/* My plan: a two-year planner organised the way SOM runs the year. Each term has two quarters (Fall-1 + Fall-2,
+   Spring-1 + Spring-2); full-term courses run through both. "All years" lays every term out on one screen with
+   units against the 16 / 24 rules and a running total toward the degree. This year's terms keep the week
+   timetable; 2027-28 terms list *expected* courses (copied from this year's offering, times TBA).
+   Calm style: status colour only where it means something, and every change comes back with an Undo toast. */
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import {
-  BookOpen, CalendarPlus, Check, CircleAlert, Clock, Compass, History, Info, MapPin, RotateCcw, Search, Sparkles, TriangleAlert, X,
+  ArrowRight, BookOpen, CalendarPlus, Check, CircleAlert, Clock, Compass, History, Info, MapPin, Plus, RotateCcw, Search, Sparkles,
+  TriangleAlert, X,
 } from 'lucide-react'
 import { api, type ActionEntry, type Clash, type PlanItem, type PlanResponse, type Section } from '../api'
 import CourseDrawer from '../components/CourseDrawer'
 import Timetable, { sectionsClash } from '../components/Timetable'
-import { Bar, Empty, Spinner } from '../components/ui'
-import { DAYS, DAY_NAMES, PLANNING_TERM, TERM_NAMES, shortExam } from '../lib/format'
+import { Empty, Spinner } from '../components/ui'
+import { scoreOffering } from '../lib/courseSearch'
+import { DAYS, DAY_NAMES, NEXT_YEAR, PLANNING_TERM, QUARTER_SHORT, TERM_NAMES, quarterLabel, shortExam, termName as baseTermName } from '../lib/format'
 import { useApp } from '../state'
 import './pages-a.css'
 import './plan-actions.css'
+import './plan-years.css'
 
 type SessionView = 'all' | '1' | '2'
 type Status = PlanItem['status']
+type TermStatus = 'ok' | 'low' | 'needs_approval'
 
 const STATUSES: { value: Status; label: string }[] = [
   { value: 'planned', label: 'Planned' },
@@ -30,19 +36,22 @@ const NOTE_ICON = {
 } as const
 
 const units = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1))
-
-function termStatus(status: 'ok' | 'low' | 'needs_approval', minApplies = true, min: number | null = 16, max: number | null = 24): { text: string; tone: string; cls: string } {
-  if (status === 'low') return { text: `Below the ${min}-unit minimum`, tone: 'amber', cls: 'pa-warn' }
-  if (status === 'needs_approval') return { text: `Over ${max} units, needs approval`, tone: 'red', cls: 'pa-bad' }
-  if (minApplies && min != null) return { text: max ? `In range (${min}–${max})` : `At least ${min}`, tone: 'green', cls: 'pa-ok' }
-  return { text: max ? `Under the ${max}-unit cap` : 'No unit limits stated', tone: 'green', cls: 'pa-ok' }
-}
+const OVERVIEW = 'all'
+const TAB_KEY = 'pwd-plan-tab'
 
 const CHECK_TONE: Record<string, string> = { done: 'pa-ok', planned: '', missing: 'pa-warn', info: 'muted', unconfirmed: 'faint' }
 const CHECK_TEXT: Record<string, string> = { done: 'Done', planned: 'Planned', missing: 'Not yet', info: 'Note', unconfirmed: 'Unconfirmed' }
 
 /** What every plan change returns: the action id lets the toast offer Undo. */
 type Work = () => Promise<{ ok: boolean; action_id?: number }>
+
+/* ---------------------------------------------------------------- terms, quarters, rules */
+
+const seasonOf = (term: string) => (term.endsWith('03') ? 'fall' : 'spring')
+/** the academic year a term belongs to: Fall 2026 and Spring 2027 are both 2026 (2026–27) */
+const academicYear = (term: string) => (term.endsWith('03') ? Number(term.slice(0, 4)) : Number(term.slice(0, 4)) - 1)
+const yearLabel = (y: number) => `${y}–${String(y + 1).slice(2)}`
+const SOURCE_TERM: Record<string, string> = Object.fromEntries(Object.entries(NEXT_YEAR).map(([a, b]) => [b, a]))
 
 function inSessionView(s: Section, view: SessionView): boolean {
   if (view === '1') return !s.session.endsWith('-2')
@@ -52,11 +61,73 @@ function inSessionView(s: Section, view: SessionView): boolean {
 
 const shortTime = (s: Section) => (s.start_min == null ? 'Time TBA' : s.time)
 
+interface TermRule { units: number; min: number | null; max: number | null; status: TermStatus }
+
+/** Units and the 16 / 24 rule for one term. The server checks every term with units in it; an empty term
+    gets the same rule here (MBA: 16 in each of the first three terms, 24 max; other programs: their per-term minimum). */
+function termRule(plan: PlanResponse, term: string, year: string): TermRule {
+  const p = plan.progress
+  const got = p.terms.find((t) => t.term === term)
+  const u = plan.terms[term]?.units ?? got?.units ?? 0
+  if (got) return { units: u, min: got.min_applies ? got.min_units ?? null : null, max: got.max_units ?? null, status: got.status }
+  const sibling = p.terms.find((t) => t.max_units != null)
+  const mba = p.mba_rules !== false
+  const max = sibling?.max_units ?? (mba ? 24 : null)
+  let min: number | null = null
+  if (mba) {
+    const firstThree: Record<string, string[]> = { '1': ['202603', '202701', '202703'], '2': ['202603'], admit: ['202703', '202801'], '': ['202603', '202701', '202703'] }
+    min = (firstThree[year] ?? []).includes(term) ? 16 : null
+  } else {
+    const withMin = p.terms.find((t) => t.min_applies && t.min_units != null)
+    min = withMin?.min_units ?? null
+  }
+  const status: TermStatus = min != null && u < min ? 'low' : max != null && u > max ? 'needs_approval' : 'ok'
+  return { units: u, min, max, status }
+}
+
+function ruleBadge(r: TermRule): { text: string; tone: string; long: string } {
+  if (r.status === 'low') return { text: `Under ${r.min} min`, tone: 'amber', long: `Below the ${r.min}-unit minimum` }
+  if (r.status === 'needs_approval') return { text: `Over ${r.max}: approval`, tone: 'red', long: `Over ${r.max} units, needs approval` }
+  if (r.min != null) return { text: r.max ? `In range ${r.min}–${r.max}` : `${r.min}+ met`, tone: 'green', long: r.max ? `In range (${r.min}–${r.max})` : `At least ${r.min}` }
+  return { text: r.max ? `Under ${r.max} cap` : 'No limits', tone: 'gray', long: r.max ? `No minimum this term; over ${r.max} needs approval` : 'No unit limits stated' }
+}
+
+/** One course in a term: a plan item, or a core section SOM assigns. */
+interface Entry { s: Section; item?: PlanItem; core: boolean }
+
+function termEntries(plan: PlanResponse, term: string, core: Section[]): Entry[] {
+  const items = plan.items.filter((i) => i.section.term === term).map((i) => ({ s: i.section, item: i, core: false }))
+  return [...core.map((s) => ({ s, core: true })), ...items]
+}
+
+function splitQuarters<T extends { s: Section }>(list: T[], term: string) {
+  const season = seasonOf(term)
+  const q1 = list.filter((e) => e.s.session === `${season}-1`)
+  const q2 = list.filter((e) => e.s.session === `${season}-2`)
+  const full = list.filter((e) => e.s.session !== `${season}-1` && e.s.session !== `${season}-2`)
+  return { season, q1, q2, full }
+}
+const sumUnits = (list: { s: Section }[]) => list.reduce((a, e) => a + e.s.units, 0)
+
+/** The core SOM assigns in a term, for the quarter board: the server lists it per quarter (finished quarters
+    included), so look each course up in the catalog, preferring the student's cohort section. */
+function boardCore(plan: PlanResponse, term: string, sections: Section[], cohort: string): Section[] {
+  const info = plan.terms[term]
+  if (!info?.core_units) return []
+  const mine = new Set(plan.items.filter((i) => i.section.term === term).map((i) => i.section.number))
+  const nums = [...new Set([...(info.quarters ?? []).flatMap((q) => q.courses), ...(info.full_term?.courses ?? [])])].filter((n) => !mine.has(n))
+  return nums.map((n) => {
+    const all = sections.filter((s) => s.term === term && s.number === n)
+    return all.find((s) => s.core && cohort && s.cohort === cohort) ?? all.find((s) => s.core) ?? all[0]
+  }).filter((s): s is Section => !!s)
+}
+
+/* ---------------------------------------------------------------- page */
+
 export default function Plan() {
   const { plan, refreshPlan, toast, undoToast, go } = useApp()
   const [loaded, setLoaded] = useState(false)
-  const [term, setTerm] = useState(PLANNING_TERM)
-  const [view, setView] = useState<SessionView>('all')
+  const [tab, setTabState] = useState<string>(() => sessionStorage.getItem(TAB_KEY) || OVERVIEW)
   const [open, setOpen] = useState<string | null>(null)
   const [busy, setBusy] = useState<number | null>(null)
   const pending = useRef(false)  // one plan change at a time; a double-click never sends the same change twice
@@ -65,6 +136,10 @@ export default function Plan() {
     refreshPlan().finally(() => setLoaded(true))
   }, [refreshPlan])
 
+  const setTab = useCallback((t: string) => {
+    setTabState(t)
+    try { sessionStorage.setItem(TAB_KEY, t) } catch { /* private mode */ }
+  }, [])
   const close = useCallback(() => setOpen(null), [])
 
   const run = useCallback(async (id: number, work: Work, ok: string) => {
@@ -86,7 +161,7 @@ export default function Plan() {
   if (!plan) {
     return (
       <div>
-        <div className="page-head"><div><h1>My plan</h1><p>Your saved courses, your week, and how you're tracking on requirements.</p></div></div>
+        <div className="page-head"><div><h1>My plan</h1><p>Every term by quarter, your week, and how you're tracking on requirements.</p></div></div>
         {loaded ? (
           <Empty icon={<CircleAlert className="icon lg faint" />} title="Couldn't load your plan">
             <button type="button" className="btn primary sm" onClick={() => { setLoaded(false); refreshPlan().finally(() => setLoaded(true)) }}>Try again</button>
@@ -96,40 +171,8 @@ export default function Plan() {
     )
   }
 
-  if (!plan.items.length) {
-    return (
-      <div>
-        <div className="page-head"><div><h1>My plan</h1><p>Your saved courses, your week, and how you're tracking on requirements.</p></div></div>
-        <div className="card">
-          <Empty icon={<Compass className="icon lg faint" />} title="Your plan is empty">
-            <p style={{ margin: 0, maxWidth: 420 }}>Let Elihu pick courses that fit your goals and schedule, or open the Course explorer yourself.</p>
-            <div className="row" style={{ justifyContent: 'center' }}>
-              <button type="button" className="btn primary" onClick={() => go('find')}><Sparkles className="icon sm" />Ask Elihu for picks</button>
-              <button type="button" className="btn" onClick={() => go('explore')}><Search className="icon sm" />Open the course explorer</button>
-            </div>
-          </Empty>
-        </div>
-        {plan.progress.mba_rules === false && (plan.progress.checks ?? []).length > 0 && (
-          <div className="card mt">
-            <div className="section-label"><span>What your program requires · {plan.progress.program_label}</span></div>
-            <p className="muted small" style={{ marginTop: 0 }}>{plan.progress.notes[0]}</p>
-            <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 8 }}>
-              {(plan.progress.checks ?? []).filter((c) => c.status !== 'done').map((c, i) => (
-                <li key={i} className="small"><b style={{ fontWeight: 500 }}>{c.label}</b> <span className="faint">· {c.detail}</span></li>
-              ))}
-            </ul>
-          </div>
-        )}
-        <RecentActions className="mt" />
-      </div>
-    )
-  }
-
   return (
-    <PlanBody
-      plan={plan} term={term} setTerm={(t) => { setTerm(t); setView('all') }} view={view} setView={setView} busy={busy} run={run}
-      onOpen={setOpen} go={go}
-    >
+    <PlanBody plan={plan} tab={tab} setTab={setTab} busy={busy} run={run} onOpen={setOpen} go={go}>
       {open && <CourseDrawer courseKey={open} onClose={close} />}
     </PlanBody>
   )
@@ -137,10 +180,8 @@ export default function Plan() {
 
 interface BodyProps {
   plan: PlanResponse
-  term: string
-  setTerm: (t: string) => void
-  view: SessionView
-  setView: (v: SessionView) => void
+  tab: string
+  setTab: (t: string) => void
   busy: number | null
   run: (id: number, work: Work, ok: string) => Promise<void>
   onOpen: (key: string) => void
@@ -148,131 +189,64 @@ interface BodyProps {
   children?: ReactNode
 }
 
-function PlanBody({ plan, term, setTerm, view, setView, busy, run, onOpen, go, children }: BodyProps) {
-  const p = plan.progress
-  const terms = useMemo(() => Array.from(new Set([...Object.keys(plan.terms), PLANNING_TERM])).sort(), [plan.terms])
-  const termName = (t: string) => plan.terms[t]?.name ?? TERM_NAMES[t] ?? t
-  const spring = p.terms.find((t) => t.term === PLANNING_TERM)
-  const springUnits = plan.terms[PLANNING_TERM]?.units ?? 0
-  const corePct = p.core.target ? (100 * p.core.counted) / p.core.target : 0
-  const elecPct = p.electives.target ? (100 * p.electives.planned) / p.electives.target : 0
-  const { profile, sectionById } = useApp()
+function PlanBody({ plan, tab, setTab, busy, run, onOpen, go, children }: BodyProps) {
+  const { profile, sectionById, sections } = useApp()
+  const terms = useMemo(() => {
+    const listed = plan.planning_terms?.map((t) => t.code) ?? [PLANNING_TERM]
+    return Array.from(new Set([...listed, ...Object.keys(plan.terms)])).sort()
+  }, [plan.planning_terms, plan.terms])
+  const termName = useCallback((t: string) => plan.terms[t]?.name ?? plan.planning_terms?.find((x) => x.code === t)?.name ?? baseTermName(t), [plan])
+  const isExpected = useCallback((t: string) => plan.terms[t]?.expected ?? !(t in TERM_NAMES), [plan.terms])
   const coreByTerm = useCoreByTerm(plan, terms, sectionById)
-  const hasHalves = [...plan.items.filter((i) => i.section.term === term).map((i) => i.section), ...(coreByTerm[term] ?? [])]
-    .some((s) => /-(1|2)$/.test(s.session))
+  const years = useMemo(() => Array.from(new Set(terms.map(academicYear))).sort(), [terms])
+  const cohort = profile?.cohort ?? ''
+  const boardCoreByTerm = useMemo(() => Object.fromEntries(terms.map((t) => [t, boardCore(plan, t, sections, cohort)])), [plan, terms, sections, cohort])
+  const active = tab === OVERVIEW || terms.includes(tab) ? tab : OVERVIEW
 
   return (
     <div>
       <div className="page-head">
         <div>
           <h1>My plan</h1>
-          <p>Your saved courses, your week, and how you're tracking on requirements.</p>
-        </div>
-        <div className="card pl-headstat">
-          <div className="stat">
-            <span className="label">{TERM_NAMES[PLANNING_TERM]}</span>
-            <span className="value">{units(springUnits)} <span className="muted small" style={{ fontFamily: 'var(--font)' }}>units</span></span>
-          </div>
-          {spring
-            ? <span className={`badge ${termStatus(spring.status, spring.min_applies, spring.min_units ?? null, spring.max_units ?? null).tone}`}>{termStatus(spring.status, spring.min_applies, spring.min_units ?? null, spring.max_units ?? null).text}</span>
-            : <span className="badge gray">Nothing planned yet</span>}
+          <p>{years.length > 1
+            ? `Every term from ${termName(terms[0])} to ${termName(terms[terms.length - 1])}, by quarter. Open a term for its week.`
+            : 'Your year by quarter, your week, and how you\'re tracking on requirements.'}</p>
         </div>
       </div>
 
-      {/* ---------------------------------------------------------- requirements */}
-      <div className="card">
-        <div className="section-label"><span>Requirements{p.program_label ? ` · ${p.program_label}` : ''}</span></div>
-        {p.mba_rules === false ? (
-          <ul className="pl-checks" style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 8 }}>
-            {(p.checks ?? []).map((c, i) => (
-              <li key={i} className="row between small" style={{ flexWrap: 'nowrap', alignItems: 'flex-start', gap: 12 }}>
-                <span><b style={{ fontWeight: 500 }}>{c.label}</b><br /><span className="faint">{c.detail}</span></span>
-                <span className={CHECK_TONE[c.status]} style={{ whiteSpace: 'nowrap' }}>{CHECK_TEXT[c.status]}</span>
-              </li>
-            ))}
-            {(p.sources ?? []).length > 0 && <li className="faint small">Sources: {(p.sources ?? []).map((u) => <a key={u} href={u} target="_blank" rel="noreferrer" style={{ marginRight: 12 }}>{sourceLabel(u)}</a>)}</li>}
-          </ul>
-        ) : (
-        <div className="pl-req">
-          <div className="meter">
-            <span>Core</span><span className="mono">{units(p.core.counted)} / {units(p.core.target)}</span>
-            <Bar pct={corePct} tone={p.core.counted >= p.core.target ? 'lime' : ''} />
-            <span>Electives <span className="faint small">· all terms</span></span><span className="mono">{units(p.electives.planned)} / {units(p.electives.target)}</span>
-            <Bar pct={elecPct} tone={p.electives.planned >= p.electives.target ? 'lime' : ''} />
-          </div>
-          <div className="pl-kv">
-            <div>
-              <span>Leadership</span>
-              {p.ldr.met ? <span className="pa-inline-icon pa-ok"><Check className="icon sm" />Met</span>
-                : p.ldr.planned ? <span>Planned, not done yet</span>
-                  : <span className="pa-warn">Not yet, add a Leadership course</span>}
-            </div>
-            <div>
-              <span>Global Studies</span>
-              {p.gsr.met ? <span className="pa-inline-icon pa-ok"><Check className="icon sm" />Met</span>
-                : p.gsr.planned ? <span>Planned, not done yet <span className="faint mono">({p.gsr.in_plan.length} in plan)</span></span>
-                  : <span className="pa-warn">Not yet</span>}
-            </div>
-            {!p.gsr.met && (
-              <div><span /><button type="button" className="link-btn small pl-gsr-link" onClick={() => go('global')}>See Global Studies options</button></div>
-            )}
-            <div><span>Core status</span><span className="muted small">{coreStatus(p.core.counted >= p.core.target, profile?.year ?? '')}</span></div>
-          </div>
-        </div>
-        )}
-        {p.terms.length > 0 && (
-          <>
-            <hr className="divider" />
-            <div className="section-label"><span>Units by term</span></div>
-            <div className="pl-terms">
-              {p.terms.map((t) => {
-                const st = termStatus(t.status, t.min_applies, t.min_units ?? null, t.max_units ?? null)
-                return (
-                  <div key={t.term}>
-                    <span style={{ minWidth: 92 }}>{termName(t.term)}</span>
-                    <span className="mono muted">{units(t.units)} units{t.core_units ? <span className="faint"> (incl. {units(t.core_units)} core)</span> : null}</span>
-                    <span className={`small ${st.cls}`}>{st.text}</span>
-                  </div>
-                )
-              })}
-            </div>
-          </>
-        )}
-        {p.notes.length > 0 && (
-          <ul className="pl-notes faint small">{p.notes.map((n) => <li key={n}>{n}</li>)}</ul>
-        )}
-      </div>
-
-      {/* ---------------------------------------------------------- term + session */}
-      <div className="row between mt-lg mb pl-termbar">
-        <div className="tabs" role="group" aria-label="Term">
+      {/* ---------------------------------------------------------- tabs: overview + one per term */}
+      <div className="pl-termbar mb">
+        <div className="tabs py-tabs" role="group" aria-label="Term">
+          <button type="button" className={active === OVERVIEW ? 'on' : ''} aria-pressed={active === OVERVIEW} onClick={() => setTab(OVERVIEW)}>
+            {years.length > 1 ? 'All years' : 'Full year'}
+          </button>
           {terms.map((t) => {
             const n = plan.items.filter((i) => i.section.term === t).length
+            const exp = isExpected(t)
             return (
-              <button key={t} type="button" className={term === t ? 'on' : ''} aria-pressed={term === t} onClick={() => setTerm(t)}>
-                {termName(t)}{n ? <span className="mono faint">{n}</span> : null}
+              <button key={t} type="button" className={active === t ? 'on' : ''} aria-pressed={active === t} onClick={() => setTab(t)}
+                title={exp ? `${termName(t)}: expected courses, times TBA` : undefined}>
+                {termName(t)}{exp && <span className="py-tab-exp" aria-label="expected">exp</span>}{n ? <span className="mono faint">{n}</span> : null}
               </button>
             )
           })}
         </div>
-        {hasHalves && (
-          <div className="tabs" role="group" aria-label="Session">
-            {(['all', '1', '2'] as const).map((v) => (
-              <button key={v} type="button" className={view === v ? 'on' : ''} aria-pressed={view === v} onClick={() => setView(v)}>
-                {v === 'all' ? 'Both sessions' : `Session ${v}`}
-              </button>
-            ))}
-          </div>
-        )}
       </div>
 
-      {/* Every term is rendered in the same grid cell and only the chosen one is shown, so switching terms
-          never changes the page length (the tallest term sets it). */}
+      {/* Every view is rendered in the same grid cell and only the chosen one is shown, so switching never
+          changes the page length (the tallest view sets it). */}
       <div className="pl-stack">
-        {terms.map((t) => (
-          <TermPane key={t} plan={plan} term={t} active={t === term} view={t === term ? view : 'all'} core={coreByTerm[t] ?? []}
+        <div className={`pl-pane ${active === OVERVIEW ? 'on' : ''}`} aria-hidden={active !== OVERVIEW || undefined} inert={active !== OVERVIEW}>
+          <Overview plan={plan} terms={terms} years={years} coreByTerm={boardCoreByTerm} cohortSet={!!cohort} termName={termName} isExpected={isExpected}
+            year={profile?.year ?? ''} setTab={setTab} onOpen={onOpen} go={go} />
+        </div>
+        {terms.map((t) => (isExpected(t) ? (
+          <ExpectedPane key={t} plan={plan} term={t} active={t === active} termName={termName(t)} year={profile?.year ?? ''}
+            busy={busy} run={run} onOpen={onOpen} go={go} />
+        ) : (
+          <TermPane key={t} plan={plan} term={t} active={t === active} core={coreByTerm[t] ?? []} year={profile?.year ?? ''}
             termName={termName(t)} busy={busy} run={run} onOpen={onOpen} go={go} />
-        ))}
+        )))}
       </div>
       {children}
     </div>
@@ -282,14 +256,6 @@ function PlanBody({ plan, term, setTerm, view, setView, busy, run, onOpen, go, c
 /* ---------------------------------------------------------------- helpers */
 
 const localIso = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-
-/** L23: "Complete" read as "done" to a first-year in October. Say what it means. */
-function coreStatus(counted: boolean, year: string): string {
-  if (!counted) return 'Counted from your year and planned core'
-  if (year === '1') return 'Assigned by SOM for your cohort, counted in full'
-  if (year === '2') return 'Done in your first year'
-  return 'Counted in full'
-}
 
 const ACRONYMS = new Set(['mba', 'mam', 'mms', 'emba', 'phd', 'som', 'gsa', 'ldr'])
 /** A readable name for a requirements source link instead of the raw URL. */
@@ -327,21 +293,264 @@ function useCoreByTerm(plan: PlanResponse, terms: string[], sectionById: Map<str
   }, [ids, sectionById, plan.items])
 }
 
-/* ---------------------------------------------------------------- one term: week grid, review, courses */
+/* ---------------------------------------------------------------- shared pieces */
 
-function TermPane({ plan, term, active, view, core, termName, busy, run, onOpen, go }: {
+/** Units against the term's rules: a bar to the cap with a tick at the minimum. Colour only when off-range. */
+function UnitMeter({ rule }: { rule: TermRule }) {
+  const scale = Math.max(rule.max ?? 24, rule.units, rule.min ?? 0) || 24
+  const pct = (n: number) => `${Math.min(100, (100 * n) / scale)}%`
+  return (
+    <div className={`py-meter ${rule.status}`} aria-hidden="true">
+      <span className="py-meter-fill" style={{ width: pct(rule.units) }} />
+      {rule.min != null && <i className="py-meter-tick" style={{ left: pct(rule.min) }} />}
+      {rule.max != null && rule.max < scale && <i className="py-meter-tick cap" style={{ left: pct(rule.max) }} />}
+    </div>
+  )
+}
+
+function Chip({ e, onOpen, expected }: { e: Entry; onOpen: (key: string) => void; expected: boolean }) {
+  const s = e.s
+  if (e.core) {
+    // core is assigned, not chosen: one quiet line, so the electives you picked stand out
+    return (
+      <button type="button" className="py-chip core line" onClick={() => onOpen(s.key)} title={`${s.number} ${s.title} · ${units(s.units)} units · your core, assigned by SOM`}>
+        <span className="py-chip-top">
+          <span className="py-chip-num">{s.number}</span>
+          <span className="py-chip-title">{s.title}</span>
+          <span className="py-chip-u">{units(s.units)}</span>
+        </span>
+      </button>
+    )
+  }
+  return (
+    <button type="button" className={`py-chip${e.core ? ' core' : ''}${expected ? ' exp' : ''}`} onClick={() => onOpen(s.key)}
+      title={`${s.number} ${s.title} · ${units(s.units)} units${e.core ? ' · your core, assigned by SOM' : ''}${expected ? ' · expected, times TBA' : ''}`}>
+      <span className="py-chip-top">
+        <span className="py-chip-num">{s.number}</span>
+        {e.core && <span className="py-chip-tag">Core</span>}
+        <span className="py-chip-u">{units(s.units)}</span>
+      </span>
+      <span className="py-chip-title">{s.title}</span>
+    </button>
+  )
+}
+
+/** One term laid out as its two quarters. Full-term courses sit in a band across both quarter columns. */
+function QuarterBoard({ term, entries, missingCore, expected, cohortSet = true, onOpen, go }: {
+  term: string; entries: Entry[]; missingCore: number; expected: boolean; cohortSet?: boolean; onOpen: (key: string) => void; go: BodyProps['go']
+}) {
+  const { season, q1, q2, full } = splitQuarters(entries, term)
+  const head = (key: string, list: Entry[]) => (
+    <div className="py-qhead">
+      <span>{QUARTER_SHORT[key]}</span>
+      <span className="mono faint">{units(sumUnits(list))} u</span>
+    </div>
+  )
+  const column = (list: Entry[], label: string) => (
+    <ul className="py-qlist" aria-label={label}>
+      {list.map((e) => <li key={e.s.id}><Chip e={e} onOpen={onOpen} expected={expected} /></li>)}
+      {!list.length && <li className="py-qempty">Nothing yet</li>}
+    </ul>
+  )
+  return (
+    <div className="py-board">
+      {head(`${season}-1`, q1)}
+      {head(`${season}-2`, q2)}
+      <div className={`py-full${full.length || missingCore ? '' : ' none'}`}>
+        {(full.length > 0 || missingCore > 0) && (
+          <span className="py-full-label"><span>Full term · both quarters</span><span className="mono">{units(sumUnits(full) + missingCore)} u</span></span>
+        )}
+        {full.map((e) => <Chip key={e.s.id} e={e} onOpen={onOpen} expected={expected} />)}
+        {missingCore > 0 && (
+          cohortSet ? (
+            <div className="py-chip core ghost">
+              <span className="py-chip-top"><span className="py-chip-num">Core</span><span className="py-chip-tag">Assigned</span><span className="py-chip-u">{units(missingCore)}</span></span>
+              <span className="py-chip-title">Assigned by SOM for your cohort</span>
+            </div>
+          ) : (
+            <button type="button" className="py-chip core ghost" onClick={() => go('profile')} title="Set your cohort to see your core sections">
+              <span className="py-chip-top"><span className="py-chip-num">Core</span><span className="py-chip-tag">Assigned</span><span className="py-chip-u">{units(missingCore)}</span></span>
+              <span className="py-chip-title">Set your cohort to see which</span>
+            </button>
+          )
+        )}
+        {!full.length && !missingCore && <span className="py-qempty">No full-term courses</span>}
+      </div>
+      {column(q1, QUARTER_SHORT[`${season}-1`])}
+      {column(q2, QUARTER_SHORT[`${season}-2`])}
+    </div>
+  )
+}
+
+/* ---------------------------------------------------------------- overview: every term on one screen */
+
+function Overview({ plan, terms, years, coreByTerm, cohortSet, termName, isExpected, year, setTab, onOpen, go }: {
+  plan: PlanResponse; terms: string[]; years: number[]; coreByTerm: Record<string, Section[]>; cohortSet: boolean
+  termName: (t: string) => string; isExpected: (t: string) => boolean; year: string
+  setTab: (t: string) => void; onOpen: (key: string) => void; go: BodyProps['go']
+}) {
+  const p = plan.progress
+  const target = p.total_target || 72
+  const termUnits = terms.map((t) => plan.terms[t]?.units ?? 0)
+  // What counts toward the degree but sits in no term shown here (a second-year's first-year core, say).
+  const base = Math.max(0, p.planned_total - termUnits.reduce((a, b) => a + b, 0))
+  const running: Record<string, number> = {}
+  terms.reduce((acc, t, i) => { running[t] = acc + termUnits[i]; return running[t] }, base)
+
+  return (
+    <div className="py-overview">
+      {!plan.items.length && (
+        <div className="card py-empty">
+          <Compass className="icon lg faint" />
+          <span className="py-empty-text"><b>Nothing planned yet.</b> <span className="muted">Let Elihu pick courses, or browse the explorer and add them to any term below.</span></span>
+          <span className="row py-empty-actions">
+            <button type="button" className="btn primary sm" onClick={() => go('find')}><Sparkles className="icon sm" />Ask Elihu</button>
+            <button type="button" className="btn sm" onClick={() => go('explore')}><Search className="icon sm" />Course explorer</button>
+          </span>
+        </div>
+      )}
+      <DegreeCard plan={plan} terms={terms} base={base} termName={termName} isExpected={isExpected} year={year} go={go} />
+
+      {years.map((y) => {
+        const ts = terms.filter((t) => academicYear(t) === y)
+        const exp = ts.every(isExpected)
+        const yUnits = ts.reduce((a, t) => a + (plan.terms[t]?.units ?? 0), 0)
+        return (
+          <section key={y} className={`py-year${exp ? ' exp' : ''}`} aria-label={`${yearLabel(y)} academic year`}>
+            <header className="py-year-head">
+              <h2>{yearLabel(y)}</h2>
+              <span className="py-year-sub">{exp ? <><Clock className="icon sm" />Expected courses · times TBA</> : 'This year · times published'}</span>
+              <span className="py-year-units mono">{units(yUnits)} units</span>
+            </header>
+            <div className={`py-year-terms n${ts.length}`}>
+              {ts.map((t) => {
+                const info = plan.terms[t]
+                const core = coreByTerm[t] ?? []
+                const coreShown = core.reduce((a, s) => a + s.units, 0)
+                const missingCore = Math.max(0, (info?.core_units ?? 0) - coreShown)
+                const rule = termRule(plan, t, year)
+                const badge = ruleBadge(rule)
+                const texp = isExpected(t)
+                return (
+                  <article key={t} className={`py-term${texp ? ' exp' : ''}`}>
+                    <header className="py-term-head">
+                      <h3>{termName(t)}</h3>
+                      {texp && <span className="badge gray py-exp-badge">Expected · times TBA</span>}
+                      <span className="py-term-units"><span className="mono">{units(rule.units)}</span> units</span>
+                    </header>
+                    <div className="py-term-rule">
+                      <UnitMeter rule={rule} />
+                      <span className={`badge ${badge.tone}`} title={badge.long}>{badge.text}</span>
+                    </div>
+                    <QuarterBoard term={t} entries={termEntries(plan, t, core)} missingCore={missingCore > 0.05 ? missingCore : 0}
+                      expected={texp} cohortSet={cohortSet} onOpen={onOpen} go={go} />
+                    <footer className="py-term-foot">
+                      <span className="faint small">Running total <span className="mono py-run">{units(running[t])}</span> / {target}</span>
+                      <button type="button" className="btn sm ghost py-open" onClick={() => setTab(t)}>
+                        {texp ? <><Plus className="icon sm" />Plan courses</> : <>See the week<ArrowRight className="icon sm" /></>}
+                      </button>
+                    </footer>
+                  </article>
+                )
+              })}
+            </div>
+          </section>
+        )
+      })}
+
+      {p.mba_rules === false && (p.checks ?? []).length > 0 && (
+        <div className="card">
+          <div className="section-label"><span>What your program requires{p.program_label ? ` · ${p.program_label}` : ''}</span></div>
+          <ul className="pl-checks" style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 8 }}>
+            {(p.checks ?? []).map((c, i) => (
+              <li key={i} className="row between small" style={{ flexWrap: 'nowrap', alignItems: 'flex-start', gap: 12 }}>
+                <span><b style={{ fontWeight: 500 }}>{c.label}</b><br /><span className="faint">{c.detail}</span></span>
+                <span className={CHECK_TONE[c.status]} style={{ whiteSpace: 'nowrap' }}>{CHECK_TEXT[c.status]}</span>
+              </li>
+            ))}
+            {(p.sources ?? []).length > 0 && <li className="faint small">Sources: {(p.sources ?? []).map((u) => <a key={u} href={u} target="_blank" rel="noreferrer" style={{ marginRight: 12 }}>{sourceLabel(u)}</a>)}</li>}
+          </ul>
+        </div>
+      )}
+      <RecentActions />
+    </div>
+  )
+}
+
+/** Degree progress: one bar toward the total, split by term (expected terms drawn lighter), plus the requirement checks. */
+function DegreeCard({ plan, terms, base, termName, isExpected, year, go }: {
+  plan: PlanResponse; terms: string[]; base: number; termName: (t: string) => string; isExpected: (t: string) => boolean; year: string
+  go: BodyProps['go']
+}) {
+  const p = plan.progress
+  const target = p.total_target || 72
+  const mba = p.mba_rules !== false
+  const expUnits = plan.items.filter((i) => i.expected).reduce((a, i) => a + i.section.units, 0)
+  const left = Math.max(0, target - p.planned_total)
+  const segs = [
+    ...(base > 0.05 ? [{ key: 'base', label: mba && year === '2' ? 'Year 1 core' : 'Counted earlier', units: base, kind: 'base' }] : []),
+    ...terms.map((t) => ({ key: t, label: termName(t), units: plan.terms[t]?.units ?? 0, kind: isExpected(t) ? 'exp' : 'now' })),
+  ]
+  const scale = Math.max(target, segs.reduce((a, s) => a + s.units, 0))
+  return (
+    <section className="card py-degree" aria-label="Progress toward your degree">
+      <div className="py-degree-top">
+        <div className="py-degree-total">
+          <span className="py-eyebrow">Toward your {p.program_label || 'degree'}</span>
+          <span className="py-big"><span className="mono">{units(p.planned_total)}</span><span className="py-big-of"> / {target} units</span></span>
+          <span className="small muted">
+            {left > 0 ? `${units(left)} to plan` : 'All planned'}
+            {expUnits > 0 && <> · incl. <span className="mono">{units(expUnits)}</span> expected for 2027–28</>}
+          </span>
+        </div>
+        {mba && (
+          <dl className="py-reqs">
+            <div><dt>Core</dt><dd className={p.core.counted >= p.core.target ? 'pa-ok' : ''}><span className="mono">{units(p.core.counted)} / {units(p.core.target)}</span>{p.core.counted >= p.core.target && <Check className="icon sm" />}</dd></div>
+            <div><dt>Electives</dt><dd><span className="mono">{units(p.electives.planned)} / {units(p.electives.target)}</span></dd></div>
+            <div><dt>Leadership</dt><dd className={p.ldr.met ? 'pa-ok' : p.ldr.planned ? '' : 'pa-warn'}>{p.ldr.met ? <><Check className="icon sm" />Met</> : p.ldr.planned ? 'Planned' : 'Not yet'}</dd></div>
+            <div>
+              <dt>Global Studies</dt>
+              <dd className={p.gsr.met ? 'pa-ok' : p.gsr.planned ? '' : 'pa-warn'}>
+                {p.gsr.met ? <><Check className="icon sm" />Met</> : (
+                  <button type="button" className="link-btn py-gsr" onClick={() => go('global')}>{p.gsr.planned ? 'Planned' : 'Not yet'} · options</button>
+                )}
+              </dd>
+            </div>
+          </dl>
+        )}
+      </div>
+      <div className="py-track" role="img" aria-label={`${units(p.planned_total)} of ${target} units: ${segs.map((s) => `${s.label} ${units(s.units)}`).join(', ')}`}>
+        {segs.filter((s) => s.units > 0).map((s) => (
+          <span key={s.key} className={`py-seg ${s.kind}`} style={{ width: `${(100 * s.units) / scale}%` } as CSSProperties} title={`${s.label}: ${units(s.units)} units`} />
+        ))}
+      </div>
+      <ul className="py-legend">
+        {segs.map((s) => (
+          <li key={s.key}><i className={`py-sw ${s.kind}`} aria-hidden="true" />{s.label}<span className="mono">{units(s.units)}</span></li>
+        ))}
+        {left > 0 && <li><i className="py-sw left" aria-hidden="true" />To plan<span className="mono">{units(left)}</span></li>}
+      </ul>
+      {p.notes.length > 0 && <ul className="pl-notes faint small">{p.notes.map((n) => <li key={n}>{n}</li>)}</ul>}
+    </section>
+  )
+}
+
+/* ---------------------------------------------------------------- one term this year: week grid, review, courses */
+
+function TermPane({ plan, term, active, core, termName, year, busy, run, onOpen, go }: {
   plan: PlanResponse
   term: string
   active: boolean
-  view: SessionView
   core: Section[]
   termName: string
+  year: string
   busy: number | null
   run: BodyProps['run']
   onOpen: (key: string) => void
   go: BodyProps['go']
 }) {
   const { sections } = useApp()
+  const [view, setView] = useState<SessionView>('all')
   const info = plan.terms[term]
   const items = plan.items.filter((i) => i.section.term === term)
   const shown = [...items.map((i) => i.section), ...core].filter((s) => inSessionView(s, view))
@@ -350,8 +559,13 @@ function TermPane({ plan, term, active, view, core, termName, busy, run, onOpen,
   const conflicts = info?.conflicts ?? []
   const clashIds = new Set(conflicts.filter((c) => shownIds.has(c.a_id) && shownIds.has(c.b_id)).flatMap((c) => [c.a_id, c.b_id]))
   const tba = shown.filter((s) => s.start_min == null || !s.days.length)
-  const hasHalves = shown.some((s) => /-(1|2)$/.test(s.session))
+  const all = [...items.map((i) => i.section), ...core]
+  const hasHalves = all.some((s) => /-(1|2)$/.test(s.session))
   const daysOn = info?.review.days_on_campus.length ?? 0
+  const rule = termRule(plan, term, year)
+  const badge = ruleBadge(rule)
+  const season = seasonOf(term)
+  const groups = splitQuarters(items.map((i) => ({ s: i.section, item: i })), term)
 
   // L22: once a half-term has finished, its "Session 1: …" review notes are history, not advice.
   const over = useMemo(() => {
@@ -363,7 +577,7 @@ function TermPane({ plan, term, active, view, core, termName, busy, run, onOpen,
     return { '1': ended('-1'), '2': ended('-2') }
   }, [sections, term])
   const allNotes = info?.review.notes ?? []
-  const notes = allNotes.filter((n) => !(over['1'] && n.text.startsWith('Session 1: ')) && !(over['2'] && n.text.startsWith('Session 2: ')))
+  const notes = allNotes.filter((n) => !(over['1'] && /^(Fall|Spring)-1: /.test(n.text)) && !(over['2'] && /^(Fall|Spring)-2: /.test(n.text)))
   const hidden = allNotes.length - notes.length
 
   return (
@@ -382,10 +596,22 @@ function TermPane({ plan, term, active, view, core, termName, busy, run, onOpen,
         <>
           <div className="grid pl-week">
             <div className="card">
-              <div className="section-label">
+              <div className="section-label py-week-head">
                 <span>Your week · {termName}</span>
-                <span className="mono">{units(info?.units ?? 0)} units</span>
+                <span className="row" style={{ gap: 8 }}>
+                  <span className="mono">{units(rule.units)} units</span>
+                  <span className={`badge ${badge.tone}`} title={badge.long}>{badge.text}</span>
+                </span>
               </div>
+              {hasHalves && (
+                <div className="tabs py-qtabs" role="group" aria-label="Quarter">
+                  {(['all', '1', '2'] as const).map((v) => (
+                    <button key={v} type="button" className={view === v ? 'on' : ''} aria-pressed={view === v} onClick={() => setView(v)}>
+                      {v === 'all' ? 'Both quarters' : QUARTER_SHORT[`${season}-${v}`]}
+                    </button>
+                  ))}
+                </div>
+              )}
               {(info?.core_units ?? 0) > 0 && (
                 <p className="faint small">
                   {core.length
@@ -394,7 +620,7 @@ function TermPane({ plan, term, active, view, core, termName, busy, run, onOpen,
                 </p>
               )}
               {view === 'all' && hasHalves && (
-                <p className="faint small">Half-term courses (S1 and S2) never clash with each other. Switch to Session 1 or 2 to see each half on its own.</p>
+                <p className="faint small">{QUARTER_SHORT[`${season}-1`]} and {QUARTER_SHORT[`${season}-2`]} courses never clash with each other. Pick a quarter to see it on its own.</p>
               )}
               <Timetable sections={shown} clashIds={clashIds} coreIds={coreIds} onOpen={(s) => onOpen(s.key)} />
               {tba.length > 0 && (
@@ -430,7 +656,7 @@ function TermPane({ plan, term, active, view, core, termName, busy, run, onOpen,
                       ))}
                     </ul>
                   ) : <p className="muted small" style={{ margin: 0 }}>Nothing to flag this week.</p>}
-                  {hidden > 0 && <p className="faint small" style={{ margin: '8px 0 0' }}>Notes for the finished half-term are hidden.</p>}
+                  {hidden > 0 && <p className="faint small" style={{ margin: '8px 0 0' }}>Notes for the finished quarter are hidden.</p>}
                 </div>
               </div>
               <RecentActions />
@@ -442,11 +668,9 @@ function TermPane({ plan, term, active, view, core, termName, busy, run, onOpen,
             <span className="faint mono">{items.length}</span>
           </div>
           {items.length ? (
-            <div className="pa-list">
-              {items.map((item) => (
-                <PlanRow key={`${item.id}-${item.bid_points ?? ''}-${item.section.id}`} item={item} busy={busy === item.id} run={run} onOpen={onOpen} />
-              ))}
-            </div>
+            <QuarterGroups term={term} groups={groups} render={(item) => (
+              <PlanRow key={`${item.id}-${item.bid_points ?? ''}-${item.section.id}`} item={item} busy={busy === item.id} run={run} onOpen={onOpen} />
+            )} />
           ) : (
             <div className="card">
               <p className="muted small" style={{ margin: 0 }}>
@@ -458,6 +682,152 @@ function TermPane({ plan, term, active, view, core, termName, busy, run, onOpen,
         </>
       )}
     </div>
+  )
+}
+
+/** A term's plan rows grouped by quarter: full term (both quarters), then quarter 1, then quarter 2. */
+function QuarterGroups({ term, groups, render }: {
+  term: string; groups: ReturnType<typeof splitQuarters<{ s: Section; item: PlanItem }>>; render: (item: PlanItem) => ReactNode
+}) {
+  const { season, q1, q2, full } = groups
+  const list = [
+    { key: season, label: `${quarterLabel(season, term)}`, sub: `${QUARTER_SHORT[`${season}-1`]} + ${QUARTER_SHORT[`${season}-2`]}`, rows: full },
+    { key: `${season}-1`, label: quarterLabel(`${season}-1`, term), sub: '', rows: q1 },
+    { key: `${season}-2`, label: quarterLabel(`${season}-2`, term), sub: '', rows: q2 },
+  ].filter((g) => g.rows.length)
+  return (
+    <div className="pa-list py-groups">
+      {list.map((g) => (
+        <div key={g.key} className="py-group">
+          <div className="py-group-head">
+            <span>{g.label}{g.sub && <span className="faint"> · {g.sub}</span>}</span>
+            <span className="faint mono">{g.rows.length} · {units(sumUnits(g.rows))} u</span>
+          </div>
+          {g.rows.map((r) => render(r.item))}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/* ---------------------------------------------------------------- one 2027-28 term: expected courses, no timetable */
+
+function ExpectedPane({ plan, term, active, termName, year, busy, run, onOpen, go }: {
+  plan: PlanResponse; term: string; active: boolean; termName: string; year: string
+  busy: number | null; run: BodyProps['run']; onOpen: (key: string) => void; go: BodyProps['go']
+}) {
+  const items = plan.items.filter((i) => i.section.term === term)
+  const rule = termRule(plan, term, year)
+  const badge = ruleBadge(rule)
+  const source = SOURCE_TERM[term]
+  const groups = splitQuarters(items.map((i) => ({ s: i.section, item: i })), term)
+  return (
+    <div className={`pl-pane ${active ? 'on' : ''}`} aria-hidden={!active || undefined} inert={!active}>
+      <div className="grid py-exp-grid">
+        <div className="card py-exp-main">
+          <div className="section-label py-week-head">
+            <span>{termName} · by quarter</span>
+            <span className="row" style={{ gap: 8 }}>
+              <span className="mono">{units(rule.units)} units</span>
+              <span className={`badge ${badge.tone}`} title={badge.long}>{badge.text}</span>
+            </span>
+          </div>
+          <div className="py-term-rule"><UnitMeter rule={rule} /><span className="faint small">{badge.long}</span></div>
+          <p className="py-exp-note">
+            <Clock className="icon sm" />
+            <span>SOM publishes 2027–28 courses next year. These are expected: this year's {source ? baseTermName(source) : ''} offerings in the same quarter. Times, rooms and sections are TBA.</span>
+          </p>
+          <QuarterBoard term={term} entries={items.map((i) => ({ s: i.section, item: i, core: false }))} missingCore={0} expected onOpen={onOpen} go={go} />
+        </div>
+        <AddForTerm plan={plan} term={term} termName={termName} busy={busy} run={run} onOpen={onOpen} go={go} />
+      </div>
+
+      <div className="section-label mt-lg">
+        <span>Courses in {termName}</span>
+        <span className="faint mono">{items.length}</span>
+      </div>
+      {items.length ? (
+        <QuarterGroups term={term} groups={groups} render={(item) => (
+          <PlanRow key={`${item.id}-${item.section.id}`} item={item} busy={busy === item.id} run={run} onOpen={onOpen} />
+        )} />
+      ) : (
+        <div className="card">
+          <p className="muted small" style={{ margin: 0 }}>Nothing planned for {termName} yet. Add a course on the right, or from the course explorer.</p>
+        </div>
+      )}
+      <RecentActions className="mt" />
+    </div>
+  )
+}
+
+const ADD_ROWS = 6
+
+/** Plan a course for a 2027-28 term from this year's same-season offering (the server copies it as expected). */
+function AddForTerm({ plan, term, termName, busy, run, onOpen, go }: {
+  plan: PlanResponse; term: string; termName: string; busy: number | null; run: BodyProps['run']; onOpen: (key: string) => void
+  go: BodyProps['go']
+}) {
+  const { sections, profile } = useApp()
+  const [q, setQ] = useState('')
+  const source = SOURCE_TERM[term]
+  const program = profile?.program || 'MBA'
+  const isMba = program === 'MBA' || program === 'MBA-JOINT'
+  const inPlan = useMemo(() => new Map(plan.items.map((i) => [i.section.number, i.section.term])), [plan.items])
+  // One entry per course: this year's sections in the same season that aren't core and are open to the program.
+  const offerings = useMemo(() => {
+    const byNum = new Map<string, Section[]>()
+    for (const s of sections) {
+      if (s.term !== source || s.core) continue
+      if (!(s.audiences ?? s.programs).includes(program)) continue
+      if (s.enrollment.trim().toLowerCase() === 'no') continue
+      if (s.category.toUpperCase() === 'GSR' && !isMba) continue
+      byNum.set(s.number, [...(byNum.get(s.number) ?? []), s])
+    }
+    return [...byNum.values()].sort((a, b) => a[0].number.localeCompare(b[0].number))
+  }, [sections, source, program, isMba])
+  const results = useMemo(() => {
+    // browsing: courses not yet in the plan first, so the box shows things you can still add
+    if (!q.trim()) return [...offerings].sort((a, b) => Number(inPlan.has(a[0].number)) - Number(inPlan.has(b[0].number))).slice(0, ADD_ROWS)
+    return offerings.map((secs) => ({ secs, score: scoreOffering(secs, q).score })).filter((x) => x.score > 0)
+      .sort((a, b) => b.score - a.score).slice(0, ADD_ROWS).map((x) => x.secs)
+  }, [offerings, q, inPlan])
+  const inputId = `add-${term}`
+
+  return (
+    <section className="card py-add" aria-label={`Add a course for ${termName}`}>
+      <div className="section-label"><span>Add a course for {termName}</span><span className="faint mono">{offerings.length}</span></div>
+      <label className="sr-only" htmlFor={inputId}>Search {source ? baseTermName(source) : ''} courses</label>
+      <div className="py-add-search">
+        <Search className="icon sm faint" />
+        <input id={inputId} type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Number, title or professor" autoComplete="off" />
+      </div>
+      <p className="faint small py-add-hint">From this year's {source ? baseTermName(source) : ''} courses, planned as expected for {termName}.</p>
+      <ul className="py-add-list">
+        {results.map((secs) => {
+          const s = secs[0]
+          const where = inPlan.get(s.number)
+          return (
+            <li key={s.number}>
+              <button type="button" className="py-add-main" onClick={() => onOpen(s.key)} aria-label={`Details for ${s.number} ${s.title}`}>
+                <span className="py-add-top"><span className="mono">{s.number}</span><span className="py-add-q">{QUARTER_SHORT[s.session] ?? s.session_name}</span><span className="mono faint">{units(s.units)} u</span></span>
+                <span className="py-add-title">{s.title}</span>
+              </button>
+              {where ? (
+                <span className="py-add-in faint small" title={`Already in your plan for ${baseTermName(where)}`}><Check className="icon sm" />{where === term ? 'Planned' : baseTermName(where)}</span>
+              ) : (
+                <button type="button" className="btn sm py-add-btn" disabled={busy === -1}
+                  onClick={() => run(-1, () => api.planNextYear(s.id, term as '202703' | '202801'), `Planned ${s.number} for ${termName} (expected)`)}
+                  aria-label={`Plan ${s.number} for ${termName}`}>
+                  <Plus className="icon sm" />Plan
+                </button>
+              )}
+            </li>
+          )
+        })}
+        {!results.length && <li className="py-add-none faint small">{offerings.length ? `No ${source ? baseTermName(source) : ''} course matches "${q}".` : sections.length ? `No ${source ? baseTermName(source) : ''} courses open to your program.` : 'Loading courses…'}</li>}
+      </ul>
+      <button type="button" className="link-btn small py-add-more" onClick={() => go('explore')}>Browse the course explorer<ArrowRight className="icon sm" /></button>
+    </section>
   )
 }
 
@@ -563,7 +933,7 @@ function ConflictCard({ conflicts, items, busy, run }: {
                   </div>
                 </div>
               ) : (
-                <p className="faint small mt" style={{ margin: 0 }}>No other sections meet at a different time. Drop one, or check whether the half-terms make it work.</p>
+                <p className="faint small mt" style={{ margin: 0 }}>No other sections meet at a different time. Drop one, or check whether the quarters make it work.</p>
               )}
             </div>
           )
@@ -577,6 +947,7 @@ function ConflictCard({ conflicts, items, busy, run }: {
 
 function PlanRow({ item, busy, run, onOpen }: { item: PlanItem; busy: boolean; run: BodyProps['run']; onOpen: (key: string) => void }) {
   const s = item.section
+  const expected = !!item.expected
   const [points, setPoints] = useState(item.bid_points == null ? '' : String(item.bid_points))
   const statusId = `status-${item.id}`
   const bidId = `bid-${item.id}`
@@ -592,37 +963,42 @@ function PlanRow({ item, busy, run, onOpen }: { item: PlanItem; busy: boolean; r
   }
 
   // No confirm dialog: the toast offers Undo (and native dialogs are blocked in some in-app browsers).
-  const remove = () => run(item.id, () => api.removeFromPlan(item.id), `Removed ${s.number}`)
+  const remove = () => run(item.id, () => api.removeFromPlan(item.id), `Removed ${s.number}${expected ? ` from ${baseTermName(s.term)}` : ''}`)
 
   return (
-    <div className="pl-row">
+    <div className={`pl-row${expected ? ' py-row-exp' : ''}`}>
       <button type="button" className="pl-row-main" onClick={() => onOpen(s.key)} aria-label={`Details for ${s.number} ${s.title}`}>
-        <span className="course-num">{s.number} §{s.section} · {s.session_name}</span>
+        <span className="course-num">{s.number}{expected ? '' : ` §${s.section}`} · {s.quarter ?? quarterLabel(s.session, s.term)}</span>
         <span className="course-title">{s.title}</span>
         <span className="meta">
-          <span><Clock className="icon sm" /><span className="mono">{shortTime(s)}</span></span>
+          {expected
+            ? <span className="badge gray"><Clock className="icon sm" />Expected · times TBA</span>
+            : <span><Clock className="icon sm" /><span className="mono">{shortTime(s)}</span></span>}
           <span className="mono">{units(s.units)} units</span>
-          {s.room && <span><MapPin className="icon sm" />{s.room}</span>}
-          {s.exam && <span title={`Final exam: ${s.exam}`}>{shortExam(s.exam)}</span>}
+          {!expected && s.room && <span><MapPin className="icon sm" />{s.room}</span>}
+          {!expected && s.exam && <span title={`Final exam: ${s.exam}`}>{shortExam(s.exam)}</span>}
+          {expected && s.faculty.length > 0 && <span className="faint" title="This year's instructors; next year's may differ">This year: {s.faculty.slice(0, 2).join(', ')}</span>}
           {item.added_by === 'dan' && <span className="badge gray">Dan's pick</span>}
         </span>
       </button>
       <div className="pl-row-controls">
-        <label className="field" htmlFor={statusId}>
-          Status
-          <select
-            id={statusId}
-            value={item.status}
-            disabled={busy}
-            onChange={(e) => {
-              const v = e.target.value as Status
-              run(item.id, () => api.updatePlan(item.id, { status: v }), `${s.number} marked ${v}`)
-            }}
-          >
-            {STATUSES.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-        </label>
-        {item.status === 'bidding' && (
+        {!expected && (
+          <label className="field" htmlFor={statusId}>
+            Status
+            <select
+              id={statusId}
+              value={item.status}
+              disabled={busy}
+              onChange={(e) => {
+                const v = e.target.value as Status
+                run(item.id, () => api.updatePlan(item.id, { status: v }), `${s.number} marked ${v}`)
+              }}
+            >
+              {STATUSES.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </label>
+        )}
+        {!expected && item.status === 'bidding' && (
           <label className="field pl-bid" htmlFor={bidId}>
             Bid points
             <input
@@ -641,7 +1017,7 @@ function PlanRow({ item, busy, run, onOpen }: { item: PlanItem; busy: boolean; r
           </label>
         )}
         <div className="row pl-row-actions">
-          {item.google_link && (
+          {!expected && item.google_link && (
             <a className="btn sm ghost" href={item.google_link} target="_blank" rel="noreferrer" title="Adds a weekly event; it doesn't skip breaks or the Jan 29 make-up day. Use the Calendar page's feed for exact dates.">
               <CalendarPlus className="icon sm" />Google Calendar
             </a>

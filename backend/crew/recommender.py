@@ -23,7 +23,7 @@ from typing import Any
 
 from pydantic_ai.exceptions import ModelHTTPError
 
-from catalog import TERM_NAMES, card_text, get_catalog
+from catalog import TERM_NAMES, term_name, card_text, get_catalog
 from config import ai_available
 from crew.agents import critic, curator
 from crew.chat import _split_followups
@@ -105,7 +105,7 @@ async def recommend(db, user_id: int, term: str = "202701", queue: asyncio.Queue
     run = Run(db=db, user_id=user_id, feature="recommend", guard=SpendGuard.for_user(db, user_id), queue=queue)
     ctx = load_context(run)
     p = ctx.profile
-    out: dict[str, Any] = {"run_id": run.run_id, "term": term, "term_name": TERM_NAMES.get(term, term)}
+    out: dict[str, Any] = {"run_id": run.run_id, "term": term, "term_name": term_name(term)}
 
     shortlist, stats = retrieve(ctx, term)
     run.emit("retrieve", agent="Retriever (code)", **stats)
@@ -131,7 +131,7 @@ async def recommend(db, user_id: int, term: str = "202701", queue: asyncio.Queue
         )
         listing = "\n".join(f"{i + 1}. {card_text(o, 300)}" for i, o in enumerate(shortlist))
         prompt = (
-            f"Term: {TERM_NAMES.get(term, term)}.\nSTUDENT QUIZ:\n{fence(quiz, 'student_quiz')}\n\n"
+            f"Term: {term_name(term)}.\nSTUDENT QUIZ:\n{fence(quiz, 'student_quiz')}\n\n"
             f"SHORTLIST (pick only from these keys):\n{fence(listing, 'som_catalog', limit=len(listing) + 100)}"
         )
         try:

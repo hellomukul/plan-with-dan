@@ -23,7 +23,7 @@ from datetime import date, datetime, timedelta, timezone
 
 from sqlmodel import Session, select
 
-from catalog import TERM_NAMES
+from catalog import TERM_NAMES, term_name
 from config import ai_available
 from crew.runtime import Run
 from db import DeskBrief, DeskState, aware, utcnow
@@ -76,7 +76,7 @@ def scan(profile: dict, plan: list[PlanRow], catalog, global_choices: list[dict]
             cards.append(Card(
                 kind="clash", key=f"{c['a_id']}-{c['b_id']}", severity="high", due=due,
                 title=f"Fix the clash: {c['a']} vs {c['b']}",
-                detail=f"{TERM_NAMES.get(term, term)}, {c['day']} {c['window']}. Overlapping courses get dropped after {label}.",
+                detail=f"{term_name(term)}, {c['day']} {c['window']}. Overlapping courses get dropped after {label}.",
                 action={"type": "go", "route": "plan", "label": "Fix clash"},
                 source="planning.conflicts (real session dates)",
                 why="SOM removes one of two overlapping courses after add/drop.",

@@ -1,12 +1,12 @@
 /* The home page's live week builder: pick program, year and cohort, see what SOM already schedules for you
    (where official data exists), then add electives and watch for clashes. No account, nothing stored. */
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { CalendarSync, Check, Download, Info, Lock, Plus, TriangleAlert, X } from 'lucide-react'
+import { CalendarRange, CalendarSync, Check, Download, Info, Lock, Plus, TriangleAlert, X } from 'lucide-react'
 import { api, type ProgramInfo, type Section } from '../api'
 import CourseExplorer from './CourseExplorer'
 import HandsomeDan from '../mascots/HandsomeDan'
 import Timetable, { sectionsClash } from './Timetable'
-import { TERM_NAMES, prettyDate, shortExam } from '../lib/format'
+import { QUARTER_SHORT, TERM_NAMES, prettyDate, quartersOf, shortExam } from '../lib/format'
 import { MAX_WEEK, saveTryout, type Tryout } from '../lib/tryout'
 import { useApp } from '../state'
 import './week-builder.css'
@@ -29,6 +29,7 @@ interface Props {
 }
 
 type TermMeta = { note: string; example: boolean; untimed: number; done: number }
+type Quarter = 'all' | '1' | '2'
 const NO_META: TermMeta = { note: '', example: false, untimed: 0, done: 0 }
 
 export default function WeekBuilder({ t, setT, programs, dataAsOf, onSave, showWho = true, wide = false }: Props) {
@@ -38,12 +39,16 @@ export default function WeekBuilder({ t, setT, programs, dataAsOf, onSave, showW
   const lastWho = useRef('')
   const listRef = useRef<HTMLUListElement>(null)
   const [justAdded, setJustAdded] = useState('')  // the row to bring into view (inside the list's own scroll) and mark
+  // Each term has two quarters (Fall-1 + Fall-2, Spring-1 + Spring-2). The grid can show one of them, or both.
+  const [quarter, setQuarter] = useState<Quarter>('all')
   useEffect(() => { saveTryout(t) }, [t])
 
   const prog = programs.find((p) => p.code === t.program)
   const isMba = t.program === 'MBA' || t.program === 'MBA-JOINT'
   const needsCohort = isMba && (t.year === '1' || t.year === 'admit')
   const term = t.year === 'admit' ? '202603' : t.term
+  const season = term === '202603' ? 'fall' : 'spring'
+  useEffect(() => { setQuarter('all') }, [term])
   const { note, example, untimed, done: doneUnits } = meta[term] ?? NO_META
 
   // Whenever the "who are you" answers change (and on every visit, so a restored week gets its notes and Fall-1
@@ -91,6 +96,18 @@ export default function WeekBuilder({ t, setT, programs, dataAsOf, onSave, showW
   }))
   const units = picked.reduce((n, s) => n + s.units, 0) + untimed + doneUnits
   const tba = picked.filter((s) => s.start_min == null || !s.days.length)
+  // Quarters: the grid shows the one picked (full-term courses run through both); the list groups by quarter.
+  const inQuarter = (s: Section, q: Quarter = quarter) => q === 'all' || quartersOf(s.session).includes(`${season}-${q}`)
+  const shown = picked.filter((s) => inQuarter(s))
+  const quarterOver = (q: '1' | '2') => {
+    const all = sections.filter((s) => s.term === term && s.session === `${season}-${q}`)
+    return all.length > 0 && all.every((s) => s.ends && s.ends < today())
+  }
+  const groupKeys = [`${season}-1`, `${season}-2`, season]
+  const groups = [...groupKeys, ''].map((key) => {
+    const items = picked.filter((s) => (key ? s.session === key : !groupKeys.includes(s.session)))
+    return { key, label: key === season ? 'Full term' : QUARTER_SHORT[key] ?? 'Other', items, units: items.reduce((n, s) => n + s.units, 0) }
+  }).filter((g) => g.items.length || (g.key === `${season}-1` && doneUnits && quarterOver('1')))
   // A term already under way hides its finished courses. MBA first years get those counted back (doneUnits);
   // for anyone else the count is partial, so don't check it against the minimum.
   const underway = (code: string) => sections.some((s) => s.term === code && s.ends && s.ends < today())
@@ -164,6 +181,12 @@ export default function WeekBuilder({ t, setT, programs, dataAsOf, onSave, showW
     if (user) { window.location.hash = '/calendar'; return }
     window.dispatchEvent(new CustomEvent('pwd:signup', { detail: { intent: 'calendar' } }))
   }
+  // First-year MBAs can plan their second year (Fall 2027, Spring 2028) as expected courses, which needs an account.
+  const nextYear = isMba && t.year === '1'
+  const planNextYear = () => {
+    if (user) { window.location.hash = '/plan'; return }
+    window.dispatchEvent(new CustomEvent('pwd:signup', { detail: 'Create a free account to plan your second year (Fall 2027 and Spring 2028).' }))
+  }
   // The whole week, both terms (not just the term on screen), so the file matches the Dates tab.
   const download = async () => {
     const res = await fetch('/api/ics/preview', { method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -174,6 +197,14 @@ export default function WeekBuilder({ t, setT, programs, dataAsOf, onSave, showW
     a.click()
     URL.revokeObjectURL(url)
   }
+
+  // Picking a quarter scrolls "Your courses" (inside its own box, never the page) to that quarter's first course.
+  useEffect(() => {
+    const ul = listRef.current
+    if (!ul) return
+    const first = quarter === 'all' ? null : ul.querySelector<HTMLElement>('li.wb-group:not(.dim)')
+    ul.scrollTop = first ? first.getBoundingClientRect().top - ul.getBoundingClientRect().top + ul.scrollTop : 0
+  }, [quarter, term])
 
   // A new course lands at the end of "Your courses", which scrolls on its own: scroll that list (never the page)
   // so the row shows, and mark it for a moment.
@@ -221,7 +252,7 @@ export default function WeekBuilder({ t, setT, programs, dataAsOf, onSave, showW
       <div className="wb-top"><div>
       <div className="row between wb-term">
         {t.year === 'admit'
-          ? <span className="small faint">Example week · Fall 2026</span>
+          ? <span className="small faint wb-example">Example week · Fall 2026</span>
           : (
             <div className="tabs wb-tabs" role="radiogroup" aria-label="Term">
               {(['202603', '202701'] as const).map((code) => (
@@ -229,12 +260,23 @@ export default function WeekBuilder({ t, setT, programs, dataAsOf, onSave, showW
               ))}
             </div>
           )}
+        <div className="tabs wb-qtabs" role="radiogroup" aria-label="Quarter">
+          {(['all', '1', '2'] as const).map((q) => {
+            const over = q !== 'all' && quarterOver(q) && !picked.some((s) => s.session === `${season}-${q}`)
+            const name = q === 'all' ? 'Both quarters' : QUARTER_SHORT[`${season}-${q}`]
+            return (
+              <button key={q} type="button" role="radio" aria-checked={quarter === q} className={quarter === q ? 'on' : ''} disabled={over}
+                title={over ? `${name} is over${q === '1' && doneUnits ? `; its ${fmt(doneUnits)} units count toward this term` : ''}` : q === 'all' ? 'Both quarters on one grid (half-term courses in different quarters never clash)' : `Only ${name} (and full-term courses)`}
+                onClick={() => setQuarter(q)}>{name}</button>
+            )
+          })}
+        </div>
       </div>
       <p className={`small wb-note ${example ? 'example' : ''}`}>{note || '\u00a0'}</p>
       </div></div>
 
       <div className="wb-main"><div className="wb-left">
-      <Timetable sections={picked} clashIds={clashIds} compact={!wide} />
+      <Timetable sections={shown} clashIds={clashIds} compact={!wide} />
       </div><div className="wb-right">
 
       <div className="section-label wb-list-head"><span>Your courses · {termLabel(term)}</span><span className="faint small" title="Courses in the term on screen, and in your whole week (both terms)">{picked.length}{week.length > picked.length ? ` · ${week.length} in all` : ''}</span></div>
@@ -242,11 +284,18 @@ export default function WeekBuilder({ t, setT, programs, dataAsOf, onSave, showW
       {(
         <ul className="wb-picked" ref={listRef}>
           {picked.length === 0 && <li className="wb-empty small faint">Nothing here yet. Use the Course explorer below to add a course.</li>}
-          {picked.map((s) => {
+          {groups.flatMap((g) => [
+            <li key={`q-${g.key}`} className={`wb-group ${g.items.length && !g.items.some((s) => inQuarter(s)) ? 'dim' : ''}`}>
+              <span className="wb-group-name">{g.label}</span>
+              <span className="wb-group-meta">{g.items.length
+                ? `${g.items.length} course${g.items.length === 1 ? '' : 's'} · ${fmt(g.units)} units`
+                : `done · ${fmt(doneUnits)} units count`}</span>
+            </li>,
+            ...g.items.map((s) => {
             const options = sectionsOf(s.key)
             const auto = t.auto.includes(s.id)
             return (
-              <li key={s.id} data-id={s.id} className={[clashIds.has(s.id) ? 'clash' : '', s.id === justAdded ? 'new' : ''].join(' ').trim() || undefined}>
+              <li key={s.id} data-id={s.id} className={[clashIds.has(s.id) ? 'clash' : '', s.id === justAdded ? 'new' : '', inQuarter(s) ? '' : 'dim'].join(' ').trim() || undefined}>
                 <div className="wb-row">
                   <span className="course-num">{s.number}</span>
                   <span className="wb-row-title" title={s.title}>{s.title}</span>
@@ -263,7 +312,7 @@ export default function WeekBuilder({ t, setT, programs, dataAsOf, onSave, showW
                 )}
               </li>
             )
-          })}
+          })])}
         </ul>
       )}
 
@@ -301,12 +350,23 @@ export default function WeekBuilder({ t, setT, programs, dataAsOf, onSave, showW
       <div className="wb-actions">
         <button type="button" className="btn primary sm" onClick={onSave} disabled={!week.length}>Save to a free plan</button>
         <button type="button" className="btn ghost sm" onClick={download} disabled={!week.length} title="Both terms: your core and the courses you added"><Download className="icon sm" />Calendar file</button>
-        <span className="wb-link">
-          <button type="button" className="btn ghost sm" onClick={linkCalendar} aria-describedby="wb-link-hint">
-            <CalendarSync className="icon sm" />Link your calendar<Lock className="icon sm wb-link-lock" />
-          </button>
-          <span role="tooltip" id="wb-link-hint" className="wb-hint">Creates your free Dan account (Google, Microsoft or email), then one click keeps your classes in sync with Apple, Google or Outlook.</span>
-        </span>
+        <div className="wb-row2">
+          <span className="wb-link">
+            <button type="button" className="btn ghost sm" onClick={linkCalendar} aria-describedby="wb-link-hint">
+              <CalendarSync className="icon sm" />Link your calendar<Lock className="icon sm wb-link-lock" />
+            </button>
+            <span role="tooltip" id="wb-link-hint" className="wb-hint">Creates your free Dan account (Google, Microsoft or email), then one click keeps your classes in sync with Apple, Google or Outlook.</span>
+          </span>
+          {/* first-year MBAs: the second year, on the same row as Link your calendar (no extra height) */}
+          {nextYear && (
+            <span className="wb-link wb-next">
+              <button type="button" className="btn ghost sm" onClick={planNextYear} aria-label="Plan your second year (2027–28)" aria-describedby="wb-next-hint">
+                <CalendarRange className="icon sm" /><span className="wb-next-long">Plan year 2 (2027–28)</span><span className="wb-next-short">Plan 2027–28</span><Lock className="icon sm wb-link-lock" />
+              </button>
+              <span role="tooltip" id="wb-next-hint" className="wb-hint">Fall 2027 and Spring 2028 aren’t published yet. A free account lets you plan them with expected courses, based on this year’s (times TBA).</span>
+            </span>
+          )}
+        </div>
       </div>
       <p className="faint wb-fine">Course data from SOM’s public directory{dataAsOf ? `, as of ${prettyDate(dataAsOf)}` : ''}. Nothing is stored until you sign up.</p>
       </div></div>
@@ -314,6 +374,7 @@ export default function WeekBuilder({ t, setT, programs, dataAsOf, onSave, showW
     <CourseExplorer who={{ program: t.program, year: t.year, cohort: t.cohort }} week={week} autoIds={t.auto}
       onAdd={(sec) => {
         if (sec.term !== term && t.year !== 'admit') setT((v) => ({ ...v, term: sec.term }))  // show the term it was added to
+        else if (!inQuarter(sec)) setQuarter('all')  // and the quarter: never add a course the grid then hides
         add(sec)
       }} />
     </>

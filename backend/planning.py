@@ -161,7 +161,8 @@ def week_review(sections: list[Section]) -> dict:
     notes: list[dict] = []
     busy: set[str] = set()
     if halves:
-        for suffix, label in (("-1", "Session 1"), ("-2", "Session 2")):
+        season = "Spring" if any(x.session.startswith("spring") for x in sections) else "Fall"
+        for suffix, label in (("-1", f"{season}-1"), ("-2", f"{season}-2")):
             half = [s for s in sections if s.session.endswith(suffix)]
             if half and all(s.ended() for s in half):
                 continue  # that half-term is over (e.g. Fall-1 in late October): nothing left to critique
@@ -231,7 +232,10 @@ def min_units(profile: dict, term: str) -> float | None:
     prog = programs.get(profile.get("program"))
     if prog["base"] == "MBA":
         year = profile.get("year") or ""
-        return float(prog["min_units"]) if year == "1" or (year == "2" and term == "202603") else None
+        # the first three terms of the two years: class of 2028 = Fall 26, Spring 27, Fall 27; class of 2027's third
+        # term is Fall 26; admits (class of 2029) start Fall 27
+        first_three = {"1": ("202603", "202701", "202703"), "2": ("202603",), "admit": ("202703", "202801")}.get(year, ())
+        return float(prog["min_units"]) if term in first_three else None
     return float(prog["min_units"]) if prog.get("min_units") else None
 
 

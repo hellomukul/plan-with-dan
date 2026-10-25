@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { Download, ExternalLink } from 'lucide-react'
 import { api, auctionApplies, type CalendarEvents, type ProgramsInfo } from '../api'
 import type { Tryout } from '../lib/tryout'
+import { QUARTER_SHORT, quarterDates } from '../lib/format'
+import { useApp } from '../state'
 import MonthCalendar from './MonthCalendar'
 
 const OWN_CALENDAR = new Set(['EMBA', 'MMS-PEM'])
@@ -13,6 +15,14 @@ export default function DatesTab({ t, info }: { t: Tryout; info: ProgramsInfo | 
   const [showClasses, setShowClasses] = useState(true)
   const [classes, setClasses] = useState<CalendarEvents['classes']>([])
   const idsKey = t.ids.join(',')
+  // When each quarter's classes run (from the catalog), for the line under the calendar: current and upcoming only.
+  const { sections } = useApp()
+  const quarters = useMemo(() => {
+    const today = info?.today ?? new Date().toISOString().slice(0, 10)
+    const fmt = (iso: string) => { const [y, m, d] = iso.split('-').map(Number); return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) }
+    return Object.entries(quarterDates(sections)).filter(([, q]) => q.ends >= today).sort((a, b) => a[1].starts.localeCompare(b[1].starts))
+      .map(([k, q]) => `${QUARTER_SHORT[k] ?? k} ${fmt(q.starts)} – ${fmt(q.ends)}`)
+  }, [sections, info?.today])
 
   useEffect(() => {
     if (!idsKey) { setClasses([]); return }
@@ -63,6 +73,8 @@ export default function DatesTab({ t, info }: { t: Tryout; info: ProgramsInfo | 
               <input type="checkbox" checked={showClasses} onChange={(e) => setShowClasses(e.target.checked)} />
               Show my classes from My plan{t.ids.length ? ` (${t.ids.length})` : ''}
             </label>
+            {quarters.length > 0 && <p className="small dt-quarters" title="Each term has two quarters; half-term courses run in one, full-term courses in both. Dates are the usual first and last class days.">
+              <span className="faint">Quarters</span> {quarters.join(' · ')}</p>}
             <p className="faint small">
               {t.ids.length ? 'Classes follow your week in My plan, including holidays and make-up days.' : 'Add courses in My plan and their classes show up here.'}{' '}
               Dates from the 2026–27 SOM academic calendar (MBA, MAM and MMS){auctionApplies(t.program, t.year) ? ', plus the course auction dates from the registrar' : ''}.

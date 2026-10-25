@@ -50,3 +50,9 @@
 /* the split result: Dan's cheer inline; a stale split (budget changed) is dimmed until you split again */
 .bd-ready { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; }
 .bd-stale .table-wrap, .bd-stale .bd-ready { opacity: 0.45; }
+
+/* Split my points: bid courses grouped by quarter (Spring-1, Spring-2, full term), one heading per group */
+.bd-page .pb-prio-wrap .pb-prio { border-top: 0; }
+.bd-page .pb-prio-wrap + .pb-prio-wrap { border-top: 1px solid var(--line); }
+.bd-page .bd-quarter { margin: 0; padding: 10px 12px 0; }
+.bd-next { margin: 4px 0 0; }

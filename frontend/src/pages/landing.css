@@ -467,3 +467,7 @@
   .lp-faq details[open] { padding-bottom: 14px; }
   .lp-footer a { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; min-width: 44px; }
 }
+/* Dates tab: one line of quarter dates under the calendar (Fall-2 Oct 26 – Dec 15 · Spring-1 …) */
+.dt-foot .dt-quarters { min-height: 0; color: var(--muted); }
+/* phones: the picker's second row is as tall as its 44px selects for every program ("student" alone included) */
+@media (max-width: 640px) { .ws-more { min-height: 44px; } }

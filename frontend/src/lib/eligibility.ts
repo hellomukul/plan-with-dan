@@ -98,3 +98,12 @@ export function courseVerdict(sections: Section[], who: Who): { verdict: Verdict
 export function blockedLabel(v: Verdict): string {
   return v.tag === 'closed' ? 'In session · add/drop closed' : v.tag === 'ended' ? 'Ended' : 'Not open to you'
 }
+
+/** The section to plan this course from for 2027-28 (an expected course), or null when the student can't: the same
+    rules as POST /api/plan with a target_term. Not core (SOM assigns it), open to their program, and not the closed
+    second half of a two-term course. Dates don't matter: next year's run hasn't started. */
+export function nextYearSection(sections: Section[], who: Pick<Who, 'program'>): Section | null {
+  const isMba = who.program === 'MBA' || who.program === 'MBA-JOINT'
+  return sections.find((s) => !s.core && !s.projected && (s.audiences ?? s.programs).includes(who.program)
+    && s.enrollment.trim().toLowerCase() !== 'no' && !(s.category.toUpperCase() === 'GSR' && !isMba)) ?? null
+}

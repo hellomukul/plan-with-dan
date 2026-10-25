@@ -9,7 +9,7 @@ import {
 import { api, auctionApplies, type AuctionInfo, type GlobalChoice, type GsrOption, type ProgramInfo, type RequirementsResponse } from '../api'
 import CourseDrawer from '../components/CourseDrawer'
 import { Empty, Spinner } from '../components/ui'
-import { daysUntil, prettyDate, relDays } from '../lib/format'
+import { daysUntil, prettyDate, quarterDates, relDays, termName } from '../lib/format'
 import { blockedLabel, verdict as sectionVerdict } from '../lib/eligibility'
 import { useApp } from '../state'
 import './pages-b.css'
@@ -27,7 +27,24 @@ const STATUSES: { value: GlobalChoice['status'] | ''; label: string }[] = [
   { value: 'applied', label: 'Applied' },
   { value: 'done', label: 'Done' },
 ]
-const TARGET_TERMS = ['Spring 2027', 'Fall 2027', 'Spring 2028']
+/** Terms a student can aim an option at. Second-years and one-year programs finish in May 2027; first-year MBAs
+    (and other multi-year students) can plan into 2027-28. An exchange is a second-year term, so first-years get
+    Fall 2027 or Spring 2028 for it. Values are plain term names, as saved before. */
+function targetTerms(optKey: string, program?: string, year?: string): string[] {
+  const finishing = year === '2' || /^(MAM|MMS)/.test(program ?? '')
+  if (finishing) return [termName('202701')]
+  if (optKey === 'exchange') return [termName('202703'), termName('202801')]
+  return ['202701', '202703', '202801'].map(termName)
+}
+
+/** "Spring-1 → Spring-2 break" when a travel window falls between a term's two quarters (from catalog dates). */
+function quarterBreak(q: Record<string, { starts: string; ends: string }>, start: string, end: string): string {
+  for (const [season, name] of [['fall', 'Fall'], ['spring', 'Spring']]) {
+    const a = q[`${season}-1`], b = q[`${season}-2`]
+    if (a && b && a.ends < start && end < b.starts) return `${name}-1 → ${name}-2 break`
+  }
+  return ''
+}
 
 type FitKey = 'travel' | 'fullTerm' | 'tight'
 const FIT_QUESTIONS: { key: FitKey; label: string }[] = [
@@ -80,7 +97,7 @@ function Pill({ tone, children }: { tone: Tone; children: string }) {
 }
 
 export default function Global() {
-  const { profile, refreshProfile, addCourse, plannedIds, toast, sectionById } = useApp()
+  const { profile, refreshProfile, addCourse, plannedIds, toast, sectionById, sections } = useApp()
   const [data, setData] = useState<RequirementsResponse | null>(null)
   const [auction, setAuction] = useState<AuctionInfo | null>(null)
   const [programs, setPrograms] = useState<ProgramInfo[]>([])
@@ -112,6 +129,7 @@ export default function Global() {
   }, [data])
 
   const recs = useMemo(() => (data ? recommend(fit, data.gsr.options) : {}), [fit, data])
+  const quarters = useMemo(() => quarterDates(sections), [sections])
   const anyFit = fit.travel || fit.fullTerm || fit.tight
   const firstYear = auctionApplies(profile?.program, profile?.year)
   const mba = !profile?.program || profile.program === 'MBA' || profile.program === 'MBA-JOINT'
@@ -163,7 +181,8 @@ export default function Global() {
       ? { title: `Bid in ${globalRounds}`, sub: `IE, GNW and SNOC go through the course auction, ${shortDate(auction.opens)} – ${shortDate(auction.closes)}.` }
       : { title: 'Bid in the auction', sub: 'IE, GNW and SNOC seats go through the course auction.' },
     ieWeek
-      ? { title: `Travel ${span(ieWeek.start, ieWeek.end)}`, sub: 'No SOM classes while IE and GNW travel.' }
+      ? { title: `Travel ${span(ieWeek.start, ieWeek.end)}`, sub: quarterBreak(quarters, ieWeek.start, ieWeek.end)
+        ? `In the ${quarterBreak(quarters, ieWeek.start, ieWeek.end)}: no SOM classes while IE and GNW travel.` : 'No SOM classes while IE and GNW travel.' }
       : { title: 'Travel', sub: 'Dates are on the option you pick.' },
   ]
 
@@ -405,7 +424,7 @@ export default function Global() {
                     <div className="gl-week">
                       <b>{w.name}</b>
                       <span className={`badge ${!past && d <= 60 ? 'amber' : 'gray'}`}>{past ? 'Done' : relDays(d)}</span>
-                      <span className="pb-date">{prettyDate(w.start)}{w.end !== w.start ? ` – ${prettyDate(w.end)}` : ''}, {w.start.slice(0, 4)}</span>
+                      <span className="pb-date">{prettyDate(w.start)}{w.end !== w.start ? ` – ${prettyDate(w.end)}` : ''}, {w.start.slice(0, 4)}{quarterBreak(quarters, w.start, w.end) ? ` · ${quarterBreak(quarters, w.start, w.end)}` : ''}</span>
                     </div>
                   </li>
                 )
@@ -431,6 +450,8 @@ export default function Global() {
             const CheckIcon = fitsTone === 'ok' ? Check : fitsTone === 'warn' ? AlertTriangle : X
             const Icon = OPTION_ICON[opt.key] ?? Globe
             const busy = busyOption === opt.key
+            // the quarters its catalog courses run in ("Spring-1 2027"), straight from the sections; none for exchange
+            const optQuarters = [...new Set(opt.courses.flatMap((c) => c.section_ids.map((id) => sectionById.get(id)?.quarter).filter(Boolean)))]
             return (
               <article key={opt.key} className={`pb-opt ${highlighted ? 'hi' : ''} ${dim ? 'dim' : ''} ${openOpts.has(opt.key) ? 'open' : ''}`} aria-labelledby={`opt-${opt.key}`}>
                 <div className="pb-opt-head">
@@ -467,6 +488,7 @@ export default function Global() {
                 <div className="pb-opt-body" id={`opt-body-${opt.key}`}>
                   <dl className="pb-kv">
                     <dt>When</dt><dd>{opt.timing}</dd>
+                    {optQuarters.length > 0 && <><dt>Quarter</dt><dd>{optQuarters.join(', ')}</dd></>}
                     <dt>Enroll</dt><dd>{opt.enrol}</dd>
                     <dt>Cost</dt><dd>{opt.cost}</dd>
                   </dl>
@@ -489,7 +511,7 @@ export default function Global() {
                                 <div className="course-num">{c.number}</div>
                                 <div className="pb-course-title">{c.title}</div>
                                 <div className="small muted">
-                                  {c.term_name ?? 'Term TBA'} · <span className="mono">{c.time || 'Time TBA'}</span>{c.seats ? <> · <span className="mono">{c.seats}</span> seats</> : ''}
+                                  {secs.find((x) => x.quarter)?.quarter ?? c.term_name ?? 'Term TBA'} · <span className="mono">{c.time || 'Time TBA'}</span>{c.seats ? <> · <span className="mono">{c.seats}</span> seats</> : ''}
                                 </div>
                               </div>
                               <div className="row gl-course-act" style={{ gap: 6 }}>
@@ -549,7 +571,7 @@ export default function Global() {
                     onChange={(e) => void track(opt, { target_term: e.target.value })}
                   >
                     <option value="">Target term…</option>
-                    {[...new Set([...TARGET_TERMS, choice?.target_term ?? ''].filter(Boolean))].map((t) => <option key={t} value={t}>{t}</option>)}
+                    {[...new Set([...targetTerms(opt.key, profile?.program, profile?.year), choice?.target_term ?? ''].filter(Boolean))].map((t) => <option key={t} value={t}>{t}</option>)}
                   </select>
                   <span className={`gl-busy ${busy ? 'on' : ''}`}><Spinner /></span>
                 </div>

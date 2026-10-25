@@ -270,12 +270,14 @@ function Rings({ go, programs }: { go: (r: Route) => void; programs: ProgramsInf
   const p = plan.progress
   const target = p.total_target || 72
   const unitsPct = p.planned_total / target
+  // planned_total already counts courses planned for 2027-28 (expected, times TBA); say so on the ring.
+  const expUnits = plan.items.filter((i) => i.expected).reduce((a, i) => a + i.section.units, 0)
   const unitsRing = (
     <ProgressRing
       key="units" size={RING} value={unitsPct} center={fmtUnits(p.planned_total)} sub={`of ${target}`} label="Units"
-      status={p.planned_total >= target ? 'All planned' : `${fmtUnits(target - p.planned_total)} to plan`}
+      status={p.planned_total >= target ? 'All planned' : expUnits > 0 ? `${fmtUnits(expUnits)} expected` : `${fmtUnits(target - p.planned_total)} to plan`}
       tone={p.planned_total >= target ? 'good' : 'accent'}
-      description={`Units: ${fmtUnits(p.planned_total)} of ${target} counted or planned`}
+      description={`Units: ${fmtUnits(p.planned_total)} of ${target} counted or planned${expUnits > 0 ? `, including ${fmtUnits(expUnits)} expected for 2027–28` : ''}`}
     />
   )
   const reqRing = (label: string, full: string, met: boolean, planned: boolean) => (

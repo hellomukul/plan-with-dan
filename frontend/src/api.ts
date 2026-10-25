@@ -14,6 +14,10 @@ export interface Section {
   term_name: string
   session: string
   session_name: string
+  /** "Fall-2 2026", "Spring full term 2027": SOM terms have two quarters (sessions); full-term courses span both */
+  quarter?: string
+  /** an expected 2027-28 offering copied from this year's (times, room and dates not published yet) */
+  projected?: boolean
   starts: string | null
   ends: string | null
   days: string[]
@@ -72,6 +76,19 @@ export interface PlanItem {
   section: Section
   other_sections: Section[]
   google_link: string | null
+  /** set for a course planned for 2027-28 ("202703" Fall 2027, "202801" Spring 2028): expected, times TBA */
+  target_term?: string | null
+  expected?: boolean
+}
+
+export interface QuarterInfo { key: string; label: string; units: number; courses: string[] }
+export interface PlanTermInfo {
+  name: string; units: number; elective_units: number; core_units: number; core_times_known: boolean
+  conflicts: Clash[]; review: { days_on_campus: string[]; notes: Note[] }
+  /** the term's two quarters (half-term courses) and the full-term courses that run through both */
+  quarters?: QuarterInfo[]; full_term?: { units: number; courses: string[] }
+  /** 2027-28: built from this year's offerings, times not published */
+  expected?: boolean; plannable?: boolean
 }
 
 export interface Progress {
@@ -94,7 +111,9 @@ export interface Progress {
 
 export interface PlanResponse {
   items: PlanItem[]
-  terms: Record<string, { name: string; units: number; elective_units: number; core_units: number; core_times_known: boolean; conflicts: Clash[]; review: { days_on_campus: string[]; notes: Note[] } }>
+  terms: Record<string, PlanTermInfo>
+  /** the terms this student can plan, in order (first-year MBAs: Fall 2026 → Spring 2028) */
+  planning_terms?: { code: string; name: string; expected: boolean }[]
   progress: Progress
 }
 
@@ -428,6 +447,9 @@ export const api = {
   plan: () => request<PlanResponse>('GET', '/api/plan'),
   addToPlan: (course_id: string, added_by: 'student' | 'dan' = 'student', status?: 'planned' | 'bidding' | 'enrolled' | 'completed') =>
     request<{ ok: boolean; id: number; clashes?: Clash[]; switched?: boolean; action_id?: number }>('POST', '/api/plan', { course_id, added_by, ...(status ? { status } : {}) }),
+  /** Plan a course for 2027-28 from this year's offering in the same quarter (expected, times TBA). */
+  planNextYear: (course_id: string, target_term: '202703' | '202801', added_by: 'student' | 'dan' = 'student') =>
+    request<{ ok: boolean; id: number; action_id?: number; expected?: boolean; unchanged?: boolean }>('POST', '/api/plan', { course_id, added_by, target_term }),
   updatePlan: (id: number, patch: { status?: PlanItem['status']; bid_points?: number; course_id?: string }) =>
     request<{ ok: boolean; action_id?: number }>('PATCH', `/api/plan/${id}`, patch),
   removeFromPlan: (id: number) => request<{ ok: boolean; action_id?: number }>('DELETE', `/api/plan/${id}`),

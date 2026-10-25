@@ -6,6 +6,7 @@ import { ArrowRight, Check, ExternalLink, Search } from 'lucide-react'
 import HandsomeDan from '../mascots/HandsomeDan'
 import { TERM_NAMES, prettyDate } from '../lib/format'
 import { courseCount, profileLink, type Faculty, type FacultyCourse } from '../lib/faculty'
+import QuarterPill from './QuarterPill'
 
 export function Avatar({ f, size = 'md' }: { f: Pick<Faculty, 'initials' | 'display'>; size?: 'sm' | 'md' | 'lg' }) {
   return <span className={`cx-ava ${size}`} aria-hidden title={f.display}>{f.initials}</span>
@@ -65,8 +66,8 @@ export function FacultyCard({ f, byName, label, onOpenCourse, onOpenPerson, page
                   <span className="cx-row-title">{c.lead.title}</span>
                 </span>
                 <span className="cx-row-meta faint small">
-                  {TERM_NAMES[c.lead.term]}{c.lead.session_name ? ` · ${c.lead.session_name}` : ''}
-                  {c.status === 'done' && c.ends ? ` · ended ${prettyDate(c.ends)}` : ` · ${plural(c.secs.length, 'section')}`}
+                  <QuarterPill session={c.lead.session} term={c.lead.term} year />
+                  {c.status === 'done' && c.ends ? `ended ${prettyDate(c.ends)}` : plural(c.secs.length, 'section')}
                 </span>
                 <StatusPill c={c} />
               </button>

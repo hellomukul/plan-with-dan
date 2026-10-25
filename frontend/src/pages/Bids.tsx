@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 import { AlertTriangle, CalendarClock, Check, Inbox, Info, Search, Send, ShoppingBag, X } from 'lucide-react'
 import { api, auctionApplies, type AuctionInfo, type BidCourse, type BidSplit } from '../api'
 import { Bar, Empty, SampleBanner, Spinner } from '../components/ui'
-import { daysUntil, relDays, TERM_NAMES } from '../lib/format'
+import { daysUntil, quarterLabel, relDays, TERM_NAMES } from '../lib/format'
 import HandsomeDan from '../mascots/HandsomeDan'
 import { useApp } from '../state'
 import './pages-b.css'
@@ -112,16 +112,22 @@ function SplitSection() {
 
   const courses = useMemo(() => {
     const seen = new Set<string>()
-    const out: { key: string; number: string; title: string; term: string; seats: number | null }[] = []
+    const out: { key: string; number: string; title: string; term: string; session: string; seats: number | null }[] = []
     for (const it of plan?.items ?? []) {
       const s = it.section
-      // Only the spring auction is ahead; one row per course offering (two sections are one bid).
+      // Only the spring auction is ahead; one row per course offering (two sections are one bid). Courses planned
+      // for 2027-28 (expected, target_term set) are never part of this year's bids.
+      if (it.expected || it.target_term || s.projected) continue
       if (s.enrollment.toLowerCase() !== 'bid' || it.status === 'completed' || s.term !== '202701' || seen.has(s.key)) continue
       seen.add(s.key)
-      out.push({ key: s.key, number: s.number, title: s.title, term: s.term_name, seats: s.limit })
+      out.push({ key: s.key, number: s.number, title: s.title, term: quarterLabel(s.session, s.term), session: s.session, seats: s.limit })
     }
-    return out
+    // grouped by quarter, in calendar order: Spring-1, Spring-2, then full term
+    const order = (x: string) => (x.endsWith('-1') ? 0 : x.endsWith('-2') ? 1 : 2)
+    return out.sort((a, b) => order(a.session) - order(b.session))
   }, [plan])
+  const nextYear = (plan?.items ?? []).filter((it) => it.expected || it.target_term).length
+  const quarterOf = useMemo(() => new Map(courses.map((c) => [c.key, c.term])), [courses])
 
   const budgetNum = Number(budget)
   const budgetOk = budget.trim() !== '' && Number.isInteger(budgetNum) && budgetNum >= 1 && budgetNum <= 100000
@@ -157,6 +163,7 @@ function SplitSection() {
     <section className="card pad-lg" aria-labelledby="split-h">
       <h2 id="split-h" className="pb-h2" style={{ marginBottom: 6 }}><span className="pb-step" aria-hidden="true">1</span>Split my points</h2>
       <p className="muted small">Rank the bid courses in your plan and we'll suggest how to spread your budget. You still place the bids in SOM's auction app.</p>
+      {nextYear > 0 && <p className="small faint bd-next">{nextYear} course{nextYear === 1 ? '' : 's'} planned for 2027–28. Bidding for {nextYear === 1 ? 'it' : 'them'} opens next year.</p>}
 
       {plan === null ? (
         <Spinner label="Loading your plan…" />
@@ -189,13 +196,16 @@ function SplitSection() {
           </div>
 
           <div className="pb-prios">
-            {courses.map((c) => {
+            {courses.map((c, i) => {
               const current = prio[c.key] ?? 2
+              const head = i === 0 || courses[i - 1].term !== c.term
               return (
-                <div key={c.key} className="pb-prio">
+                <div key={c.key} className="pb-prio-wrap">
+                {head && <div className="section-label bd-quarter"><span>{c.term}</span></div>}
+                <div className="pb-prio">
                   <div style={{ minWidth: 0, flex: '1 1 200px' }}>
                     <span className="course-num">{c.number}</span> <b>{c.title}</b>
-                    <div className="small muted">{c.term}{c.seats ? ` · ${c.seats} seats` : ''}</div>
+                    <div className="small muted">{c.seats ? `${c.seats} seats` : 'No seat limit listed'}</div>
                   </div>
                   <div className="tabs" role="radiogroup" aria-label={`Priority for ${c.number}`}>
                     {PRIORITIES.map((p) => (
@@ -209,6 +219,7 @@ function SplitSection() {
                       >{p.label}</button>
                     ))}
                   </div>
+                </div>
                 </div>
               )
             })}
@@ -250,7 +261,7 @@ function SplitSection() {
                       <td data-label="Course" className="bd-first">
                         <span className="course-num">{r.number}</span>
                         <div className="small">{r.title}</div>
-                        {r.term_name && <div className="small faint">{r.term_name}</div>}
+                        {(r.key && quarterOf.get(r.key)) || r.term_name ? <div className="small faint">{(r.key && quarterOf.get(r.key)) || r.term_name}</div> : null}
                       </td>
                       <td data-label="Priority"><span className={`badge ${PRIO_BADGE[r.priority] ?? 'gray'}`}>{p?.short ?? r.priority}</span></td>
                       <td data-label="Seats" className="pb-right pb-num">{r.seats ?? '–'}</td>

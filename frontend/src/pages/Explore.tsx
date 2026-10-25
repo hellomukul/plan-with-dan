@@ -36,7 +36,7 @@ export default function Explore() {
   const week = useMemo(() => {
     const seen = new Map<string, Section>()
     for (const id of coreIds) { const s = sectionById.get(id); if (s) seen.set(s.id, s) }
-    for (const i of plan?.items ?? []) seen.set(i.section.id, i.section)
+    for (const i of plan?.items ?? []) if (!i.expected) seen.set(i.section.id, i.section)  // 2027-28 plans have no times
     return [...seen.values()]
   }, [coreIds, sectionById, plan])
 

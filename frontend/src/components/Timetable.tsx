@@ -4,7 +4,7 @@
    Calm style: every block looks the same; assigned core is outlined dashed; only a clash gets colour (red). */
 import { TriangleAlert } from 'lucide-react'
 import type { Section } from '../api'
-import { clock, DAYS, DAY_NAMES } from '../lib/format'
+import { clock, DAYS, DAY_NAMES, quarterLabel } from '../lib/format'
 import '../pages/pages-a.css'
 
 const DEFAULT_START = 8 * 60
@@ -102,7 +102,7 @@ export default function Timetable({ sections, clashIds = NONE, coreIds = NONE, o
               const bottom = Math.min(HEIGHT, ((s.end_min ?? END) - START) * PX_PER_MIN)
               const clash = clashIds.has(s.id)
               const core = coreIds.has(s.id)
-              const half = s.session.endsWith('-1') ? 'S1' : s.session.endsWith('-2') ? 'S2' : ''
+              const half = /-[12]$/.test(s.session) ? quarterLabel(s.session) : ''  // "Spring-1": the app's quarter names
               const w = 100 / lanes
               return (
                 <button
@@ -116,7 +116,13 @@ export default function Timetable({ sections, clashIds = NONE, coreIds = NONE, o
                 >
                   <b>{clash && <TriangleAlert className="icon xs" aria-label="Time clash" />}{s.number}</b>
                   <span className="tt-time">{clock(s.start_min).replace(/ (AM|PM)$/, '')}–{clock(s.end_min)}</span>
-                  {(core || half) && <span className="tt-sess">{[core ? 'Core' : '', half].filter(Boolean).join(' · ')}</span>}
+                  {(core || half) && (
+                    <span className="tt-sess">
+                      {/* full quarter name, or a short one when two classes share a narrow day column */}
+                      <span className="tt-sess-full">{[core ? 'Core' : '', half].filter(Boolean).join(' · ')}</span>
+                      <span className="tt-sess-short" aria-hidden="true">{[core ? 'Core' : '', half.replace('Spring-', 'Sp-').replace('Fall-', 'F-')].filter(Boolean).join(' · ')}</span>
+                    </span>
+                  )}
                 </button>
               )
             })}

@@ -1247,3 +1247,75 @@ def test_cache_headers_for_assets_shell_and_catalog(client):
     assert client.get("/").headers.get("cache-control") == "no-cache"
     assert client.get("/api/catalog").headers.get("cache-control") == "public, max-age=300"
     assert "cache-control" not in client.get("/api/auth/me").headers  # personal data is never cached
+
+
+# ---------------------------------------------------------------- two-year planning (quarters + 2027-28)
+
+def _elective(term, session):
+    from catalog import get_catalog
+    return next(s for s in get_catalog().sections if s.term == term and s.session == session and s.open_to("MBA")
+                and not s.any_core and s.visible and s.meeting)
+
+
+def test_quarter_labels_and_plan_terms_in_catalog(client):
+    cat = client.get("/api/catalog").json()
+    assert cat["plan_terms"]["202703"] == "Fall 2027" and cat["next_year"]["202701"] == "202801"
+    s = next(x for x in cat["sections"] if x["session"] == "fall-2")
+    assert s["quarter"] == "Fall-2 2026" and s["projected"] is False
+
+
+def test_first_year_plans_expected_courses_for_2027_28(client):
+    c = _login_new(client, "twoyear@yale.edu")
+    c.put("/api/profile", json={"program": "MBA", "year": "1", "cohort": "Gold"})
+    fall2 = _elective("202603", "fall-2")
+    r = c.post("/api/plan", json={"course_id": fall2.id, "target_term": "202703"}).json()
+    assert r["ok"] and r["expected"]
+    plan = c.get("/api/plan").json()
+    assert [t["code"] for t in plan["planning_terms"]] == ["202603", "202701", "202703", "202801"]
+    item = next(i for i in plan["items"] if i["expected"])
+    assert item["section"]["term"] == "202703" and item["section"]["quarter"] == "Fall-2 2027"
+    assert item["section"]["time"] == "Time TBA" and item["target_term"] == "202703"
+    t = plan["terms"]["202703"]
+    assert t["expected"] and t["units"] == fall2.units and fall2.number in t["quarters"][1]["courses"]
+    assert [q["key"] for q in t["quarters"]] == ["fall-1", "fall-2"]
+    # 16-unit minimum: first three terms only (Fall 26, Spring 27, Fall 27), not Spring 28
+    checks = {x["term"]: x for x in plan["progress"]["terms"]}
+    assert checks["202703"]["min_applies"] is True
+    # expected courses never reach the calendar
+    assert all(e["course_id"] != fall2.id for e in c.get("/api/calendar/events").json()["classes"])
+    # same course twice → refused; wrong season → refused; core → refused
+    assert c.post("/api/plan", json={"course_id": fall2.id, "target_term": "202703"}).json()["unchanged"]
+    spring = _elective("202701", "spring-1")
+    assert c.post("/api/plan", json={"course_id": spring.id, "target_term": "202703"}).status_code == 422
+    from catalog import get_catalog
+    core = next(s for s in get_catalog().sections if s.term == "202701" and s.any_core and s.open_to("MBA"))
+    assert c.post("/api/plan", json={"course_id": core.id, "target_term": "202801"}).status_code == 400
+    # expected courses stay "planned"
+    assert c.patch(f"/api/plan/{item['id']}", json={"status": "enrolled"}).status_code == 400
+    # remove + undo keeps it in 2027-28
+    removed = c.delete(f"/api/plan/{item['id']}").json()
+    assert c.post(f"/api/actions/{removed['action_id']}/undo").json()["ok"]
+    assert any(i["target_term"] == "202703" for i in c.get("/api/plan").json()["items"])
+
+
+def test_second_years_and_one_year_programs_cannot_plan_2027_28(client):
+    fall2 = _elective("202603", "fall-2")
+    for email, profile in (("y2@yale.edu", {"program": "MBA", "year": "2"}), ("mam1@yale.edu", {"program": "MAM"})):
+        c = _login_new(client, email)
+        c.put("/api/profile", json=profile)
+        assert c.post("/api/plan", json={"course_id": fall2.id, "target_term": "202703"}).status_code == 400
+        assert [t["code"] for t in c.get("/api/plan").json()["planning_terms"]] == ["202603", "202701"]
+
+
+def test_mba_minimum_applies_to_the_first_three_terms_only():
+    from planning import min_units
+    y1 = {"program": "MBA", "year": "1"}
+    assert [min_units(y1, t) for t in ("202603", "202701", "202703", "202801")] == [16.0, 16.0, 16.0, None]
+    assert [min_units({"program": "MBA", "year": "2"}, t) for t in ("202603", "202701")] == [16.0, None]
+
+
+def test_admits_keep_their_year_and_plan_2027_28_only(client):
+    c = _login_new(client, "admit2027@yale.edu")
+    assert c.put("/api/profile", json={"program": "MBA", "year": "admit"}).status_code == 200
+    assert c.get("/api/profile").json()["profile"]["year"] == "admit"
+    assert [t["code"] for t in c.get("/api/plan").json()["planning_terms"]] == ["202703", "202801"]

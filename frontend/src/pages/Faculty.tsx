@@ -8,7 +8,7 @@ import CourseDrawer from '../components/CourseDrawer'
 import { Avatar, FacultyCard } from '../components/FacultyCard'
 import HandsomeDan from '../mascots/HandsomeDan'
 import { buildFaculty, courseCount, resolveFaculty, searchFaculty, spotlight, type Faculty as Person } from '../lib/faculty'
-import { TERM_NAMES } from '../lib/format'
+import { quarterLabel } from '../lib/format'
 import { useApp } from '../state'
 import '../components/course-explorer.css'
 import './faculty-page.css'
@@ -160,7 +160,7 @@ export default function Faculty() {
                         <Avatar f={f} />
                         <span className="fp-tile-text">
                           <span className="fp-tile-name">{f.display}</span>
-                          <span className="faint small fp-tile-sub">{courseCount(f)} · {f.terms.map((t) => (TERM_NAMES[t] ?? t).split(' ')[0]).join(' & ')}</span>
+                          <span className="faint small fp-tile-sub">{courseCount(f)} · {quartersOf(f)}</span>
                           <span className="fp-tile-tags">
                             {f.topics.slice(0, 1).map((t) => <span key={t} className="cx-pill plain fp-tag">{t}</span>)}
                             {f.topics.length > 1 && <span className="cx-pill plain fp-tag-more" title={f.topics.slice(1).join(', ')}>+{f.topics.length - 1}</span>}
@@ -200,6 +200,11 @@ export default function Faculty() {
 function initialOf(f: Person): string {
   const c = f.last.normalize('NFD').replace(/[̀-ͯ]/g, '').charAt(0).toUpperCase()
   return /[A-Z]/.test(c) ? c : '#'
+}
+
+/** "Fall-2, Spring-1": the quarters they teach in this year, in calendar order. */
+function quartersOf(f: Person): string {
+  return [...new Set(f.courses.map((c) => quarterLabel(c.lead.session)))].join(', ')
 }
 
 function nextLine(f: Person): string {

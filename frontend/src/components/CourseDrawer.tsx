@@ -4,6 +4,9 @@ import StarButton from './StarButton'
 import { X } from 'lucide-react'
 import { enrollLabel, prettyDate } from '../lib/format'
 import { displayName } from '../lib/faculty'
+import { addDropClosed } from '../lib/eligibility'
+import QuarterPill from './QuarterPill'
+import NextYearAction from './NextYearAction'
 import { useApp } from '../state'
 import { Overlay } from './ui'
 import '../pages/pages-a.css'
@@ -34,7 +37,7 @@ export default function CourseDrawer({ courseKey, onClose }: { courseKey: string
     <Overlay onClose={onClose}>
       <div className="row between top">
         <div>
-          <div className="course-num">{c.number} · {c.term_name} · {c.session_name}</div>
+          <div className="cx-card-kicker"><span className="course-num">{c.number}</span><QuarterPill session={c.session} term={c.term} year /></div>
           <h2 style={{ marginTop: 4 }}>{c.title}</h2>
         </div>
         <div className="row" style={{ gap: 4, flexWrap: 'nowrap' }}>
@@ -52,6 +55,8 @@ export default function CourseDrawer({ courseKey, onClose }: { courseKey: string
       </div>
       {(c.ldr || c.gsr) && <p className="faint small mt">* Inferred from attribute codes in SOM's public course feed. Confirm on the internal list.</p>}
 
+      {user && profile && <div className="cd-nx mt"><NextYearAction secs={rows} program={profile.program || 'MBA'} /></div>}
+
       <h4 className="mt">Sections</h4>
       {user && assignedCore && (
         <p className="muted small" style={{ marginTop: 0 }}>
@@ -63,7 +68,7 @@ export default function CourseDrawer({ courseKey, onClose }: { courseKey: string
           <div key={s.id} className="card flat cd-section" style={{ padding: 14 }}>
             <div className="row between">
               <div>
-                <b>Section {s.section}</b> <span className="muted">· {s.time}</span>
+                <b>Section {s.section}</b> <QuarterPill session={s.session} term={s.term} /> <span className="muted cx-sec-time">{s.time}</span>
                 <div className="small muted">{s.room || 'Room TBA'} · {names(s)}</div>
                 {s.starts && <div className="small faint">{prettyDate(s.starts)}{s.ends ? ` – ${prettyDate(s.ends)}` : ''}</div>}
                 {s.exam && <div className="small faint">Final exam: {s.exam}</div>}
@@ -74,6 +79,7 @@ export default function CourseDrawer({ courseKey, onClose }: { courseKey: string
                 : s.ends && s.ends < todayIso ? <span className="faint small">Ended</span>
                 : plannedIds.has(s.id)
                   ? <span className="badge green">In plan</span>
+                  : addDropClosed(s) ? <span className="faint small" title="It's in session and add/drop has closed">In session · add/drop closed</span>
                   : <button className="btn sm primary" onClick={() => add(s.id)} disabled={adding != null} aria-busy={adding === s.id || undefined}>Add</button>
               ) : (
                 <button className="btn sm" onClick={() => go('home')}>Sign in to add</button>

@@ -58,7 +58,7 @@ const LINKS: [string, string, string][] = [
 ]
 const GLOSSARY: [string, string][] = [
   ['Units', 'SOM credits. Most electives are 2 units (half a term) or 4 (full term).'],
-  ['Sessions', 'Each term has two halves, session 1 and session 2. Half-term courses in different sessions never clash.'],
+  ['Quarters', 'Each term has two quarters (SOM calls them sessions): Fall-1 and Fall-2, Spring-1 and Spring-2. Half-term courses in different quarters never clash; full-term courses run through both.'],
   ['Auction', 'How SOM fills popular electives: you bid points; the highest bids get seats.'],
   ['Add/drop', 'The week at the start of each session when you can still change courses for free.'],
   ['Core', 'Required first-year courses SOM schedules by cohort. You don’t bid on them.'],

@@ -8,21 +8,40 @@
    page), which adds a few more filters in a popover, an optional slot in the list (Elihu's box), and links to the
    Faculty page. Props stay backward compatible: WeekBuilder passes only who / week / autoIds / onAdd. */
 import { Fragment, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
-import { AlertCircle, AlertTriangle, ArrowLeft, ArrowLeftRight, Check, ChevronDown, ExternalLink, Plus, Search, SlidersHorizontal, X } from 'lucide-react'
+import { AlertCircle, AlertTriangle, ArrowLeft, ArrowLeftRight, CalendarClock, Check, ChevronDown, ExternalLink, Plus, Search, SlidersHorizontal, X } from 'lucide-react'
 import type { Section } from '../api'
-import { TERM_NAMES, prettyDate } from '../lib/format'
+import { NEXT_YEAR, prettyDate, termName } from '../lib/format'
 import { isTrip, scoreOffering } from '../lib/courseSearch'
-import { blockedLabel, courseVerdict, verdict as sectionVerdict, type Verdict, type Who } from '../lib/eligibility'
+import { blockedLabel, courseVerdict, nextYearSection, verdict as sectionVerdict, type Verdict, type Who } from '../lib/eligibility'
 import { buildFaculty, courseCount, displayName, resolveFaculty, searchFaculty, spotlight, type Faculty } from '../lib/faculty'
 import { sectionsClash } from './Timetable'
 import StarButton from './StarButton'
 import { Avatar, FacultyCard, FacultySpotlight } from './FacultyCard'
 import FacultyPicker from './FacultyPicker'
+import QuarterPill from './QuarterPill'
+import NextYearAction from './NextYearAction'
 import { useApp } from '../state'
 import './course-explorer.css'
 
 type TermPick = 'all' | '202701' | '202603'
-type Extra = 'ldr' | 'gsr' | 'late' | 'fri' | 'bid' | 's-full' | 's-1' | 's-2'
+type Extra = 'ldr' | 'gsr' | 'late' | 'fri' | 'bid'
+/** Quarters: SOM terms have two (Fall-1 + Fall-2, Spring-1 + Spring-2). A quarter chip shows the half-term courses that
+    run in exactly that quarter; full-term courses (which run through both quarters) have their own chip, so every
+    course sits in one bucket and "Fall-1" never means "Fall-1, plus 40 courses that also run in Fall-2". */
+type QuarterPick = 'all' | 'fall-1' | 'fall-2' | 'spring-1' | 'spring-2' | 'full'
+const QUARTERS: { value: QuarterPick; label: string; title: string }[] = [
+  { value: 'all', label: 'All quarters', title: 'Every quarter, and full-term courses' },
+  { value: 'fall-1', label: 'Fall-1', title: 'Half-term courses in the first fall quarter (Fall 2026)' },
+  { value: 'fall-2', label: 'Fall-2', title: 'Half-term courses in the second fall quarter (Fall 2026)' },
+  { value: 'spring-1', label: 'Spring-1', title: 'Half-term courses in the first spring quarter (Spring 2027)' },
+  { value: 'spring-2', label: 'Spring-2', title: 'Half-term courses in the second spring quarter (Spring 2027)' },
+  { value: 'full', label: 'Full term', title: 'Courses that run through both quarters of their term' },
+]
+/** The published term a quarter belongs to ('full' fits either). */
+const quarterTerm = (q: QuarterPick): TermPick => (q.startsWith('fall') ? '202603' : q.startsWith('spring') ? '202701' : 'all')
+/** First-years and admits in a two-year program still have 2027-28 to plan (same rule as the backend's planning_terms). */
+const secondYearAhead = (w: Who) => ['MBA', 'MBA-JOINT', 'EMBA'].includes(w.program) && ['1', '', 'admit'].includes(w.year)
+const inQuarter = (s: Section, q: QuarterPick) => q === 'all' || (q === 'full' ? s.session === 'fall' || s.session === 'spring' : s.session === q)
 const PAGE = 60
 
 const EXTRAS: { value: Extra; label: string; hint: string }[] = [
@@ -32,10 +51,6 @@ const EXTRAS: { value: Extra; label: string; hint: string }[] = [
   { value: 'fri', label: 'Fridays free', hint: 'A section with no Friday meetings' },
   { value: 'bid', label: 'Bid only', hint: 'Enrollment is through the course auction' },
 ]
-const SESSIONS: { value: Extra; label: string }[] = [
-  { value: 's-full', label: 'Full term' }, { value: 's-1', label: 'Session 1' }, { value: 's-2', label: 'Session 2' },
-]
-const sessionOf = (s: Section): Extra => (s.session.endsWith('-1') ? 's-1' : s.session.endsWith('-2') ? 's-2' : 's-full')
 
 interface Props {
   who: Who
@@ -58,11 +73,17 @@ interface Props {
 
 interface Row { key: string; secs: Section[]; lead: Section; score: number; open: Section[]; reason: string; tag?: Verdict['tag']; fits: Section | null; inWeek: boolean; inWeekClash: boolean }
 
-export default function CourseExplorer({ who, week, autoIds, onAdd, onEnroll, variant = 'home', initialFaculty, listSlot, facultyHref }: Props) {
-  const { sections, topics } = useApp()
+export default function CourseExplorer({ who, week: weekIn, autoIds, onAdd, onEnroll, variant = 'home', initialFaculty, listSlot, facultyHref }: Props) {
+  const { sections, topics, user, plan } = useApp()
   const page = variant === 'page'
+  // Courses planned for 2027-28 are expected (no times) and never part of this year's week or its clash checks.
+  const week = useMemo(() => weekIn.filter((s) => !s.projected), [weekIn])
+  // Course number -> "Fall 2027" for the student's expected 2027-28 courses (a pill in the list).
+  const nextYear = useMemo(() => new Map((plan?.items ?? []).filter((i) => i.expected && i.target_term)
+    .map((i) => [i.section.number, termName(i.target_term!)])), [plan])
   const [q, setQ] = useState('')
   const [term, setTerm] = useState<TermPick>('all')
+  const [quarter, setQuarter] = useState<QuarterPick>('all')
   const [onlyOpen, setOnlyOpen] = useState(true)
   const [onlyFits, setOnlyFits] = useState(false)
   const [topic, setTopic] = useState('')
@@ -115,9 +136,11 @@ export default function CourseExplorer({ who, week, autoIds, onAdd, onEnroll, va
     const searching = q.trim().length >= 2
     const out: Row[] = []
     let hidden = 0
-    const sessionPicks = SESSIONS.filter((x) => extras.has(x.value)).map((x) => x.value)
     const timeOk = (s: Section) => (!extras.has('late') || s.start_min == null || s.start_min >= 600) && (!extras.has('fri') || !s.days.includes('F'))
-    for (const [key, all] of offerings) {
+    for (const [key, every] of offerings) {
+      // A quarter pick narrows an offering to its sections in that quarter (a rare course runs one section per quarter).
+      const all = quarter === 'all' ? every : every.filter((s) => inQuarter(s, quarter))
+      if (!all.length) continue
       const lead = all[0]
       if (term !== 'all' && lead.term !== term) continue
       if (topic && !lead.topics.includes(topic)) continue
@@ -125,7 +148,6 @@ export default function CourseExplorer({ who, week, autoIds, onAdd, onEnroll, va
       if (extras.has('ldr') && !lead.ldr) continue
       if (extras.has('gsr') && !lead.gsr) continue
       if (extras.has('bid') && lead.enrollment.trim().toLowerCase() !== 'bid') continue
-      if (sessionPicks.length && !sessionPicks.includes(sessionOf(lead))) continue
       const secs = extras.has('late') || extras.has('fri') ? all.filter(timeOk) : all  // only the sections that pass
       if (!secs.length) continue
       const { score } = scoreOffering(all, searching ? q : '')
@@ -143,8 +165,8 @@ export default function CourseExplorer({ who, week, autoIds, onAdd, onEnroll, va
     const byNum = (a: Row, b: Row) => a.lead.number.localeCompare(b.lead.number, undefined, { numeric: true }) || a.lead.title.localeCompare(b.lead.title)
     out.sort(searching ? (a, b) => b.score - a.score || byNum(a, b)
       : (a, b) => Number(Boolean(b.fits)) - Number(Boolean(a.fits)) || Number(isTrip(a.lead)) - Number(isTrip(b.lead)) || byNum(a, b))
-    return { rows: out, hiddenNotOpen: searching || facFilter ? hidden : 0 }
-  }, [offerings, q, term, topic, facFilter, extras, onlyOpen, onlyFits, who, week, weekKeys, weekIds])
+    return { rows: out, hiddenNotOpen: searching || facFilter || quarter !== 'all' ? hidden : 0 }
+  }, [offerings, q, term, quarter, topic, facFilter, extras, onlyOpen, onlyFits, who, week, weekKeys, weekIds])
 
   const sel = rows.find((r) => r.key === selected)
   const selSecs = selected ? offerings.get(selected) : undefined
@@ -183,8 +205,12 @@ export default function CourseExplorer({ who, week, autoIds, onAdd, onEnroll, va
     setExtras((cur) => { const next = new Set(cur); if (next.has(x)) next.delete(x); else next.add(x); return next })
     setActive(-1); setLimit(PAGE)
   }
-  const resetFilters = () => { setTerm('all'); setOnlyOpen(true); setOnlyFits(false); setTopic(''); setQ(''); setExtras(new Set()); clearFaculty() }
+  // Term and quarter compose: picking Fall-1 while Spring 2027 is on switches the term to Fall 2026 (and back).
+  const pickTerm = (t: TermPick) => { setTerm(t); if (t !== 'all' && quarterTerm(quarter) !== 'all' && quarterTerm(quarter) !== t) setQuarter('all'); setActive(-1); setLimit(PAGE) }
+  const pickQuarter = (x: QuarterPick) => { setQuarter(x); const t = quarterTerm(x); if (term !== 'all' && t !== 'all' && t !== term) setTerm(t); setActive(-1); setLimit(PAGE) }
+  const resetFilters = () => { setTerm('all'); setQuarter('all'); setOnlyOpen(true); setOnlyFits(false); setTopic(''); setQ(''); setExtras(new Set()); clearFaculty() }
   const facChosen = facFilter ? byName.get(facFilter) : undefined
+  const quarterName = quarter === 'all' || quarter === 'full' ? '' : QUARTERS.find((x) => x.value === quarter)!.label
   const slot = page && listSlot ? listSlot({ selectedKey: selected }) : null
   const slotAt = Math.min(2, rows.length)  // between the 2nd and 3rd course: "stuck between two electives?"
 
@@ -209,7 +235,13 @@ export default function CourseExplorer({ who, week, autoIds, onAdd, onEnroll, va
         <div className="cx-filters" role="group" aria-label="Filters">
           <div className="tabs cx-seg" role="group" aria-label="Term">
             {([['all', 'Both terms'], ['202701', 'Spring 2027'], ['202603', 'Fall 2026']] as const).map(([v, l]) => (
-              <button key={v} type="button" className={term === v ? 'on' : ''} aria-pressed={term === v} onClick={() => setTerm(v)}>{l}</button>
+              <button key={v} type="button" className={term === v ? 'on' : ''} aria-pressed={term === v} onClick={() => pickTerm(v)}>{l}</button>
+            ))}
+          </div>
+          <div className="tabs cx-seg cx-qseg" role="group" aria-label="Quarter">
+            {QUARTERS.map((x) => (
+              <button key={x.value} type="button" title={x.title} className={quarter === x.value ? 'on' : ''} aria-pressed={quarter === x.value}
+                onClick={() => pickQuarter(x.value)}>{x.label}</button>
             ))}
           </div>
           <button type="button" className={`chip ${onlyOpen ? 'on' : ''}`} aria-pressed={onlyOpen} onClick={() => setOnlyOpen((v) => !v)}>Open to me</button>
@@ -243,13 +275,6 @@ export default function CourseExplorer({ who, week, autoIds, onAdd, onEnroll, va
                         onClick={() => toggleExtra(x.value)}>{extras.has(x.value) && <Check className="icon xs" />}{x.label}</button>
                     ))}
                   </div>
-                  <div className="section-label"><span>Session</span></div>
-                  <div className="cx-more-chips">
-                    {SESSIONS.map((x) => (
-                      <button key={x.value} type="button" className={`chip ${extras.has(x.value) ? 'on' : ''}`} aria-pressed={extras.has(x.value)}
-                        onClick={() => toggleExtra(x.value)}>{extras.has(x.value) && <Check className="icon xs" />}{x.label}</button>
-                    ))}
-                  </div>
                   <div className="cx-more-foot">
                     <button type="button" className="link-btn small" disabled={!extras.size} onClick={() => setExtras(new Set())}>Clear these</button>
                     <button type="button" className="btn sm" onClick={() => setMoreOpen(false)}>Done</button>
@@ -270,7 +295,7 @@ export default function CourseExplorer({ who, week, autoIds, onAdd, onEnroll, va
               {q.trim().length >= 2 ? ` for “${q.trim()}”` : ''}
               {facChosen && ` taught by ${facChosen.display}`}
             </span>
-            {(term !== 'all' || !onlyOpen || onlyFits || topic || q || facFilter || extras.size > 0) && <button type="button" className="link-btn small" onClick={resetFilters}>Reset</button>}
+            {(term !== 'all' || quarter !== 'all' || !onlyOpen || onlyFits || topic || q || facFilter || extras.size > 0) && <button type="button" className="link-btn small" onClick={resetFilters}>Reset</button>}
           </div>
           {hiddenNotOpen > 0 && (
             <div className="cx-hidden small">
@@ -280,7 +305,7 @@ export default function CourseExplorer({ who, week, autoIds, onAdd, onEnroll, va
           )}
           {items.length === 0 ? (
             <div className="cx-empty small muted">
-              <p>{hiddenNotOpen > 0 ? `Nothing open to you matches${q ? ` “${q.trim()}”` : ''}.` : `No course matches${q ? ` “${q.trim()}”` : ''} with these filters.`}</p>
+              <p>{hiddenNotOpen > 0 ? `Nothing open to you matches${q ? ` “${q.trim()}”` : ''}${quarterName ? ` in ${quarterName}` : ''}.` : `No course matches${q ? ` “${q.trim()}”` : ''} with these filters.`}</p>
               <button type="button" className="btn sm" onClick={resetFilters}>Clear search and filters</button>
             </div>
           ) : (
@@ -327,14 +352,16 @@ export default function CourseExplorer({ who, week, autoIds, onAdd, onEnroll, va
                       <span className="course-num">{r.lead.number}</span>
                       <span className="cx-row-title">{r.lead.title}</span>
                     </span>
-                    <span className="cx-row-meta faint small">{TERM_NAMES[r.lead.term]} · {(r.fits ?? r.lead).time || 'Time TBA'} · {r.lead.faculty[0] ? displayName(r.lead.faculty[0]) : 'Faculty TBA'}</span>
+                    <span className="cx-row-meta faint small">{(r.fits ?? r.lead).time || 'Time TBA'} · {r.lead.faculty[0] ? displayName(r.lead.faculty[0]) : 'Faculty TBA'}</span>
                     <span className="cx-row-pills">
+                      <QuarterPill session={r.lead.session} term={r.lead.term} year />
                       {r.inWeek && r.inWeekClash ? <span className="cx-pill warn"><AlertTriangle className="icon xs" />In your week · clashes</span>
                         : r.inWeek ? <span className="cx-pill in"><Check className="icon xs" />In your week</span>
                         : !r.open.length && r.secs.some((x) => autoIds.includes(x.id)) ? <span className="cx-pill in">Your core</span>
                         : !r.open.length ? <span className="cx-pill no">{r.tag === 'closed' ? 'Add/drop closed' : r.tag === 'ended' ? 'Ended' : 'Not for you'}</span>
                           : r.fits ? <span className="cx-pill ok">Fits your week</span> : <span className="cx-pill warn">Clashes</span>}
                       <span className="cx-pill plain">{r.lead.units} units</span>
+                      {nextYear.has(r.lead.number) && <span className="cx-pill in" title={`Planned for ${nextYear.get(r.lead.number)} (expected, times TBA)`}><CalendarClock className="icon xs" />{nextYear.get(r.lead.number)}</span>}
                     </span>
                   </button>
                 </li>
@@ -355,6 +382,7 @@ export default function CourseExplorer({ who, week, autoIds, onAdd, onEnroll, va
           )}
           {selSecs ? (
             <Detail key={selSecs[0].key} secs={selSecs} row={sel} who={who} autoIds={autoIds} clashesFor={clashesFor} onAdd={onAdd} onEnroll={onEnroll} inWeek={weekKeys.has(selSecs[0].key)} weekIds={weekIds}
+              nextYear={page ? 'action' : user ? 'none' : 'hint'}
               back={profObj ? { label: profObj.display, onClick: () => setSelected(null) } : undefined} onPerson={pickProf} />
           ) : profObj ? (
             <FacultyCard key={profObj.name} f={profObj} byName={byName} onOpenCourse={openFromCard(profObj)} onOpenPerson={pickProf}
@@ -371,10 +399,12 @@ export default function CourseExplorer({ who, week, autoIds, onAdd, onEnroll, va
   )
 }
 
-function Detail({ secs, row, who, autoIds, clashesFor, onAdd, onEnroll, inWeek, weekIds, back, onPerson }: {
+function Detail({ secs, row, who, autoIds, clashesFor, onAdd, onEnroll, inWeek, weekIds, back, onPerson, nextYear }: {
   secs: Section[]; row: Row | null | undefined; who: Who; autoIds: string[]; clashesFor: (x: Section) => Section[]
   onAdd: (s: Section) => void | Promise<unknown>; onEnroll?: (s: Section) => void | Promise<unknown>; inWeek: boolean; weekIds: Set<string>
   back?: { label: string; onClick: () => void }; onPerson: (name: string) => void
+  /** 2027-28: 'action' = "Plan for Fall 2027" (signed-in page), 'hint' = a one-line sign-up hint (visitors), 'none'. */
+  nextYear: 'action' | 'hint' | 'none'
 }) {
   const lead = secs[0]
   const { verdict, open, enrollable } = courseVerdict(secs, who)
@@ -401,7 +431,7 @@ function Detail({ secs, row, who, autoIds, clashesFor, onAdd, onEnroll, inWeek, 
       {back && <button type="button" className="link-btn small cx-back" onClick={back.onClick}><ArrowLeft className="icon sm" />Back to {back.label}</button>}
       <div className="cx-card-head">
         <div style={{ minWidth: 0 }}>
-          <div className="course-num">{lead.number} · {TERM_NAMES[lead.term]}{lead.session_name ? ` · ${lead.session_name}` : ''}</div>
+          <div className="cx-card-kicker"><span className="course-num">{lead.number}</span><QuarterPill session={lead.session} term={lead.term} year /></div>
           <h4>{lead.title}</h4>
           <div className="cx-meta small muted">
             <span>{lead.units} units</span>
@@ -437,6 +467,13 @@ function Detail({ secs, row, who, autoIds, clashesFor, onAdd, onEnroll, inWeek, 
         <div className="cx-verdict warn"><AlertTriangle className="icon sm" /><span>Open to you, but every section clashes with your week. Pick one below to add it anyway; the clash shows on your grid.</span></div>
       )}
 
+      {nextYear === 'action' && <NextYearAction secs={secs} program={who.program} />}
+      {nextYear === 'hint' && NEXT_YEAR[lead.term] && secondYearAhead(who) && nextYearSection(secs, who) && (
+        <p className="cx-nx-hint faint small">Thinking about 2027–28?{' '}
+          <button type="button" className="link-btn small" onClick={() => window.dispatchEvent(new CustomEvent('pwd:signup', { detail: 'Plan your second year' }))}>
+            Plan your second year with a free account</button></p>
+      )}
+
       <div className="cx-sections">
         <div className="section-label"><span>Sections</span></div>
         <ul>
@@ -448,7 +485,7 @@ function Detail({ secs, row, who, autoIds, clashesFor, onAdd, onEnroll, inWeek, 
             return (
               <li key={s.id} className={s === mine ? 'mine' : ''}>
                 <span className="cx-sec-main">
-                  <span className="cx-sec-line"><span className="mono">§{s.section}</span> {s.time || 'Time TBA'}{s.room ? <span className="faint cx-sec-room">{s.room}</span> : null}</span>
+                  <span className="cx-sec-line"><span className="mono">§{s.section}</span> <QuarterPill session={s.session} term={s.term} /> <span className="cx-sec-time">{s.time || 'Time TBA'}</span>{s.room ? <span className="faint cx-sec-room">{s.room}</span> : null}</span>
                   <span className="faint small cx-sec-sub">
                     {s === mine ? clashText || 'Your section'
                       : autoIds.includes(s.id) ? 'Your core section, assigned by SOM'

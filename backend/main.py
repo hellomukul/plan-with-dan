@@ -34,7 +34,10 @@ from sqlmodel import Session, func, select  # noqa: E402
 import auth  # noqa: E402
 from auth import client_ip, current_user, limiter  # noqa: E402
 import som_feed  # noqa: E402
-from catalog import CATALOG_PATH, LIVE_PATH, TERM_NAMES, TOPIC_RULES, Section, clock, data_path, get_catalog  # noqa: E402
+from catalog import (  # noqa: E402
+    CATALOG_PATH, LIVE_PATH, NEXT_YEAR, PLAN_TERMS, TERM_NAMES, TOPIC_RULES, Section, clock, data_path, get_catalog, project,
+    quarter_label, term_name,
+)
 import config  # noqa: E402
 from config import (  # noqa: E402
     DAILY_BUDGET_USD, MODEL_NAME, PUBLIC_MESSAGES_PER_DAY, ROOT, RUN_BUDGET_USD, ai_available,
@@ -52,7 +55,8 @@ from db import (  # noqa: E402
 from ics import build_calendar, google_template_link, meeting_dates  # noqa: E402
 from programs import CODES as PROGRAM_CODES, PROGRAMS  # noqa: E402
 from shortlist import MAX_SHORTLIST, compare as compare_shortlist  # noqa: E402
-from planning import (  # noqa: E402
+from planning import (
+    min_units, max_units,  # noqa: E402
     PlanRow, bid_stats, conflicts, core_load, effective_gsa_used, gsa_check, requirement_progress, suggest_bids,
     units_by_term, week_review,
 )
@@ -185,6 +189,8 @@ def catalog_all():
     cat = get_catalog()
     return {
         "terms": TERM_NAMES,
+        "plan_terms": PLAN_TERMS,  # adds 2027-28: planned from this year's offerings (expected, times TBA)
+        "next_year": NEXT_YEAR,
         "topics": list(TOPIC_RULES),
         "sections": [s.to_api() for s in cat.sections if s.visible],
     }
@@ -413,7 +419,8 @@ def put_profile(body: ProfileIn, user: User = Depends(current_user), db: Session
             log_audit(db, "profile_text_blocked", user_id=user.id, field=label, reasons=screen.reasons)
             raise HTTPException(422, f"Your {label} reads like an instruction to the AI. Describe it in plain words instead.")
     p = db.get(Profile, user.id) or Profile(user_id=user.id)
-    p.program, p.year, p.cohort, p.class_year = body.program, body.year[:2], body.cohort[:10], body.class_year[:6]
+    year = body.year if body.year in ("", "1", "2", "admit") else body.year[:2]  # "admit" was being cut to "ad"
+    p.program, p.year, p.cohort, p.class_year = body.program, year, body.cohort[:10], body.class_year[:6]
     p.background, p.goal_short, p.goal_long = body.background, body.goal_short, body.goal_long
     p.interests = json.dumps([i[:40] for i in body.interests])
     p.completed = json.dumps([" ".join(c.split()).upper()[:12] for c in body.completed if c.strip()])
@@ -430,6 +437,21 @@ class PlanIn(BaseModel):
     course_id: str
     status: Literal["planned", "bidding", "enrolled", "completed"] = "planned"
     added_by: Literal["student", "dan"] = "student"
+    # plan this course for next year (an expected offering): course_id is this year's section in the same quarter
+    target_term: Optional[Literal["202703", "202801"]] = None
+
+
+TWO_YEAR_PROGRAMS = ("MBA", "MBA-JOINT", "EMBA")
+
+
+def planning_terms(profile: dict) -> list[str]:
+    """The terms this student can plan: this year, plus 2027-28 for anyone with a second year still ahead."""
+    program, year = profile.get("program") or "MBA", profile.get("year") or ""
+    if program in TWO_YEAR_PROGRAMS and year == "admit":
+        return ["202703", "202801"]  # admitted for fall 2027: their first year is 2027-28
+    if program in TWO_YEAR_PROGRAMS and year in ("1", ""):
+        return ["202603", "202701", "202703", "202801"]
+    return ["202603", "202701"]
 
 
 class PlanPatch(BaseModel):
@@ -442,7 +464,8 @@ class PlanPatch(BaseModel):
 def _plan_rows(db: Session, user_id: int) -> tuple[list[PlanItem], list[PlanRow]]:
     cat = get_catalog()
     items = db.exec(select(PlanItem).where(PlanItem.user_id == user_id).order_by(PlanItem.id)).all()
-    rows = [PlanRow(cat.by_id[i.course_id], i.status) for i in items if i.course_id in cat.by_id]
+    rows = [PlanRow(project(cat.by_id[i.course_id], i.target_term) if i.target_term else cat.by_id[i.course_id], i.status)
+            for i in items if i.course_id in cat.by_id]
     return items, rows
 
 
@@ -462,31 +485,49 @@ def get_plan(user: User = Depends(current_user), db: Session = Depends(get_db)):
         sec = cat.by_id.get(i.course_id)
         if not sec:
             continue
+        shown = project(sec, i.target_term) if i.target_term else sec
         out_items.append({
             "id": i.id, "status": i.status, "bid_points": i.bid_points, "added_by": i.added_by,
-            "section": sec.to_api(),
-            "other_sections": [s.to_api() for s in cat.offerings[sec.offering_key].sections_for(program)
-                               if s.id != sec.id],
-            "google_link": google_template_link(sec),
+            "target_term": i.target_term or None, "expected": bool(i.target_term),
+            "section": shown.to_api(),
+            "other_sections": [] if i.target_term else [s.to_api() for s in cat.offerings[sec.offering_key].sections_for(program)
+                                                       if s.id != sec.id],
+            "google_link": None if i.target_term else google_template_link(sec),
         })
     by_term: dict[str, dict] = {}
-    terms = {r.section.term for r in rows} | ({"202701"} if profile.get("year") == "1" else set())
+    plannable = planning_terms(profile)
+    terms = {r.section.term for r in rows} | ({"202701"} if profile.get("year") == "1" else set()) | set(plannable)
     for term in sorted(terms):
         secs = [r.section for r in rows if r.section.term == term]
         core = core_load(profile, term, cat)
+        everything = secs + core["sections"]
+        season = "fall" if term.endswith("03") else "spring"
+        quarters = []
+        for half in ("1", "2"):
+            key = f"{season}-{half}"
+            in_q = [x for x in everything if x.session == key]
+            quarters.append({"key": key, "label": quarter_label(key, term), "units": round(sum(x.units for x in in_q), 1),
+                             "courses": [x.number for x in in_q]})
+        full = [x for x in everything if x.session == season]
         by_term[term] = {
-            "name": TERM_NAMES.get(term, term),
+            "name": term_name(term),
             "units": sum(s.units for s in secs) + core["units"],
             "elective_units": sum(s.units for s in secs),
             "core_units": core["units"],
             "core_times_known": core["times_known"],
             "conflicts": conflicts(secs + core["sections"]),
             "review": week_review(secs + core["sections"]),
+            # SOM terms have two quarters (sessions); full-term courses run through both
+            "quarters": quarters,
+            "full_term": {"units": round(sum(x.units for x in full), 1), "courses": [x.number for x in full]},
+            "expected": term not in TERM_NAMES,  # 2027-28: courses are expected from this year's offerings
+            "plannable": term in plannable,
         }
     return {
         "items": out_items,
         "terms": by_term,
-        "progress": requirement_progress(profile, rows, cat, _globals(db, user.id)),
+        "planning_terms": [{"code": t, "name": term_name(t), "expected": t not in TERM_NAMES} for t in plannable],
+        "progress": _with_empty_terms(requirement_progress(profile, rows, cat, _globals(db, user.id)), profile, plannable),
     }
 
 
@@ -545,9 +586,13 @@ def _add_plan(body: PlanIn, user: User, db: Session):
     sec = cat.by_id.get(body.course_id)
     if not sec:
         raise HTTPException(404, "That course isn't in the catalog.")
+    if body.target_term:
+        return _add_expected(body, user, db, sec)
     _check_section_allowed(db, user.id, sec, body.status)
     existing = db.exec(select(PlanItem).where(PlanItem.user_id == user.id)).all()
     for item in existing:
+        if item.target_term:
+            continue  # next year's plan is separate from this year's sections
         other = cat.by_id.get(item.course_id)
         if other and other.offering_key == sec.offering_key:
             if other.id == sec.id:
@@ -572,6 +617,52 @@ def _add_plan(body: PlanIn, user: User, db: Session):
     return {"ok": True, "id": item.id, "clashes": clashes, "action_id": action_id}
 
 
+def _with_empty_terms(progress: dict, profile: dict, plannable: list[str]) -> dict:
+    """Every plannable term gets a unit check, even one with nothing planned yet (e.g. an empty Spring 2028)."""
+    have = {t["term"] for t in progress.get("terms", [])}
+    for term in plannable:
+        if term not in have:
+            minimum, cap = min_units(profile, term), max_units(profile)
+            progress.setdefault("terms", []).append({"term": term, "units": 0.0, "core_units": 0.0,
+                                                     "status": "low" if minimum else "ok", "min_applies": minimum is not None,
+                                                     "min_units": minimum, "max_units": cap})
+    progress["terms"] = sorted(progress.get("terms", []), key=lambda t: t["term"])
+    return progress
+
+
+def _add_expected(body: PlanIn, user: User, db: Session, sec: Section) -> dict:
+    """Plan a course for 2027-28 from this year's offering in the same quarter (an expected course, times TBA)."""
+    cat = get_catalog()
+    profile = (db.get(Profile, user.id) or Profile(user_id=user.id)).as_dict()
+    target = body.target_term
+    if target not in planning_terms(profile):
+        raise HTTPException(400, "Your program ends in May 2027, so there's no 2027–28 term to plan.")
+    if NEXT_YEAR.get(sec.term) != target:
+        raise HTTPException(422, f"{sec.number} runs in {quarter_label(sec.session, sec.term)}, so plan it for "
+                                 f"{term_name(NEXT_YEAR.get(sec.term, target))}.")
+    if not sec.open_to(profile.get("program") or "MBA"):
+        raise HTTPException(400, f"{sec.number} isn't open to {profile.get('program') or 'MBA'} students.")
+    if sec.any_core:
+        raise HTTPException(400, f"{sec.number} is core: SOM assigns it, so there's nothing to plan.")
+    existing = db.exec(select(PlanItem).where(PlanItem.user_id == user.id)).all()
+    for item in existing:
+        other = cat.by_id.get(item.course_id)
+        if other and other.number == sec.number:
+            if item.target_term == target:
+                return {"ok": True, "id": item.id, "unchanged": True}
+            when = term_name(item.target_term or other.term)
+            raise HTTPException(400, f"{sec.number} is already in your plan for {when}.")
+    if len(existing) >= 60:
+        raise HTTPException(400, "Your plan is full (60 courses).")
+    item = PlanItem(user_id=user.id, course_id=sec.id, status="planned", added_by=body.added_by, target_term=target)
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    action_id = _log_action(db, user.id, "add", f"Planned {sec.number} {sec.title} for {term_name(target)} (expected)",
+                            {"item_id": item.id, "course_id": sec.id, "target_term": target}, body.added_by)
+    return {"ok": True, "id": item.id, "clashes": [], "action_id": action_id, "expected": True}
+
+
 @app.patch("/api/plan/{item_id}")
 def patch_plan(item_id: DbId, body: PlanPatch, user: User = Depends(current_user), db: Session = Depends(get_db)):
     item = db.get(PlanItem, item_id)
@@ -581,6 +672,8 @@ def patch_plan(item_id: DbId, body: PlanPatch, user: User = Depends(current_user
     if body.status is None and body.bid_points is None and not body.course_id and not body.clear_bid:
         raise HTTPException(400, "Nothing to change.")
     before = {"status": item.status, "bid_points": item.bid_points, "course_id": item.course_id}
+    if item.target_term and ((body.status and body.status != "planned") or body.course_id):
+        raise HTTPException(400, "Next year's courses stay planned until SOM publishes 2027–28 sections.")
     if body.status:
         item.status = body.status
     if body.bid_points is not None:
@@ -608,7 +701,8 @@ def delete_plan(item_id: DbId, user: User = Depends(current_user), db: Session =
     if not item or item.user_id != user.id:
         raise HTTPException(404, "Not in your plan.")
     sec = get_catalog().by_id.get(item.course_id)
-    payload = {"course_id": item.course_id, "status": item.status, "bid_points": item.bid_points, "added_by": item.added_by}
+    payload = {"course_id": item.course_id, "status": item.status, "bid_points": item.bid_points, "added_by": item.added_by,
+               "target_term": item.target_term}
     db.delete(item)
     db.commit()
     action_id = _log_action(db, user.id, "remove", f"Removed {sec.number if sec else 'a course'}", payload)
@@ -643,12 +737,15 @@ def undo_action(action_id: DbId, user: User = Depends(current_user), db: Session
         current = db.exec(select(PlanItem).where(PlanItem.user_id == user.id)).all()
         if not sec:
             raise HTTPException(404, "That course is no longer in the catalog.")
-        if any((cat.by_id.get(i.course_id) or sec).offering_key == sec.offering_key for i in current if i.course_id in cat.by_id):
+        target = data.get("target_term", "")
+        if any((cat.by_id.get(i.course_id) or sec).offering_key == sec.offering_key and (i.target_term or "") == target
+               for i in current if i.course_id in cat.by_id):
             return {"ok": False, "detail": f"{sec.number} is already back in your plan."}
         if len(current) >= 60:
             raise HTTPException(400, "Your plan is full (60 courses).")
         db.add(PlanItem(user_id=user.id, course_id=sec.id, status=data.get("status", "planned"),
-                        bid_points=data.get("bid_points"), added_by=data.get("added_by", "student")))
+                        bid_points=data.get("bid_points"), added_by=data.get("added_by", "student"),
+                        target_term=data.get("target_term", "")))
     elif a.action == "event_add":
         ev = db.get(PersonalEvent, data.get("event_id"))
         if not ev or ev.user_id != user.id or ("title" in data and (ev.title, ev.date) != (data["title"], data.get("date"))):

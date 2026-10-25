@@ -204,6 +204,21 @@ KB.append({
                 "independent study mgt 690 audit law yale college credit units presentation office hours registrar",
 })
 
+# How SOM terms and quarters work, and how 2027-28 planning works in Plan with Dan.
+KB.append({
+    "id": "quarters", "programs": None, "title": "Quarters: Fall-1, Fall-2, Spring-1, Spring-2, and planning 2027-28",
+    "text": ("Each SOM term has two half-term sessions (quarters): Fall-1 and Fall-2 make up the fall term, Spring-1 and "
+             "Spring-2 make up the spring term. Half-term courses (usually 2 units) run in one quarter; full-term courses "
+             "(usually 4 units) run through both quarters of their term. Half-term courses in different quarters never "
+             "clash. Unit rules are per term (e.g. the MBA's 16-unit minimum in each of the first three terms, and more "
+             "than 24 units needing approval). SOM hasn't published 2027-28 courses yet, so in Plan with Dan a first-year "
+             "can plan Fall 2027 and Spring 2028 with expected courses based on this year's offering in the same quarter; "
+             "times, rooms and instructors may change when SOM publishes the 2027-28 schedule."),
+    "url": SOURCES["policies"],
+    "keywords": "quarter quarters session sessions half term half-term fall-1 fall-2 spring-1 spring-2 full term "
+                "second year next year 2027 2028 plan ahead expected",
+})
+
 # "Get help": who to see for what, behind the guide's four doors (career / CDO, academics, wellbeing, international &
 # more). Same notes and links as the guide (frontend/src/lib/helpGuide.ts), checked 2026-10-25.
 KB.extend([

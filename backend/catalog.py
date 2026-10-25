@@ -17,7 +17,7 @@ import math
 import os
 import re
 from collections import Counter, defaultdict
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date
 from functools import lru_cache
 from pathlib import Path
@@ -28,7 +28,26 @@ from config import DATA_DIR
 CATALOG_PATH = DATA_DIR / "yale_som_classes.json"  # committed snapshot: the fallback
 LIVE_PATH = DATA_DIR / "som_live.json"  # written by som_feed's background refresh; preferred when present
 
-TERM_NAMES = {"202603": "Fall 2026", "202701": "Spring 2027"}
+TERM_NAMES = {"202603": "Fall 2026", "202701": "Spring 2027"}  # terms SOM has published courses for
+# Terms a student can plan for. SOM hasn't published 2027-28 yet, so those plans are *expected* courses: this year's
+# offering of the same course in the same quarter, with times to come (never shown as confirmed).
+PLAN_TERMS = {**TERM_NAMES, "202703": "Fall 2027", "202801": "Spring 2028"}
+NEXT_YEAR = {"202603": "202703", "202701": "202801"}  # a published term → the same season one year later
+# Quarters: each term has two half-term sessions (SOM calls them sessions); a full-term course spans both.
+QUARTER_SHORT = {"fall": "Fall full term", "fall-1": "Fall-1", "fall-2": "Fall-2",
+                 "spring": "Spring full term", "spring-1": "Spring-1", "spring-2": "Spring-2"}
+
+
+def term_name(code: str) -> str:
+    return PLAN_TERMS.get(code, code)
+
+
+def quarter_label(session: str, term: str) -> str:
+    """"Fall-2 2026", "Spring full term 2027": the quarter and the calendar year it falls in."""
+    year = term_name(term).split()[-1]
+    return f"{QUARTER_SHORT.get(session, session)} {year}"
+
+
 SESSION_NAMES = {
     "fall": "Fall (full term)",
     "fall-1": "Fall 1",
@@ -289,6 +308,7 @@ class Section:
     audiences: list[str] = field(default_factory=list)  # program codes that can plan it
     cohort: str = ""  # MBA core: the cohort this section is for (live feed only)
     exam: str = ""  # MBA core: the scheduled final exam, when SOM has published one
+    projected: bool = False  # an expected 2027-28 offering, copied from this year's (times not published)
 
     @property
     def offering_key(self) -> str:
@@ -337,8 +357,10 @@ class Section:
             "number": self.number,
             "title": self.title,
             "term": self.term,
-            "term_name": TERM_NAMES.get(self.term, self.term),
+            "term_name": term_name(self.term),
             "session": self.session,
+            "quarter": quarter_label(self.session, self.term),
+            "projected": self.projected,
             "session_name": SESSION_NAMES.get(self.session, self.session),
             "starts": self.starts.isoformat() if self.starts else None,
             "ends": self.ends.isoformat() if self.ends else None,
@@ -446,6 +468,7 @@ class Offering:
             "term": s.term,
             "term_name": TERM_NAMES.get(s.term, s.term),
             "session": s.session,
+            "quarter": quarter_label(s.session, s.term),
             "units": s.units,
             "enrollment": s.enrollment,
             "limit": s.limit,
@@ -622,3 +645,11 @@ def get_catalog() -> Catalog:
         return Catalog(json.loads(data_path().read_text(encoding="utf-8")))
     except (OSError, ValueError):  # a damaged cache must never take the site down
         return Catalog(json.loads(CATALOG_PATH.read_text(encoding="utf-8")))
+
+
+
+def project(sec: "Section", target_term: str) -> "Section":
+    """This year's section as an *expected* offering in the same quarter next year: same course, units, faculty and
+    description; no meeting time, room or dates, because SOM hasn't published 2027-28 yet."""
+    return replace(sec, id=f"{sec.id}@{target_term}", term=target_term, starts=None, ends=None, meeting=None,
+                   room="", section="TBA", exam="", cohort="", projected=True)

@@ -12,7 +12,7 @@ from typing import Literal
 
 from pydantic_ai import RunContext
 
-from catalog import SESSION_NAMES, TERM_NAMES, card_text
+from catalog import SESSION_NAMES, TERM_NAMES, term_name, card_text
 from crew.context import DEFAULT_TERM, StudentContext
 from planning import (
     alternates,
@@ -93,7 +93,7 @@ def student_card(d: StudentContext) -> str:
         units = sum(r.section.units for r in d.plan if r.section.term == term)
         core = core_load(p, term, d.catalog)["units"]
         total = f"{units + core:g} units incl. {core:g} core" if core else f"{units:g} units"
-        lines.append(f"plan {TERM_NAMES.get(term, term)} [{total}]: " + "; ".join(items))
+        lines.append(f"plan {term_name(term)} [{total}]: " + "; ".join(items))
     if not d.plan:
         lines.append("plan: empty")
     if d.global_choices:
@@ -176,7 +176,7 @@ def my_profile_and_plan(ctx: RunContext[StudentContext]) -> str:
     d = ctx.deps
     p = d.profile or {}
     plan_lines = [
-        f"- {r.section.number} {r.section.title} §{r.section.section} [{TERM_NAMES.get(r.section.term)}, "
+        f"- {r.section.number} {r.section.title} §{r.section.section} [{term_name(r.section.term)}, "
         f"{r.section.session}, {r.section.time_label}, {r.section.units:g}u] status={r.status}"
         for r in d.plan
     ] or ["- (empty plan)"]
@@ -190,7 +190,7 @@ def my_profile_and_plan(ctx: RunContext[StudentContext]) -> str:
     )
     core = core_load(p, DEFAULT_TERM, d.catalog)
     if core["units"]:
-        plan_lines.append(f"- Cohort core in {TERM_NAMES.get(DEFAULT_TERM)} (assigned, not in the plan): "
+        plan_lines.append(f"- Cohort core in {term_name(DEFAULT_TERM)} (assigned, not in the plan): "
                           f"{', '.join(core['courses'])} = {core['units']:g} units")
     return fence(profile, "student_profile") + "\nPLAN:\n" + "\n".join(plan_lines)
 
@@ -269,7 +269,7 @@ def suggest_add(ctx: RunContext[StudentContext], key_or_number: str, reason: str
         return "Already suggested."
     d.proposals.append({
         "course_id": sec.id, "number": o.lead.number, "title": o.lead.title,
-        "term_name": TERM_NAMES.get(o.lead.term), "time": sec.time_label, "reason": reason[:200],
+        "term_name": term_name(o.lead.term), "time": sec.time_label, "reason": reason[:200],
     })
     return f"Suggested {o.lead.number} (section {sec.section}). The student decides."
 
@@ -283,12 +283,12 @@ def plan_review(ctx: RunContext[StudentContext], term: Literal["202603", "202701
     secs = [s for s in d.sections(term)]
     core = core_load(d.profile, term, d.catalog)
     if not secs and not core["units"]:
-        return f"No courses planned for {TERM_NAMES.get(term)}."
+        return f"No courses planned for {term_name(term)}."
     clash_list = conflicts(secs + core["sections"])
     review = week_review(secs + core["sections"])
     units = sum(s.units for s in secs) + core["units"]
-    lines = [f"{TERM_NAMES.get(term)}: {len(secs)} electives + cohort core ({core['units']:g} units), {units:g} units in total."
-             if core["units"] else f"{TERM_NAMES.get(term)}: {len(secs)} courses, {units:g} units."]
+    lines = [f"{term_name(term)}: {len(secs)} electives + cohort core ({core['units']:g} units), {units:g} units in total."
+             if core["units"] else f"{term_name(term)}: {len(secs)} courses, {units:g} units."]
     lines += [f"CLASH: {c['a']} vs {c['b']} on {c['day']} {c['window']}" for c in clash_list] or ["No clashes."]
     lines += [f"{n['kind']}: {n['text']}" for n in review["notes"]]
     return "\n".join(lines)

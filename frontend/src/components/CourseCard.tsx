@@ -4,6 +4,7 @@ import type { Section } from '../api'
 import { enrollLabel } from '../lib/format'
 import { useApp } from '../state'
 import StarButton from './StarButton'
+import QuarterPill from './QuarterPill'
 
 interface Props {
   course: Section
@@ -22,7 +23,7 @@ export default function CourseCard({ course: c, sectionCount = 1, onOpen, footer
     <article className="card hoverable course-card" onClick={onOpen} tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && onOpen?.()}>
       <div className="row between top">
         <div>
-          <div className="course-num">{c.number} · {c.session_name}</div>
+          <div className="cx-card-kicker"><span className="course-num">{c.number}</span><QuarterPill session={c.session} term={c.term} year /></div>
           <div className="course-title">{c.title}</div>
         </div>
         <div className="row" style={{ gap: 4, flexWrap: 'nowrap' }}>

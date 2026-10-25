@@ -3,41 +3,41 @@
 **Status: all 13 to-dos done and tested** (also ticked on the Notion page). Dropped items, with reasons, are at the end.
 
 **Source:** the Notion page "Feedback from real user" (WhatsApp messages and two screenshots).
-**Who:** two Yale SOM students, Sanjana (first-year MBA, Silver) and Siddhant (second-year MBA).
+**Who:** two Yale SOM students: a first-year MBA (Silver cohort) and a second-year MBA. Named by role only.
 **Build reviewed:** both used the *previously published* version. Each point below is checked against the current local build (commit 1ae58f7) before deciding.
 
 ## What they liked (usable as evidence in the report)
 
-**Sanjana:**
+**First-year MBA (Silver):**
 - "Love!!"
 - My plan is "the most intuitive" page.
 
-**Siddhant:**
+**Second-year MBA:**
 - "I absolutely loved the tool, and think it is very thoughtful. Really impressive!!"
 - "A lot of my ideas on a similar tool were already captured by you."
-- He had planned to build something similar himself and never found the time.
+- They had planned to build something similar themselves and never found the time.
 
 ## Point by point
 
 | # | Who | Feedback | Checked against the current build | Verdict |
 |---|---|---|---|---|
-| 1 | Sanjana | The dropdown colour is hard to read (the "Any topic" filter in the Course explorer, shown on Windows). | Native dropdown lists take their colours from the operating system. We set `color-scheme: dark` but never styled the options themselves, so on some Windows setups the list can render low-contrast. | **Fix now.** Give options an explicit dark background and light text. |
-| 2 | Sanjana | Rename "Running total" to "Progress towards degree". | Still says "Running total" on My plan & timetable. | **Fix now.** |
-| 3 | Sanjana | Colour-code first-year required core vs electives. | Core chips are only dashed and grey; electives have no distinct colour, and there's no legend. | **Fix now.** Distinct elective accent and a small legend (Core · Elective · Expected). |
-| 4 | Sanjana | Move classes around on My plan, e.g. drop some from a term that's over the limit (she had 32 units in Fall 2027). | In the all-years view a course opens its details; removing or moving takes extra clicks. The new Course picks pre-ticks only the essentials, so overloading a term is now less likely. | **Fix now.** Quick Move and Remove on each elective in the all-years view. |
-| 5 | Siddhant | Asked about LDR electives; the chatbot sent him to an internal page and missed electives. | Tested on the current build: Dan now lists LDR courses itself, but only 5 of the 10 that SOM's feed flags for Spring 2027 (his search stops at the top matches). Yale's internal LDR page needs a NetID, so we can't read it. | **Fix now.** A tool that lists every flagged LDR course, used for LDR questions. Keep the honest note that flags come from the public feed. |
-| 6 | Siddhant | The elective-load answer should consider clubs, projects and social commitments. | Tested: the answer talks only about units and the 16–24 range. | **Fix now.** Dan weighs recruiting, clubs, projects and social plans, and asks about them if unknown. |
-| 7 | Siddhant | Wants bid information while comparing electives. | Already there: Shortlist → compare shows seats, demand and the median winning bid. Not in the course details panel. | **Mostly solved.** Small add: demand line in the course details panel. |
-| 8 | Sanjana | Log grades, to see how many more Pass credits are allowed. | The rule is already in the data (`PASS_FAIL_CAP_UNITS`: 23.5 units for the MBA, 16.5 for joint degrees). Grades aren't stored. | **Next.** A Pass/Fail budget on Requirements, with grades on completed courses. |
+| 1 | First-year | The dropdown colour is hard to read (the "Any topic" filter in the Course explorer, shown on Windows). | Native dropdown lists take their colours from the operating system. We set `color-scheme: dark` but never styled the options themselves, so on some Windows setups the list can render low-contrast. | **Fix now.** Give options an explicit dark background and light text. |
+| 2 | First-year | Rename "Running total" to "Progress towards degree". | Still says "Running total" on My plan & timetable. | **Fix now.** |
+| 3 | First-year | Colour-code first-year required core vs electives. | Core chips are only dashed and grey; electives have no distinct colour, and there's no legend. | **Fix now.** Distinct elective accent and a small legend (Core · Elective · Expected). |
+| 4 | First-year | Move classes around on My plan, e.g. drop some from a term that's over the limit (she had 32 units in Fall 2027). | In the all-years view a course opens its details; removing or moving takes extra clicks. The new Course picks pre-ticks only the essentials, so overloading a term is now less likely. | **Fix now.** Quick Move and Remove on each elective in the all-years view. |
+| 5 | Second-year | Asked about LDR electives; the chatbot pointed to an internal page and missed electives. | Tested on the current build: Dan now lists LDR courses itself, but only 5 of the 10 that SOM's feed flags for Spring 2027 (his search stops at the top matches). Yale's internal LDR page needs a NetID, so we can't read it. | **Fix now.** A tool that lists every flagged LDR course, used for LDR questions. Keep the honest note that flags come from the public feed. |
+| 6 | Second-year | The elective-load answer should consider clubs, projects and social commitments. | Tested: the answer talks only about units and the 16–24 range. | **Fix now.** Dan weighs recruiting, clubs, projects and social plans, and asks about them if unknown. |
+| 7 | Second-year | Wants bid information while comparing electives. | Already there: Shortlist → compare shows seats, demand and the median winning bid. Not in the course details panel. | **Mostly solved.** Small add: demand line in the course details panel. |
+| 8 | First-year | Log grades, to see how many more Pass credits are allowed. | The rule is already in the data (`PASS_FAIL_CAP_UNITS`: 23.5 units for the MBA, 16.5 for joint degrees). Grades aren't stored. | **Next.** A Pass/Fail budget on Requirements, with grades on completed courses. |
 | 9 | Both | Courses outside SOM (e.g. Yale GSAS English). | Still SOM only. | **Next.** First let students add an outside course by hand; import Yale-wide data later. |
-| 10 | Siddhant | Entering already-taken courses is a pain; paste a Yale Hub screenshot and have them picked up. | Today it's a typed list in the profile. | **Next.** Screenshot import (image reading, as in the course's image-analysis lecture), with a confirmation step. |
-| 11 | Siddhant | Workload per course (assignments, exam vs project). | Not shown. | **Later.** Pull exam-or-project and deliverables from descriptions and syllabi, labelled as estimates. |
-| 12 | Siddhant | Peer feedback (course evaluations), and similar-taste recommendations. | Evaluations are behind Yale login; can't be read. | **Later.** Optional student ratings, crowdsourced like bid outcomes. The similar-taste idea is his own "overkill" note. |
-| 13 | Siddhant | Strategy for body-to-body (B2B) swaps. | The swap-form date is stored; there's no strategy help. | **Later.** A swap section on Bidding. |
+| 10 | Second-year | Entering already-taken courses is a pain; paste a Yale Hub screenshot and have them picked up. | Today it's a typed list in the profile. | **Next.** Screenshot import (image reading, as in the course's image-analysis lecture), with a confirmation step. |
+| 11 | Second-year | Workload per course (assignments, exam vs project). | Not shown. | **Later.** Pull exam-or-project and deliverables from descriptions and syllabi, labelled as estimates. |
+| 12 | Second-year | Peer feedback (course evaluations), and similar-taste recommendations. | Evaluations are behind Yale login; can't be read. | **Later.** Optional student ratings, crowdsourced like bid outcomes. The similar-taste idea is the student's own "overkill" note. |
+| 13 | Second-year | Strategy for body-to-body (B2B) swaps. | The swap-form date is stored; there's no strategy help. | **Later.** A swap section on Bidding. |
 
 ## Also learned
 - Both reviewed the old version. Several pain points (confusing navigation, too much at once) are already addressed by the signed-in redesign and the new Course picks flow. **Ask them to look again after the push.**
-- Siddhant: "ask diverse people to get everyone's view." The next round should include MAM, EMBA and international students.
+- The second-year: "ask diverse people to get everyone's view." The next round should include MAM, EMBA and international students.
 
 ## What was done (to-do list on Notion, worked in order)
 

@@ -1,7 +1,7 @@
 """Owner dashboard: sign-ups, onboarding, active students, feature use and AI spend, live from the database.
 
 Only accounts listed in OWNER_EMAILS can read it; everyone else gets a 404, so the page doesn't advertise itself.
-Counts and anonymous rows only: no emails, names, chat text or plan contents leave this module.
+Counts, plus each account's email for the owner. No names, chat text or plan contents leave this module.
 """
 from __future__ import annotations
 
@@ -182,6 +182,7 @@ def stats(_owner: User = Depends(require_owner), db: Session = Depends(get_db)):
         p = profiles.get(u.id)
         recent.append({
             "label": f"Student {u.id}",
+            "email": u.email,
             "you": u.email.lower() in owners,
             "joined": aware(u.created_at).isoformat(),
             "method": method(u),

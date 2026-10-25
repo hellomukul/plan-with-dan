@@ -14,6 +14,7 @@ const STORED: [string, string][] = [
   ['Sign-in sessions', 'Only a scrambled fingerprint of your sign-in cookie, deleted when you sign out or after 30 days without a visit.'],
   ['Profile and goals', 'Program, year, cohort, background, interests, goals, courses taken, schedule preferences, Global Studies days used.'],
   ['Plan', 'Courses you add, their status and bid points, plus a log of changes so you can undo them.'],
+  ['Who can see your account', 'Only the person who runs Plan with Dan can see your email, when you joined and how much you use the app (counts, not your chats or plan), to keep the service running.'],
   ['Chats with Dan', 'Your questions and Dan’s answers, until you clear them. Blocked messages are not stored.'],
   ['Bid reports', 'Outcomes you choose to report. Classmates only ever see anonymous totals.'],
   ['Usage and safety logs', 'Token counts and cost per AI run, and which safety checks fired (no message text).'],

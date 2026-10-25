@@ -34,12 +34,15 @@ function ago(iso: string | null): string {
   return days === 1 ? 'yesterday' : `${days} days ago`
 }
 
+const HIDE_KEY = 'pwd_owner_hide_emails'
 const pct = (n: number, of: number) => (of ? Math.round((100 * n) / of) : 0)
 
 export default function Owner() {
   const [data, setData] = useState<OwnerStats | null>(null)
   const [error, setError] = useState<{ status: number; message: string } | null>(null)
   const [refreshing, setRefreshing] = useState(false)
+  const [hideEmails, setHideEmails] = useState(() => localStorage.getItem(HIDE_KEY) === '1')
+  const toggleEmails = () => setHideEmails((v) => { localStorage.setItem(HIDE_KEY, v ? '0' : '1'); return !v })
 
   const load = useCallback(async () => {
     setRefreshing(true)
@@ -77,7 +80,7 @@ export default function Owner() {
     <div className="page-head ow-head">
       <div>
         <h1>Owner dashboard</h1>
-        <p>Live from the database: sign-ups, setup, active students, what they use and what the AI costs. Only you can see this page. No emails or names are shown.</p>
+        <p>Live from the database: sign-ups, setup, active students, what they use and what the AI costs. Only you can see this page. Use “Hide emails” before taking screenshots.</p>
       </div>
       <div className="ow-refresh">
         <span className="small faint" aria-live="polite">{data ? `Updated ${clockTime(data.generated_at)} · every minute` : ''}</span>
@@ -227,7 +230,7 @@ export default function Owner() {
       </div>
 
       <section className="card mt-lg" aria-labelledby="ow-recent-h">
-        <div className="section-label" id="ow-recent-h"><span>Newest accounts</span><span className="faint">last {Math.min(25, data.recent.length)}, no names or emails</span></div>
+        <div className="section-label" id="ow-recent-h"><span>Newest accounts</span><span className="row" style={{ gap: 10 }}><span className="faint">last {Math.min(25, data.recent.length)}</span><button type="button" className="btn sm ghost" aria-pressed={hideEmails} onClick={toggleEmails}>{hideEmails ? 'Show emails' : 'Hide emails'}</button></span></div>
         {data.recent.length === 0 ? (
           <Empty title="No accounts yet">When someone signs up, they show up here.</Empty>
         ) : (
@@ -236,6 +239,7 @@ export default function Owner() {
               <thead>
                 <tr>
                   <th scope="col">Student</th>
+                  {!hideEmails && <th scope="col">Email</th>}
                   <th scope="col">Joined</th>
                   <th scope="col">Signed up with</th>
                   <th scope="col">Program</th>
@@ -250,6 +254,7 @@ export default function Owner() {
                 {data.recent.map((r) => (
                   <tr key={r.label}>
                     <td style={{ whiteSpace: 'nowrap' }}>{r.label}{r.you && <span className="badge gray" style={{ marginLeft: 6 }}>you</span>}</td>
+                    {!hideEmails && <td className="ow-num">{r.email}</td>}
                     <td className="ow-num muted" style={{ whiteSpace: 'nowrap' }}>{new Date(r.joined).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</td>
                     <td>{r.method === 'email' ? 'Email' : METHOD_LABELS[r.method] ?? r.method}</td>
                     <td>{r.program ? <>{r.program}{r.year && <span className="faint"> · {r.year}</span>}</> : <span className="faint">not set</span>}</td>

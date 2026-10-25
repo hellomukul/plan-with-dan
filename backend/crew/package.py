@@ -32,7 +32,7 @@ import other_courses
 from db import RecommendationRun
 from fit import _is_trip
 from planning import (
-    add_drop_closed, best_section, clean_prefs, conflicts, core_load, max_units, min_units, planning_terms,
+    add_drop_closed, best_section, clean_prefs, pref_miss, conflicts, core_load, max_units, min_units, planning_terms,
 )
 from safety import REFUSAL, BudgetExceeded, SpendGuard, fence, screen_input, validate_picks
 
@@ -230,19 +230,21 @@ def _option(slot: Slot, week: dict[str, list[Section]], prefs: dict, program: st
         src = _source_section(o, program)
         return {"term": t, "term_name": term_name(t), "session": src.session, "quarter": quarter_label(src.session, t),
                 "expected": True, "course_id": src.id, "target_term": t, "section": "", "time": "Times TBA",
-                "fits": True, "clash_with": []}
+                "fits": True, "clash_with": [], "pref_note": ""}
     sec = best_section(o, week[t], prefs, program)
     if sec:
         return {"term": t, "term_name": term_name(t), "session": sec.session, "quarter": quarter_label(sec.session, t),
                 "expected": False, "course_id": sec.id, "target_term": None, "section": sec.section,
-                "time": sec.time_label, "fits": True, "clash_with": []}
+                "time": sec.time_label, "fits": True, "clash_with": [],
+                "pref_note": pref_miss(sec, prefs)}  # no section matched the preferences: say so, don't hide it
     first = next(x for x in o.sections_for(program) if not x.closed)
     me = f"{first.number} §{first.section}"
     hits = [h for h in conflicts(week[t] + [first]) if me in (h["a"], h["b"])]
     return {"term": t, "term_name": term_name(t), "session": first.session, "quarter": quarter_label(first.session, t),
             "expected": False, "course_id": first.id, "target_term": None, "section": first.section,
             "time": first.time_label, "fits": False,
-            "clash_with": sorted(({h["a"] for h in hits} | {h["b"] for h in hits}) - {me})}
+            "clash_with": sorted(({h["a"] for h in hits} | {h["b"] for h in hits}) - {me}),
+            "pref_note": pref_miss(first, prefs)}
 
 
 def _term_info(ctx, term: str) -> dict:

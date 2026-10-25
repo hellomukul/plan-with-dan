@@ -20,7 +20,7 @@ os.environ["OPENAI_API_KEY"] = ""
 import pytest  # noqa: E402
 
 from catalog import get_catalog, infer_topics, parse_meeting  # noqa: E402
-from planning import clash, conflicts, gsa_check, suggest_bids  # noqa: E402
+from planning import clash, conflicts, gsa_check, pref_miss, suggest_bids  # noqa: E402
 from safety import SpendGuard, BudgetExceeded, check_output, screen_input, validate_picks  # noqa: E402
 
 
@@ -1566,3 +1566,11 @@ def test_qa_fixes_core_clashes_export_outside_swap_catalog(client):
     assert c.post("/api/swap/check", json={"give_item_id": 10**30, "want": "MGT 523"}).status_code == 422
     r = c.get("/api/catalog", headers={"Accept-Encoding": "gzip"})
     assert r.status_code == 200 and r.json()["sections"]
+
+
+def test_pref_miss_names_the_broken_preference():
+    """Course picks warns when the only section breaks a time preference (e.g. an 8:30 class for "nothing before 9")."""
+    early = next(s for s in get_catalog().sections if s.meeting and s.meeting.start < 9 * 60 and "F" not in s.meeting.days)
+    assert pref_miss(early, {"no_before": 9 * 60}).startswith("starts before 9:00")
+    assert pref_miss(early, {}) == ""
+    assert pref_miss(early, {"no_before": early.meeting.start}) == ""

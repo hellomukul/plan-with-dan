@@ -279,6 +279,7 @@ export interface PackageOption {
   time: string
   fits: boolean
   clash_with: string[]
+  pref_note?: string
 }
 export interface PackageItem {
   rank: number

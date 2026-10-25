@@ -121,6 +121,22 @@ def respects_prefs(sec: Section, prefs: dict) -> bool:
     return not (set(p.get("avoid_days", [])) & set(m.days))
 
 
+def pref_miss(sec: Section, prefs: dict) -> str:
+    """Which of the student's time preferences a section breaks, in words ("" when it breaks none)."""
+    m, p = sec.meeting, clean_prefs(prefs)
+    if not m:
+        return ""
+    bits = []
+    if p.get("no_before") and m.start < p["no_before"]:
+        bits.append(f"starts before {clock(p['no_before'])}")
+    if p.get("fridays_free") and "F" in m.days:
+        bits.append("meets on Friday")
+    hit = [d for d in p.get("avoid_days", []) if d in m.days]
+    if hit:
+        bits.append("meets on " + ", ".join(hit))
+    return " and ".join(bits)
+
+
 # ---------------------------------------------------------------- week review
 
 def _window_review(sections: list[Section], label: str) -> tuple[list[dict], list[str]]:

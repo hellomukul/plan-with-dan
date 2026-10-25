@@ -217,6 +217,7 @@ export default function PackageBuilder({ onOpenCourse }: { onOpenCourse: (key: s
             {o.expected ? <span className="small faint">Expected from this year’s offering · times TBA</span>
               : <span className="small faint"><Clock className="icon xs" aria-hidden /> {o.time}{o.section ? ` · §${o.section}` : ''}</span>}
             {!o.fits && <span className="badge red"><AlertTriangle className="icon sm" />Clashes with {o.clash_with.join(', ') || 'your week'}</span>}
+            {o.pref_note && <span className="badge amber"><AlertTriangle className="icon sm" />Outside your preferences: {o.pref_note}</span>}
           </div>
         </div>
       </li>

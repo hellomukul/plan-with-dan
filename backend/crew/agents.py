@@ -57,6 +57,18 @@ class Curation(BaseModel):
     summary: str
 
 
+class RankedPick(BaseModel):
+    key: str
+    why: str
+    tier: Literal["essential", "strong", "worth a look"] = "strong"
+    evidence: str = ""
+
+
+class Package(BaseModel):
+    items: list[RankedPick] = Field(description="Most useful first.")
+    summary: str
+
+
 class Critique(BaseModel):
     verdict: str
     watch_outs: list[str]
@@ -93,6 +105,7 @@ specialists: dict[str, Agent] = {
 }
 
 curator = Agent(output_type=Curation, instructions=instructions("curator"), name="curator")
+packager = Agent(output_type=Package, instructions=instructions("packager"), name="packager")
 critic = Agent(output_type=Critique, instructions=instructions("critic"), name="critic")
 chief = Agent(output_type=Brief, instructions=instructions("chief"), name="chief_of_staff")
 memory_keeper = Agent(output_type=MemoryUpdate, instructions=instructions("memory_keeper"), name="memory_keeper")

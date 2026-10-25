@@ -222,6 +222,56 @@ export interface RecPick {
   alternates: Alternate[]
 }
 
+/** Course package: a goal in the student's words → courses ranked by usefulness, placed across every quarter left. */
+export interface PackageOption {
+  term: string
+  term_name: string
+  session: string
+  quarter: string
+  expected: boolean
+  course_id: string
+  target_term: '202703' | '202801' | null
+  section: string
+  time: string
+  fits: boolean
+  clash_with: string[]
+}
+export interface PackageItem {
+  rank: number
+  key: string
+  number: string
+  title: string
+  units: number
+  tier: 'essential' | 'strong' | 'worth a look'
+  why: string
+  evidence: string
+  evidence_note: string
+  ldr: boolean
+  gsr: boolean
+  topics: string[]
+  faculty: string[]
+  placement: PackageOption
+  options: PackageOption[]
+}
+export interface PackageTerm { code: string; name: string; expected: boolean; base_units: number; core_units: number; min_units: number | null; max_units: number | null }
+export interface PackageResult {
+  run_id: string
+  goal: string
+  summary: string
+  followups?: string[]
+  blocked: boolean
+  items: PackageItem[]
+  terms: PackageTerm[]
+  dropped: { key?: string; dropped_because: string }[]
+  trace: TraceStep[]
+  usage: Usage
+}
+export interface PackageApplied {
+  added: { number: string; term: string; expected: boolean; action_id?: number }[]
+  skipped: { number: string; reason: string }[]
+  clashes: Clash[]
+}
+
 export interface RecResult {
   run_id: string
   term: string
@@ -513,6 +563,9 @@ export const api = {
   chatMemory: () => request<{ facts: string[]; summary: string; updated_at: string | null }>('GET', '/api/chat/memory'),
   forgetMemory: (fact?: string) => request<{ facts: string[] }>('POST', '/api/chat/memory/forget', { fact: fact ?? null }),
   recommend: (term = '202701') => request<RecResult>('POST', '/api/recommend', { term }),
+  buildPackage: (goal: string) => request<PackageResult>('POST', '/api/package', { goal }),
+  latestPackage: () => request<{ result: PackageResult | null }>('GET', '/api/package/latest'),
+  applyPackage: (items: { course_id: string; target_term: string | null }[]) => request<PackageApplied>('POST', '/api/package/apply', { items }),
   latestRecommendation: () => request<{ result: RecResult | null }>('GET', '/api/recommend/latest'),
 
   usage: () => request<UsageResponse>('GET', '/api/usage'),

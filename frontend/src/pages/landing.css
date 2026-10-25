@@ -471,3 +471,63 @@
 .dt-foot .dt-quarters { min-height: 0; color: var(--muted); }
 /* phones: the picker's second row is as tall as its 44px selects for every program ("student" alone included) */
 @media (max-width: 640px) { .ws-more { min-height: 44px; } }
+
+/* ---- v4: one obvious first action (student feedback, Oct 25). The hero is a single goal box; Dan's chat and the
+   workspace sit below under "Or explore without an account", with quieter headings and no competing primary
+   buttons. Every size here is static, so typing, an error note or a focus ring never changes the page length. ---- */
+.lp-goal { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 22px; padding: 48px 0 8px; scroll-margin-top: 72px; }
+.lp-goal-copy { display: flex; flex-direction: column; align-items: center; gap: 14px; max-width: 760px; }
+.lp-goal-kicker { font-size: 13px; font-weight: 500; color: var(--pink-2); padding: 4px 12px; border-radius: 999px; border: 1px solid var(--pink-line); background: var(--pink-soft); }
+.lp-goal h1 { font-size: clamp(32px, 4.6vw, 54px); line-height: 1.06; letter-spacing: -0.035em; margin: 0; }
+.lp-goal .lp-lede { max-width: 600px; }
+.lp-goal-form { width: 100%; max-width: 720px; text-align: left; display: grid; gap: 12px; padding: 18px; border-color: var(--pink-line);
+  box-shadow: 0 0 0 4px var(--pink-soft), 0 18px 48px rgba(0, 0, 0, 0.35); }
+.lp-goal-label { display: flex; align-items: center; gap: 12px; }
+.lp-goal-label label { font-size: 18px; font-weight: 600; letter-spacing: -0.01em; color: var(--text); line-height: 1.3; }
+.lp-goal-owl { flex: none; width: 44px; height: 48px; display: grid; place-items: center; }
+.lp-goal-form textarea { width: 100%; height: calc(3 * 1.5em + 26px); resize: none; background: var(--bg-2); border: 1px solid var(--line-2); border-radius: 10px;
+  padding: 12px 14px; color: var(--text); font: inherit; font-size: 16px; line-height: 1.5; outline: none; }
+.lp-goal-form textarea:focus { border-color: var(--pink-line); }
+.lp-goal-form textarea:focus-visible { outline: 2px solid var(--pink); outline-offset: 2px; }
+.lp-goal-form textarea[aria-invalid='true'] { border-color: rgba(255, 92, 92, 0.6); }
+.lp-goal-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px 16px; }
+.lp-goal-note { margin: 0; font-size: 13px; line-height: 1.5; color: var(--faint); min-height: 2lh; display: flex; align-items: center; }
+.lp-goal-note.is-error { color: var(--red); }
+.lp-goal-btn { flex: none; min-height: 44px; }
+.lp-goal-skip { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 8px; font-size: 14px; color: var(--muted); }
+.lp-goal-skip:hover { color: var(--text); }
+
+/* everything below the hero: one muted heading, smaller section titles */
+.lp-explore { margin-top: 56px; padding-top: 36px; border-top: 1px solid var(--line); }
+.lp-explore-head { margin-bottom: 22px; max-width: 680px; }
+.lp-explore-head h2 { margin: 0 0 4px; font-size: 20px; font-weight: 600; letter-spacing: -0.01em; color: var(--muted); }
+.lp-explore-head p { margin: 0; font-size: 14px; }
+.lp-explore .lp-sub { margin-top: 48px; }
+.lp-explore .lp-band-head h3 { margin: 0 0 6px; font-size: 20px; letter-spacing: -0.015em; }
+.lp-ask-copy h3 { margin: 0 0 6px; font-size: 20px; letter-spacing: -0.015em; }
+.lp-ask-copy p { margin: 0; font-size: 15px; max-width: 420px; }
+.lp-explore .lp-meet-dog { width: 48px; height: 48px; }
+.lp-explore .lp-meet-name { font-size: 16px; }
+/* the goal button is the page's one primary: buttons down here look secondary */
+.lp-explore .btn.primary { background: var(--card-2); border-color: var(--line-2); color: var(--text); }
+.lp-explore .btn.primary:hover:not(:disabled) { background: var(--card); border-color: var(--pink-line); }
+@media (min-width: 901px) {
+  .lp-explore .lp-hero.v3 { padding-top: 0; }
+  .lp-explore .lp-hero.v3 .lp-hero-copy { justify-content: flex-start; }  /* Dan's intro on top, the promises at the bottom edge */
+  .lp-explore .lp-hero.v3 .lp-trust { margin-top: auto; }
+}
+@media (max-width: 900px) {
+  .lp-goal { padding-top: 28px; gap: 18px; }
+  .lp-explore { margin-top: 40px; padding-top: 28px; }
+  .lp-explore .lp-sub { margin-top: 40px; }
+}
+@media (max-width: 640px) {
+  .lp-goal { align-items: stretch; text-align: left; }
+  .lp-goal-copy { align-items: flex-start; }
+  .lp-goal-label label { font-size: 16px; }
+  .lp-goal-form { padding: 14px; }
+  .lp-goal-foot { flex-direction: column-reverse; align-items: stretch; }
+  .lp-goal-btn { width: 100%; }
+  .lp-goal-skip { align-self: center; }
+}
+@media (max-width: 520px) { .lp-goal h1 { font-size: 34px; } }

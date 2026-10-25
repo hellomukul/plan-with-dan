@@ -9,7 +9,7 @@ full-term clashes with both halves; fall never clashes with spring).
 from __future__ import annotations
 
 import statistics
-from datetime import date
+from datetime import date, timedelta
 from dataclasses import dataclass
 from typing import Iterable
 
@@ -493,3 +493,27 @@ def suggest_bids(items: list[dict], budget: int) -> list[dict]:
         {**it, "suggested_points": p, "share": round(p / budget, 3)}
         for it, p in zip(items, points)
     ]
+
+
+# ---------------------------------------------------------------- which terms a student can still plan
+
+TWO_YEAR_PROGRAMS = ("MBA", "MBA-JOINT", "EMBA")
+ADD_DROP_DAYS = 7  # SOM add/drop runs about a week from the start of each session (Bulletin course policies)
+
+
+def planning_terms(profile: dict) -> list[str]:
+    """The terms this student can plan: this year, plus 2027-28 for anyone with a second year still ahead."""
+    program, year = profile.get("program") or "MBA", profile.get("year") or ""
+    if program in TWO_YEAR_PROGRAMS and year == "admit":
+        return ["202703", "202801"]  # admitted for fall 2027: their first year is 2027-28
+    if program in TWO_YEAR_PROGRAMS and year in ("1", ""):
+        return ["202603", "202701", "202703", "202801"]
+    return ["202603", "202701"]
+
+
+def add_drop_closed(sec: Section, today: date | None = None) -> bool:
+    """True once a section is under way and past its ~1-week add/drop: it can't be newly planned or bid on.
+    (A start date more than ~10 months before the end is a typo in SOM's feed, e.g. MGT 640 listed as 2026-03-22.)"""
+    today = today or date.today()
+    plausible = bool(sec.starts and (not sec.ends or (sec.ends - sec.starts).days < 300))
+    return plausible and today > sec.starts + timedelta(days=ADD_DROP_DAYS)

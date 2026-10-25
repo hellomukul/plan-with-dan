@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import type { TraceStep } from '../api'
 import { tokens, usd } from '../lib/format'
 
-const CODE_STEPS = new Set(['retrieve', 'validate', 'assemble'])
+const CODE_STEPS = new Set(['retrieve', 'validate', 'assemble', 'place'])
 
 function describe(s: TraceStep): { cls: string; text: ReactNode } | null {
   switch (s.kind) {
@@ -29,6 +29,11 @@ function describe(s: TraceStep): { cls: string; text: ReactNode } | null {
     }
     case 'assemble':
       return { cls: 'code', text: <><b>Scheduler</b> (code): {String(s.fitted)} fit clash-free{(s.not_fitting as string[])?.length ? `, ${(s.not_fitting as string[]).join(', ')} clash` : ''}</> }
+    case 'place': {
+      const placed = Object.entries((s.placed as Record<string, number>) ?? {}).map(([t, u]) => `${t} ${u}u`).join(', ')
+      const clashing = (s.clashing as string[]) ?? []
+      return { cls: 'code', text: <><b>Placer</b> (code): {placed}{clashing.length ? ` · ${clashing.join(', ')} clash` : ''}</> }
+    }
     case 'safety':
       return { cls: 'safety', text: <>Safety check: <b>{String(s.check).replaceAll('_', ' ')}</b></> }
     default:

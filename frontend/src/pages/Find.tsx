@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { api, type RecPick, type RecResult, type Section } from '../api'
 import AgentTrace from '../components/AgentTrace'
 import CourseDrawer from '../components/CourseDrawer'
+import PackageBuilder from '../components/PackageBuilder'
 import { CostChip, Empty } from '../components/ui'
 import { AlertTriangle, ArrowRight, Check, Clock, MessageCircle, ScrollText, ShieldCheck, Sparkles, Target, X } from 'lucide-react'
 import Elihu from '../mascots/Elihu'
@@ -160,6 +161,9 @@ export default function Find() {
   const [showTrace, setShowTrace] = useState(false)
   const [addingAll, setAddingAll] = useState(false)
   const timer = useRef<number | null>(null)
+  // The course package (every quarter left, ranked for a goal) is the main view; the one-term finder is the second tab.
+  // Arriving from the Course explorer's "weighing up" box opens the one-term view, where those courses are compared.
+  const [mode, setMode] = useState<'package' | 'term'>(() => (readElihuContext() ? 'term' : 'package'))
 
   useEffect(() => {
     api.latestRecommendation().then((r) => r.result && setResult(r.result)).catch(() => undefined)
@@ -200,10 +204,16 @@ export default function Find() {
         <Elihu size={64} />
         <div style={{ minWidth: 0, flex: 1 }}>
           <h1>Find courses with Elihu</h1>
-          <p>Elihu is Dan’s bookish owl, named after Elihu Yale. He reads your goals, scans every real {term === '202701' ? 'Spring 2027' : 'Fall 2026'} course, and builds a shortlist that fits your week.</p>
+          <p>Elihu is Dan’s bookish owl, named after Elihu Yale. Tell him your goal and he ranks real SOM courses for every quarter you have left.</p>
         </div>
       </div>
 
+      <div className="tabs fd-mode" role="tablist" aria-label="How Elihu helps">
+        <button type="button" role="tab" aria-selected={mode === 'package'} className={mode === 'package' ? 'on' : ''} onClick={() => setMode('package')}>Course package · every quarter</button>
+        <button type="button" role="tab" aria-selected={mode === 'term'} className={mode === 'term' ? 'on' : ''} onClick={() => setMode('term')}>One term, fitted to your week</button>
+      </div>
+
+      {mode === 'package' ? <PackageBuilder onOpenCourse={setOpen} /> : <>
       <div className="card stack">
         <div className="row between">
           <div className="stack tight">
@@ -312,6 +322,7 @@ export default function Find() {
           )}
         </>
       )}
+      </>}
       {open && <CourseDrawer courseKey={open} onClose={() => setOpen(null)} />}
     </div>
   )

@@ -6,6 +6,7 @@ import { EMPTY_PROFILE, useApp } from '../state'
 import { importTryout, loadTryout, type Tryout } from '../lib/tryout'
 import { calendarIntentFresh } from '../components/AuthDialog'
 import './onboarding.css'
+import { PACKAGE_GOAL_KEY } from '../lib/elihu'
 
 const PROGRAMS = [
   { v: 'MBA', label: 'Full-time MBA', big: <GraduationCap className="icon lg" /> },
@@ -75,6 +76,8 @@ export default function Onboarding({ editing = false }: { editing?: boolean }) {
   const [week] = useState(() => (editing ? null : homeWeek()))
   const [p, setP] = useState<Profile>(() => fromHomeWeek(profile ?? EMPTY_PROFILE, week))
   const carried = Boolean(week) && !editing && !(profile?.onboarded)
+  // Arrived with a goal for the course package (typed on the landing page): finish on the package, not the desk.
+  const [packageGoal] = useState(() => (editing ? '' : sessionStorage.getItem(PACKAGE_GOAL_KEY) ?? ''))
   // First-year MBAs must pick a cohort (it sets their core class times), or say they don't know it yet.
   const [cohortUnsure, setCohortUnsure] = useState(() => week?.year === 'admit')
   const [step, setStep] = useState(0)
@@ -85,7 +88,13 @@ export default function Onboarding({ editing = false }: { editing?: boolean }) {
   useEffect(() => { api.programs().then((r) => setPrograms(r.programs ?? [])).catch(() => undefined) }, [])
 
   useEffect(() => {
-    if (profile) { setP(fromHomeWeek(profile, editing ? null : week)); setCompletedText(profile.completed.join(', ')) }
+    if (profile) {
+      const next = fromHomeWeek(profile, editing ? null : week)
+      // A goal typed on the landing page fills the goals step, so a new student doesn't type it twice.
+      if (packageGoal && !next.goal_short && !next.goal_long) next.goal_long = packageGoal.slice(0, 300)
+      setP(next)
+      setCompletedText(profile.completed.join(', '))
+    }
   }, [profile, editing, week])
 
   const courses = useMemo(() => parseCourses(completedText), [completedText])
@@ -297,8 +306,13 @@ export default function Onboarding({ editing = false }: { editing?: boolean }) {
             <button type="button" className="btn primary" disabled={!canNext} onClick={() => setStep((s) => s + 1)}>Next →</button>
           ) : (
             <>
-              <button type="button" className="btn" disabled={saving} onClick={() => save('find')}>Save and ask Elihu for picks</button>
-              <button type="button" className="btn primary" disabled={saving} onClick={() => save('home')}>Save and see my desk</button>
+              {packageGoal ? <>
+                <button type="button" className="btn" disabled={saving} onClick={() => save('home')}>Save and see my desk</button>
+                <button type="button" className="btn primary" disabled={saving} onClick={() => save('find')}>Save and see my course package</button>
+              </> : <>
+                <button type="button" className="btn" disabled={saving} onClick={() => save('find')}>Save and ask Elihu for picks</button>
+                <button type="button" className="btn primary" disabled={saving} onClick={() => save('home')}>Save and see my desk</button>
+              </>}
             </>
           )}
         </div>

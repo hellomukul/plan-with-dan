@@ -46,6 +46,7 @@ from crew import memory as chat_memory  # noqa: E402
 from crew.chat import run_turn, stream_turn  # noqa: E402
 from crew.desk import apply_states, brief as desk_brief, scan as desk_scan, set_state as set_desk_state  # noqa: E402
 from crew.recommender import recommend  # noqa: E402
+from crew.package import PACKAGE_TERM, build_package  # noqa: E402
 from fit import FitContext, best_fits  # noqa: E402
 from db import (  # noqa: E402
     USER_TABLES, ActionLog, AuditEvent, BidReport, ChatMemory, ChatMessage, DeskBrief, DeskState, FitDismissal, GlobalChoice,
@@ -56,7 +57,7 @@ from ics import build_calendar, google_template_link, meeting_dates  # noqa: E40
 from programs import CODES as PROGRAM_CODES, PROGRAMS  # noqa: E402
 from shortlist import MAX_SHORTLIST, compare as compare_shortlist  # noqa: E402
 from planning import (
-    min_units, max_units,  # noqa: E402
+    min_units, max_units, add_drop_closed, planning_terms,  # noqa: E402
     PlanRow, bid_stats, conflicts, core_load, effective_gsa_used, gsa_check, requirement_progress, suggest_bids,
     units_by_term, week_review,
 )
@@ -443,19 +444,6 @@ class PlanIn(BaseModel):
     target_term: Optional[Literal["202703", "202801"]] = None
 
 
-TWO_YEAR_PROGRAMS = ("MBA", "MBA-JOINT", "EMBA")
-
-
-def planning_terms(profile: dict) -> list[str]:
-    """The terms this student can plan: this year, plus 2027-28 for anyone with a second year still ahead."""
-    program, year = profile.get("program") or "MBA", profile.get("year") or ""
-    if program in TWO_YEAR_PROGRAMS and year == "admit":
-        return ["202703", "202801"]  # admitted for fall 2027: their first year is 2027-28
-    if program in TWO_YEAR_PROGRAMS and year in ("1", ""):
-        return ["202603", "202701", "202703", "202801"]
-    return ["202603", "202701"]
-
-
 class PlanPatch(BaseModel):
     status: Optional[Literal["planned", "bidding", "enrolled", "completed"]] = None
     bid_points: Optional[int] = Field(None, ge=0, le=5000)
@@ -533,9 +521,6 @@ def get_plan(user: User = Depends(current_user), db: Session = Depends(get_db)):
     }
 
 
-ADD_DROP_DAYS = 7  # SOM add/drop runs about a week from the start of each session (Bulletin course policies)
-
-
 def _check_section_allowed(db: Session, user_id: int, sec, status: str = "planned") -> None:
     """Students can only plan sections open to their program that haven't already ended."""
     program = (db.get(Profile, user_id) or Profile(user_id=user_id)).program or "MBA"
@@ -547,10 +532,7 @@ def _check_section_allowed(db: Session, user_id: int, sec, status: str = "planne
         raise HTTPException(400, f"{sec.number} section {sec.section} has already ended. Mark it completed instead.")
     # Under way and past its ~1-week add/drop: you can't newly plan or bid on it, but if you're taking it, add it
     # as enrolled so it shows on your week and calendar.
-    # (a start date more than ~10 months before the end is a typo in SOM's feed, e.g. MGT 640 listed as 2026-03-22)
-    plausible = bool(sec.starts and (not sec.ends or (sec.ends - sec.starts).days < 300))
-    if (plausible and status in ("planned", "bidding")
-            and date.today() > sec.starts + timedelta(days=ADD_DROP_DAYS)):
+    if status in ("planned", "bidding") and add_drop_closed(sec):
         raise HTTPException(400, f"{sec.number} is already in session and add/drop has closed. "
                                  "If you're taking it, add it as enrolled.")
 
@@ -1362,9 +1344,64 @@ async def recommend_courses(request: Request, body: RecommendIn, user: User = De
 
 @app.get("/api/recommend/latest")
 def latest_recommendation(user: User = Depends(current_user), db: Session = Depends(get_db)):
-    row = db.exec(select(RecommendationRun).where(RecommendationRun.user_id == user.id)
+    row = db.exec(select(RecommendationRun).where(RecommendationRun.user_id == user.id,
+                                                  RecommendationRun.term_code != PACKAGE_TERM)
                   .order_by(RecommendationRun.id.desc())).first()
     return {"result": json.loads(row.result) if row else None}
+
+
+# ------------------------------------------------------------------ course package (goal → ranked, every quarter left)
+
+class PackageIn(BaseModel):
+    goal: str = Field(min_length=3, max_length=600)
+
+
+@app.post("/api/package")
+@limiter.limit("6/minute")
+async def course_package(request: Request, body: PackageIn, user: User = Depends(current_user),
+                         db: Session = Depends(get_db)):
+    return await build_package(db, user.id, body.goal)
+
+
+@app.get("/api/package/latest")
+def latest_package(user: User = Depends(current_user), db: Session = Depends(get_db)):
+    row = db.exec(select(RecommendationRun).where(RecommendationRun.user_id == user.id,
+                                                  RecommendationRun.term_code == PACKAGE_TERM)
+                  .order_by(RecommendationRun.id.desc())).first()
+    return {"result": json.loads(row.result) if row else None}
+
+
+class PackageItemIn(BaseModel):
+    course_id: str = Field(max_length=40)
+    target_term: Optional[Literal["202703", "202801"]] = None
+
+
+class PackageApplyIn(BaseModel):
+    items: list[PackageItemIn] = Field(min_length=1, max_length=20)
+
+
+@app.post("/api/package/apply")
+def apply_package(body: PackageApplyIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Add every course the student kept. Each goes through the same checks as a single add; one that can't be
+    added (already planned, add/drop closed, ...) is reported back and skipped, never fatal."""
+    cat = get_catalog()
+    added, skipped, clashes = [], [], []
+    with _one_at_a_time(user.id):
+        for it in body.items:
+            sec = cat.by_id.get(it.course_id)
+            label = sec.number if sec else it.course_id
+            try:
+                r = _add_plan(PlanIn(course_id=it.course_id, added_by="dan", target_term=it.target_term), user, db)
+            except HTTPException as exc:
+                skipped.append({"number": label, "reason": str(exc.detail)})
+                continue
+            if r.get("unchanged"):
+                skipped.append({"number": label, "reason": "already in your plan"})
+                continue
+            added.append({"number": label, "term": term_name(it.target_term or (sec.term if sec else "")),
+                          "expected": bool(it.target_term), "action_id": r.get("action_id")})
+            clashes += [c for c in r.get("clashes", []) if c not in clashes]
+    return {"added": added, "skipped": skipped, "clashes": clashes}
 
 
 # ------------------------------------------------------------------ usage + safety log

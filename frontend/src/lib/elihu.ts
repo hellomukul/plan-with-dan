@@ -35,3 +35,6 @@ export function splitFollowups(summary: string, given?: string[] | null): { text
   const list = (given?.length ? given : parsed).map((q) => q.trim()).filter(Boolean)
   return { text, followups: [...new Set(list)].slice(0, 3) }
 }
+
+/** A goal handed to the course package from another page (landing goal box, the Desk's next step). Read once there. */
+export const PACKAGE_GOAL_KEY = 'pwd_package_goal'

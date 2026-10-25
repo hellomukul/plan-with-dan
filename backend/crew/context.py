@@ -7,7 +7,7 @@ from datetime import date
 
 from sqlmodel import Session, select
 
-from catalog import Catalog, Section, get_catalog
+from catalog import Catalog, Section, get_catalog, project
 from db import BidReport, GlobalChoice, PlanItem, Profile
 from planning import PlanRow
 from crew.runtime import Run
@@ -54,7 +54,8 @@ def load_context(run: Run) -> StudentContext:
         for item in run.db.exec(select(PlanItem).where(PlanItem.user_id == run.user_id)).all():
             sec = catalog.by_id.get(item.course_id)
             if sec:
-                plan.append(PlanRow(sec, item.status))
+                # a 2027-28 plan item is stored as this year's section: show it in its own term, times TBA
+                plan.append(PlanRow(project(sec, item.target_term) if item.target_term else sec, item.status))
         choices = [c.model_dump(include={"option_key", "target_term", "status", "note"})
                    for c in run.db.exec(select(GlobalChoice).where(GlobalChoice.user_id == run.user_id)).all()]
     return StudentContext(run=run, catalog=catalog, profile=profile, plan=plan, global_choices=choices)

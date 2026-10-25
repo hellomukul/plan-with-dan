@@ -1,8 +1,10 @@
 /* Dan's Desk: the signed-in home. Built to be glanced at between classes:
+   0. "Your next step": one card, one primary button, picked from the plan (see nextStep below). Everything
+      else on the Desk is quieter (muted section headings, secondary-looking buttons), so this is what to click.
    1. today strip (next class, room, live countdown) + a countdown tile (course auction or next deadline)
    2. this week (at most three things, deadlines and decisions mixed, each with one next action) + progress rings
    3. a small timetable of this week's real class meetings
-   The brief from Dan is one line under the greeting. Recent actions (with undo) live on My plan. */
+   The brief from Dan is one quiet line under the next-step card. Recent actions (with undo) live on My plan. */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   ArrowRight, CalendarClock, CalendarDays, Check, CircleAlert, Gavel, Plus, Sparkles,
@@ -11,6 +13,7 @@ import {
   api, auctionApplies, type CalendarEvents, type DeskCard, type DeskResponse, type ProgramsInfo, type Section,
 } from '../api'
 import CourseDrawer from '../components/CourseDrawer'
+import Elihu from '../mascots/Elihu'
 import HandsomeDan from '../mascots/HandsomeDan'
 import ProgressRing from '../components/ProgressRing'
 import Timetable from '../components/Timetable'
@@ -18,9 +21,10 @@ import TodayStrip from '../components/TodayStrip'
 import {
   WEEKDAY_CODES, auctionPhase, clockText, countdown, dayDiff, dayName, dayStart, isoDay, msToNextMinute, shownWeek, type Meeting,
 } from '../lib/deskTime'
-import { PLANNING_TERM, TERM_NAMES } from '../lib/format'
+import { DAY_NAMES, PLANNING_TERM, TERM_NAMES, termName } from '../lib/format'
 import { useApp, type Route } from '../state'
 import './desk.css'
+import { PACKAGE_GOAL_KEY } from '../lib/elihu'
 
 /* ------------------------------------------------------------------ clock */
 
@@ -348,6 +352,89 @@ function Rings({ go, programs }: { go: (r: Route) => void; programs: ProgramsInf
   )
 }
 
+/* ------------------------------------------------------------------ your next step */
+
+/** Read and cleared by the course-package screen (#/find), which prefills its goal box with it. */
+const readPendingGoal = () => { try { return sessionStorage.getItem(PACKAGE_GOAL_KEY)?.trim() ?? '' } catch { return '' } }
+const sentence = (t: string) => (/[.!?]$/.test(t) ? t : `${t}.`)
+
+interface NextStepPick { kind: 'package' | 'clash' | 'review'; title: string; detail: string; button: string; run: () => void }
+
+/** One next step, simplest rule first:
+    1. a goal typed on the home page that never reached the package screen, or no electives in the plan yet:
+       build the course package (goal prefilled from that goal, else from the profile's goals);
+    2. a clash in the plan: fix it on My plan;
+    3. otherwise: review the plan. */
+function NextStep({ go }: { go: (r: Route) => void }) {
+  const { plan, profile } = useApp()
+  const [pendingGoal] = useState(readPendingGoal)
+  // If the plan can't load, don't hold a skeleton forever: the package is the right first step anyway.
+  const [waited, setWaited] = useState(false)
+  useEffect(() => {
+    if (plan) return
+    const t = window.setTimeout(() => setWaited(true), 2500)
+    return () => window.clearTimeout(t)
+  }, [plan])
+
+  if (!plan && !waited) {
+    return (
+      <section className="card dk-next" aria-label="Your next step" aria-busy="true">
+        <span className="skeleton dk-next-art" />
+        <div className="dk-next-body">
+          <span className="dk-next-eyebrow">Your next step</span>
+          <span className="dk-next-title"><span className="skeleton dk-next-skel" /></span>
+          <span className="dk-next-detail"><span className="skeleton dk-next-skel long" /></span>
+        </div>
+        <span className="skeleton dk-next-btn dk-next-btn-skel" />
+      </section>
+    )
+  }
+
+  const electives = (plan?.items ?? []).filter((i) => !i.section.core)
+  const clashes = Object.values(plan?.terms ?? {}).flatMap((t) => t.conflicts)
+  let pick: NextStepPick
+  if (pendingGoal || !plan || electives.length === 0) {
+    const profileGoal = [profile?.goal_short, profile?.goal_long].map((g) => g?.trim() ?? '').filter(Boolean).map(sentence).join(' ')
+    const goal = pendingGoal || profileGoal
+    pick = {
+      kind: 'package', title: 'Build your course package', button: 'Build my course package',
+      detail: goal ? `Elihu ranks courses across every quarter you have left, for your goal: “${goal}”`
+        : 'Tell Elihu your goal in your own words. He ranks courses across every quarter you have left.',
+      run: () => {
+        try { if (goal) sessionStorage.setItem(PACKAGE_GOAL_KEY, goal) } catch { /* storage off: the package screen asks */ }
+        go('find')
+      },
+    }
+  } else if (clashes.length) {
+    const c = clashes[0]
+    const more = clashes.length - 1
+    pick = {
+      kind: 'clash', title: `${c.a} clashes with ${c.b}`, button: 'Fix the clash', run: () => go('plan'),
+      detail: `${termName(c.term)}, ${DAY_NAMES[c.day] ?? c.day} ${c.window}.${more ? ` ${more} more ${more === 1 ? 'clash' : 'clashes'} after this.` : ''} Pick one, or switch a section.`,
+    }
+  } else {
+    const p = plan.progress
+    pick = {
+      kind: 'review', title: 'Review your plan', button: 'Review my plan', run: () => go('plan'),
+      detail: `${electives.length} ${electives.length === 1 ? 'elective' : 'electives'} planned, ${fmtUnits(p.planned_total)} of ${p.total_target || 72} units. Check sections, bids and requirements.`,
+    }
+  }
+  return (
+    <section className={`card dk-next is-${pick.kind}${pick.kind === 'package' ? ' elihu-host' : ''}`} aria-labelledby="dk-next-title">
+      <span className="dk-next-art" aria-hidden="true">
+        {pick.kind === 'package' ? <Elihu size={34} /> : pick.kind === 'clash' ? <CircleAlert className="icon lg" />
+          : <HandsomeDan size={36} furColor="#f4b183" bandanaColor="#00356b" />}
+      </span>
+      <div className="dk-next-body">
+        <span className="dk-next-eyebrow">Your next step</span>
+        <h2 id="dk-next-title" className="dk-next-title" title={pick.title}>{pick.title}</h2>
+        <p className="dk-next-detail" title={pick.detail}>{pick.detail}</p>
+      </div>
+      <button type="button" className="btn primary lg dk-next-btn" onClick={pick.run}>{pick.button}<ArrowRight className="icon" /></button>
+    </section>
+  )
+}
+
 /* ------------------------------------------------------------------ week view */
 
 function WeekView({ cal, now, onOpen, go, error, onRetry }: {
@@ -489,28 +576,31 @@ export default function Home() {
         <div className="dk-hello">
           <span className="dk-date">{now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</span>
           <h1>{hello}{first ? `, ${first}` : ''}</h1>
-          <div className="dk-brief" aria-live="polite">
-            <span className="dk-brief-dot" aria-hidden="true" />
-            {desk ? (
-              <span className="dk-brief-text" title={desk.brief.text}>{brief}</span>
-            ) : <span className="skeleton dk-brief-skel" />}
-            {briefMore && (
-              <button type="button" className="link-btn small dk-brief-more" onClick={() => setBriefOpen((v) => !v)}
-                aria-expanded={briefOpen} aria-controls="dk-brief-full">
-                {briefOpen ? 'Less' : 'More'}
-              </button>
-            )}
-            {/* The full brief opens over the page (not inline), so the cards below never move. */}
-            {briefOpen && desk && (
-              <div id="dk-brief-full" className="dk-brief-pop" role="region" aria-label="Dan's full brief"
-                onKeyDown={(e) => { if (e.key === 'Escape') setBriefOpen(false) }}>
-                <p>{desk.brief.text}</p>
-                <button type="button" className="link-btn small" onClick={() => setBriefOpen(false)}>Close</button>
-              </div>
-            )}
-          </div>
         </div>
       </header>
+
+      <NextStep go={go} />
+
+      <div className="dk-brief" aria-live="polite">
+        <span className="dk-brief-dot" aria-hidden="true" />
+        {desk ? (
+          <span className="dk-brief-text" title={desk.brief.text}>{brief}</span>
+        ) : <span className="skeleton dk-brief-skel" />}
+        {briefMore && (
+          <button type="button" className="link-btn small dk-brief-more" onClick={() => setBriefOpen((v) => !v)}
+            aria-expanded={briefOpen} aria-controls="dk-brief-full">
+            {briefOpen ? 'Less' : 'More'}
+          </button>
+        )}
+        {/* The full brief opens over the page (not inline), so the cards below never move. */}
+        {briefOpen && desk && (
+          <div id="dk-brief-full" className="dk-brief-pop" role="region" aria-label="Dan's full brief"
+            onKeyDown={(e) => { if (e.key === 'Escape') setBriefOpen(false) }}>
+            <p>{desk.brief.text}</p>
+            <button type="button" className="link-btn small" onClick={() => setBriefOpen(false)}>Close</button>
+          </div>
+        )}
+      </div>
 
       <div className="dk-grid">
         <TodayStrip

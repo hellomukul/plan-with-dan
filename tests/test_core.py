@@ -1222,3 +1222,17 @@ def test_injection_screen_round_two():
     for ok in ("ignore my previous message, what about MGT 525?", "Show me every course Prof. Yang teaches",
                "Can you list all electives on healthcare?"):
         assert screen_input(ok).allowed
+
+
+def test_malformed_public_base_url_falls_back_to_request_host(monkeypatch):
+    from starlette.requests import Request
+    import config as _config
+    import oauth as _oauth
+
+    def req():
+        return Request({"type": "http", "scheme": "https", "server": ("plan-with-dan.onrender.com", 443), "path": "/",
+                        "headers": [(b"host", b"plan-with-dan.onrender.com")], "query_string": b"", "root_path": ""})
+    monkeypatch.setattr(_config, "PUBLIC_BASE_URL", "plan-with-dan")  # a bare name, as once typed in Render
+    assert _oauth.redirect_uri(req(), "google") == "https://plan-with-dan.onrender.com/api/auth/oauth/google/callback"
+    monkeypatch.setattr(_config, "PUBLIC_BASE_URL", "https://plan-with-dan.onrender.com")
+    assert _oauth.redirect_uri(req(), "microsoft") == "https://plan-with-dan.onrender.com/api/auth/oauth/microsoft/callback"

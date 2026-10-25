@@ -119,7 +119,9 @@ def _provider(key: str) -> Provider:
 
 
 def _base_url(request: Request) -> str:
-    if config.PUBLIC_BASE_URL:
+    # Only a full address counts ("https://plan-with-dan.onrender.com"); a bare name like "plan-with-dan" would send
+    # Google/Microsoft an invalid redirect URI, so fall back to the address the request came in on.
+    if config.PUBLIC_BASE_URL.startswith(("https://", "http://localhost", "http://127.0.0.1")):
         return config.PUBLIC_BASE_URL
     host = request.headers.get("x-forwarded-host") if TRUST_PROXY else None
     if host:

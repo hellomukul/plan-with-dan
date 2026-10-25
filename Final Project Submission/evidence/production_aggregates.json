@@ -1,0 +1,162 @@
+{
+ "note": "Read-only COUNT/SUM aggregates from the production database, Oct 25, 2026 (~21:00 UTC). No emails, names or URLs.",
+ "users_total": 7,
+ "users_example_com_test": 0,
+ "users_yale_edu": 4,
+ "profiles_onboarded": 7,
+ "active_7d_last_seen": 5,
+ "active_30d_last_seen": 5,
+ "activity_days_rows": 5,
+ "users_with_2plus_active_days": 0,
+ "plan_items": 35,
+ "users_with_plan": 4,
+ "shortlist_items": 8,
+ "recommendation_runs": 21,
+ "package_runs": 4,
+ "questions_dan": 14,
+ "questions_news": 1,
+ "users_asked_dan": 4,
+ "outside_courses": "ERR ProgrammingError",
+ "personal_events": 0,
+ "global_choices": 1,
+ "bid_reports_student": 0,
+ "spend_by_feature": {
+  "chat": {
+   "runs": 21,
+   "input": 476743,
+   "cached": 363503,
+   "output": 26295,
+   "web": 0,
+   "usd": 0.02811
+  },
+  "desk": {
+   "runs": 16,
+   "input": 27585,
+   "cached": 12993,
+   "output": 4396,
+   "web": 0,
+   "usd": 0.00379
+  },
+  "news": {
+   "runs": 2,
+   "input": 53861,
+   "cached": 23913,
+   "output": 1532,
+   "web": 8,
+   "usd": 0.084
+  },
+  "package": {
+   "runs": 4,
+   "input": 30503,
+   "cached": 7192,
+   "output": 6869,
+   "web": 0,
+   "usd": 0.00584
+  },
+  "public": {
+   "runs": 18,
+   "input": 186890,
+   "cached": 96592,
+   "output": 13890,
+   "web": 4,
+   "usd": 0.05694
+  },
+  "recommend": {
+   "runs": 17,
+   "input": 141085,
+   "cached": 15918,
+   "output": 30336,
+   "web": 0,
+   "usd": 0.02784
+  }
+ },
+ "spend_by_agent": {
+  "AI News Desk": {
+   "runs": 3,
+   "input": 83254,
+   "cached": 29829,
+   "output": 2571,
+   "usd": 0.12693
+  },
+  "Career Coach": {
+   "runs": 5,
+   "input": 165593,
+   "cached": 124458,
+   "output": 7191,
+   "usd": 0.00895
+  },
+  "Chief of Staff": {
+   "runs": 16,
+   "input": 27585,
+   "cached": 12993,
+   "output": 4396,
+   "usd": 0.00379
+  },
+  "Course Scout": {
+   "runs": 8,
+   "input": 235783,
+   "cached": 185256,
+   "output": 9986,
+   "usd": 0.0119
+  },
+  "Critic": {
+   "runs": 17,
+   "input": 26711,
+   "cached": 0,
+   "output": 8492,
+   "usd": 0.00692
+  },
+  "Curator": {
+   "runs": 17,
+   "input": 114374,
+   "cached": 15918,
+   "output": 21844,
+   "usd": 0.02093
+  },
+  "Dispatcher": {
+   "runs": 39,
+   "input": 86033,
+   "cached": 48930,
+   "output": 8840,
+   "usd": 0.00862
+  },
+  "Elihu": {
+   "runs": 4,
+   "input": 30503,
+   "cached": 7192,
+   "output": 6869,
+   "usd": 0.00584
+  },
+  "Planner": {
+   "runs": 8,
+   "input": 75088,
+   "cached": 53135,
+   "output": 7287,
+   "usd": 0.00637
+  },
+  "SOM Guide": {
+   "runs": 14,
+   "input": 71743,
+   "cached": 42400,
+   "output": 5842,
+   "usd": 0.00628
+  }
+ },
+ "spend_total_usd": 0.20652,
+ "users_with_ai_spend": 7,
+ "max_user_spend_usd": 0.12837,
+ "first_usage_at": "2026-10-24",
+ "first_user_at": "2026-10-24",
+ "audit_by_kind": {
+  "recommendation_dropped": 8,
+  "oauth_state_rejected": 2,
+  "oauth_signup": 2,
+  "oauth_needs_link": 1,
+  "input_blocked": 4,
+  "oauth_login": 2
+ },
+ "onboarded_by_program_year": {
+  "MBA/2": 1,
+  "MBA/1": 6
+ }
+}

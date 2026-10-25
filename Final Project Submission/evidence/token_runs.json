@@ -1,0 +1,666 @@
+{
+ "note": "Real runs on Oct 25, 2026: FastAPI TestClient, scratch SQLite DB, gpt-6-luna via Portkey. 'usage' is copied from each API response.",
+ "runs": {
+  "chat": {
+   "status": 200,
+   "seconds": 15.7,
+   "agent": "Course Scout",
+   "blocked": false,
+   "safety": [],
+   "usage": {
+    "run_id": "4140d632336f",
+    "model": "gpt-6-luna",
+    "agents": [
+     {
+      "agent": "Dispatcher",
+      "requests": 1,
+      "input_tokens": 2114,
+      "cached_tokens": 1859,
+      "output_tokens": 224,
+      "web_searches": 0,
+      "cost_usd": 0.000156,
+      "seconds": 2.770436
+     },
+     {
+      "agent": "Course Scout",
+      "requests": 5,
+      "input_tokens": 24321,
+      "cached_tokens": 17848,
+      "output_tokens": 1267,
+      "web_searches": 0,
+      "cost_usd": 0.001459,
+      "seconds": 12.915173
+     }
+    ],
+    "total": {
+     "requests": 6,
+     "input_tokens": 26435,
+     "cached_tokens": 19707,
+     "output_tokens": 1491,
+     "web_searches": 0,
+     "cost_usd": 0.001615
+    },
+    "run_budget_usd": 0.05,
+    "spent_today_usd": 0.001615,
+    "daily_budget_usd": 0.5
+   },
+   "answer": "Best fit: **MGT 995 Sustainable Innovation in Healthcare** \u2014 Spring 1, Mondays 4:10\u20137:10 p.m.  \nIts description covers healthcare innovation, quality, efficiency, and patient service delivery\u2014useful context for leading a healthcare services company. It fits your no-early-class and Friday-free preferences.\n\n- **MGT 698 Healthcare Policy, Finance, and Economics** \u2014 full term, Mondays and Wednesdays 10:05\u201311:25 a.m. Its focus on healthcare financing and delivery models aligns closely with your healthcare private equity goal. The meeting times meet your stated preferences, but the fit checker flagged an overlap with MGT 423 \u00a702; confirm your schedule before pursuing it.\n\nI\u2019ve added an \u201cadd to plan\u201d option for MGT 995; you decide whether to use it.",
+   "trace": [
+    {
+     "kind": "agent_start",
+     "t_ms": 2,
+     "agent": "Dispatcher"
+    },
+    {
+     "kind": "agent_done",
+     "t_ms": 2774,
+     "agent": "Dispatcher",
+     "tool_calls": [
+      "final_result"
+     ],
+     "usage": {
+      "agent": "Dispatcher",
+      "requests": 1,
+      "input_tokens": 2114,
+      "cached_tokens": 1859,
+      "output_tokens": 224,
+      "web_searches": 0,
+      "cost_usd": 0.000156,
+      "seconds": 2.770436
+     }
+    },
+    {
+     "kind": "route",
+     "t_ms": 2774,
+     "specialist": "course_scout",
+     "task": "Find Spring 2027 Yale SOM electives focused on healthcare strategy or healthcare finance that fit this first-year full-time MBA student's schedule. Check course offerings and meeting times against their stated preferences: no classes starting before 9:00 a.m. and keep Fridays free. Their plan is currently empty, so assess schedule fit against those preferences only; do not imply conflicts with core courses unless verified. Their short-term goal is a healthcare private equity internship and long-term goal is leading a healthcare services company. Use tool-verified course details only, and explain briefly why each suggested course fits their goals based on its description. If no matching course can be verified, say so and point to the SOM course directory."
+    },
+    {
+     "kind": "agent_start",
+     "t_ms": 2775,
+     "agent": "Course Scout"
+    },
+    {
+     "kind": "tool",
+     "t_ms": 4407,
+     "tool": "search_catalog",
+     "args": {
+      "query": "healthcare strategy healthcare finance",
+      "term": "202701"
+     },
+     "allowed": true
+    },
+    {
+     "kind": "tool",
+     "t_ms": 6413,
+     "tool": "course_details",
+     "args": {
+      "key": "MGT 698"
+     },
+     "allowed": true
+    },
+    {
+     "kind": "tool",
+     "t_ms": 6413,
+     "tool": "check_fit",
+     "args": {
+      "key": "MGT 698"
+     },
+     "allowed": true
+    },
+    {
+     "kind": "tool",
+     "t_ms": 6414,
+     "tool": "search_catalog",
+     "args": {
+      "query": "healthcare provider strategy management industry economics finance",
+      "term": "202701"
+     },
+     "allowed": true
+    },
+    {
+     "kind": "tool",
+     "t_ms": 10985,
+     "tool": "course_details",
+     "args": {
+      "key": "MGT 995"
+     },
+     "allowed": true
+    },
+    {
+     "kind": "tool",
+     "t_ms": 10985,
+     "tool": "check_fit",
+     "args": {
+      "key": "MGT 995"
+     },
+     "allowed": true
+    },
+    {
+     "kind": "tool",
+     "t_ms": 13245,
+     "tool": "suggest_add",
+     "args": {
+      "key": "MGT 995"
+     },
+     "allowed": true
+    },
+    {
+     "kind": "agent_done",
+     "t_ms": 15693,
+     "agent": "Course Scout",
+     "tool_calls": [
+      "search_catalog",
+      "course_details",
+      "check_fit",
+      "search_catalog",
+      "course_details",
+      "check_fit",
+      "suggest_add"
+     ],
+     "usage": {
+      "agent": "Course Scout",
+      "requests": 5,
+      "input_tokens": 24321,
+      "cached_tokens": 17848,
+      "output_tokens": 1267,
+      "web_searches": 0,
+      "cost_usd": 0.001459,
+      "seconds": 12.915173
+     }
+    }
+   ]
+  },
+  "ldr": {
+   "status": 200,
+   "seconds": 10.82,
+   "agent": "Planner",
+   "blocked": false,
+   "safety": [],
+   "usage": {
+    "run_id": "5b521bba5d9d",
+    "model": "gpt-6-luna",
+    "agents": [
+     {
+      "agent": "Dispatcher",
+      "requests": 1,
+      "input_tokens": 2323,
+      "cached_tokens": 1859,
+      "output_tokens": 237,
+      "web_searches": 0,
+      "cost_usd": 0.000183,
+      "seconds": 3.285269
+     },
+     {
+      "agent": "Planner",
+      "requests": 3,
+      "input_tokens": 10392,
+      "cached_tokens": 8511,
+      "output_tokens": 427,
+      "web_searches": 0,
+      "cost_usd": 0.000487,
+      "seconds": 7.509898
+     }
+    ],
+    "total": {
+     "requests": 4,
+     "input_tokens": 12715,
+     "cached_tokens": 10370,
+     "output_tokens": 664,
+     "web_searches": 0,
+     "cost_usd": 0.00067
+    },
+    "run_budget_usd": 0.05,
+    "spent_today_usd": 0.002285,
+    "daily_budget_usd": 0.5
+   },
+   "answer": "The Spring 2027 course tool flags these **9 courses** for LDR:\n\n- **MGT 623 Strategic Leadership Across Sectors**\n- **MGT 896 America\u2019s Future Role in the Global Economy**\n- **MGT 581 Education Policy and Leadership**\n- **MGT 679 Leading Organizational Change**\n- **MGT 801 Impact Measurement & Financial Reporting in the Social Sector**\n- **MGT 526 Market Failures and Economic Policy in Developing Countries**\n- **MGT 532 Business Ethics**\n- **MGT 674 Leading Small and Medium Enterprises**\n- **MGT 863 Political Ethics and Issues for Organizations**\n\nThe app infers LDR eligibility from the public course-feed MGLD flag. Confirm the approved courses on the internal LDR list before choosing one. The tool flags **MGT 532 Business Ethics**, though its listing says AM students only, so check your eligibility.",
+   "trace": [
+    {
+     "kind": "agent_start",
+     "t_ms": 3,
+     "agent": "Dispatcher"
+    },
+    {
+     "kind": "agent_done",
+     "t_ms": 3289,
+     "agent": "Dispatcher",
+     "tool_calls": [
+      "final_result"
+     ],
+     "usage": {
+      "agent": "Dispatcher",
+      "requests": 1,
+      "input_tokens": 2323,
+      "cached_tokens": 1859,
+      "output_tokens": 237,
+      "web_searches": 0,
+      "cost_usd": 0.000183,
+      "seconds": 3.285269
+     }
+    },
+    {
+     "kind": "route",
+     "t_ms": 3289,
+     "specialist": "planner",
+     "task": "For this first-year full-time MBA student, identify which spring 2027 courses count toward the Leadership Distribution Requirement (LDR). Use current SOM course/catalog tools to find spring offerings flagged for LDR, and report course numbers and titles. Explain that the app infers LDR from the public MGLD flag and the student should confirm the approved courses on the internal list. Their plan is currently empty; prior discussion mentioned MGT 995 Sustainable Innovation in Healthcare and MGT 698 Healthcare Policy, Finance, and Economics, but do not assume either counts unless the tool confirms it."
+    },
+    {
+     "kind": "agent_start",
+     "t_ms": 3289,
+     "agent": "Planner"
+    },
+    {
+     "kind": "tool",
+     "t_ms": 4958,
+     "tool": "my_profile_and_plan",
+     "args": {},
+     "allowed": true
+    },
+    {
+     "kind": "tool",
+     "t_ms": 6650,
+     "tool": "ldr_courses",
+     "args": {
+      "term": "202701"
+     },
+     "allowed": true
+    },
+    {
+     "kind": "agent_done",
+     "t_ms": 10807,
+     "agent": "Planner",
+     "tool_calls": [
+      "my_profile_and_plan",
+      "ldr_courses"
+     ],
+     "usage": {
+      "agent": "Planner",
+      "requests": 3,
+      "input_tokens": 10392,
+      "cached_tokens": 8511,
+      "output_tokens": 427,
+      "web_searches": 0,
+      "cost_usd": 0.000487,
+      "seconds": 7.509898
+     }
+    }
+   ]
+  },
+  "package": {
+   "status": 200,
+   "seconds": 11.71,
+   "blocked": false,
+   "usage": {
+    "run_id": "0d6a18a9ad9c",
+    "model": "gpt-6-luna",
+    "agents": [
+     {
+      "agent": "Elihu",
+      "requests": 1,
+      "input_tokens": 7534,
+      "cached_tokens": 1826,
+      "output_tokens": 1405,
+      "web_searches": 0,
+      "cost_usd": 0.001292,
+      "seconds": 11.625971
+     }
+    ],
+    "total": {
+     "requests": 1,
+     "input_tokens": 7534,
+     "cached_tokens": 1826,
+     "output_tokens": 1405,
+     "web_searches": 0,
+     "cost_usd": 0.001292
+    },
+    "run_budget_usd": 0.05,
+    "spent_today_usd": 0.003577,
+    "daily_budget_usd": 0.5
+   },
+   "answer": "This package pairs PE deal, valuation, and healthcare-market skills with practical AI decision-making and organizational strategy\u2014an especially natural bridge from your healthcare consulting background. Prioritize the PE and healthcare finance foundations, then layer in AI strategy; the Fall 2027 and Spring 2028 options are expected courses based on this year\u2019s offerings.",
+   "items": [
+    {
+     "rank": 1,
+     "number": "MGT 846",
+     "title": "Introduction to Private Equity",
+     "tier": "essential",
+     "why": "Builds the broad practitioner-level foundation for evaluating healthcare PE opportunities and understanding how the asset class works.",
+     "evidence": "a holistic view of the Private Equity business from a practitioner\u2019s perspective",
+     "taught_with": [],
+     "placed": "Spring 2027 Spring-1 2027",
+     "fits": true,
+     "expected": false
+    },
+    {
+     "rank": 2,
+     "number": "MGT 847",
+     "title": "Private Equity: Leveraged Buyouts",
+     "tier": "essential",
+     "why": "Develops the LBO screening and diligence lens central to assessing buyout targets, including healthcare companies.",
+     "evidence": "how private equity professionals evaluate opportunities and manage due diligence",
+     "taught_with": [],
+     "placed": "Fall 2027 Fall-2 2027",
+     "fits": true,
+     "expected": true
+    },
+    {
+     "rank": 3,
+     "number": "MGT 948",
+     "title": "Security Analysis & Valuation",
+     "tier": "essential",
+     "why": "Strengthens the fundamental valuation skills needed to judge a healthcare target\u2019s investment case.",
+     "evidence": "fundamental firm valuation is a primary part of the job",
+     "taught_with": [],
+     "placed": "Fall 2027 Fall full term 2027",
+     "fits": true,
+     "expected": true
+    },
+    {
+     "rank": 4,
+     "number": "MGT 843",
+     "title": "Private Equity: The Deal",
+     "tier": "strong",
+     "why": "Gives you hands-on practice evaluating an investment opportunity from the perspective of a PE investor.",
+     "evidence": "puts students in the seat of the private equity investor evaluating a live investment opportunity",
+     "taught_with": [],
+     "placed": "Fall 2027 Fall-2 2027",
+     "fits": true,
+     "expected": true
+    },
+    {
+     "rank": 5,
+     "number": "MGT 635",
+     "title": "Mergers & Acquisitions",
+     "tier": "strong",
+     "why": "Adds transactional and numerical M&A fluency relevant to executing deals at a private equity firm.",
+     "evidence": "expected within leading Wall Street investment banks and private equity firms",
+     "taught_with": [],
+     "placed": "Spring 2027 Spring-1 2027",
+     "fits": true,
+     "expected": false
+    },
+    {
+     "rank": 6,
+     "number": "MGT 698",
+     "title": "Healthcare Policy, Finance, and Economics",
+     "tier": "essential",
+     "why": "Builds healthcare-specific fluency in the financing and economic forces that shape targets and markets.",
+     "evidence": "Economic and Financial drivers of the domestic healthcare system",
+     "taught_with": [],
+     "placed": "Spring 2028 Spring full term 2028",
+     "fits": true,
+     "expected": true
+    },
+    {
+     "rank": 7,
+     "number": "MGT 663",
+     "title": "Innovation, Investments, and New Frontiers in Medicine",
+     "tier": "strong",
+     "why": "Helps you assess life-sciences investment opportunities across pharma, devices, and diagnostics.",
+     "evidence": "critical assessment of the life science industries",
+     "taught_with": [],
+     "placed": "Fall 2026 Fall-2 2026",
+     "fits": true,
+     "expected": false
+    },
+    {
+     "rank": 8,
+     "number": "MGT 992",
+     "title": "Health Care Strategy",
+     "tier": "strong",
+     "why": "Deepens your understanding of how healthcare-market incentives and competitive strategy affect profits and outcomes.",
+     "evidence": "how strategic interactions among firms impact profits, health outcomes, and social welfare",
+     "taught_with": [],
+     "placed": "Fall 2027 Fall full term 2027",
+     "fits": true,
+     "expected": true
+    },
+    {
+     "rank": 9,
+     "number": "MGT 860",
+     "title": "Generative AI for Managers",
+     "tier": "strong",
+     "why": "Gives you a manager\u2019s framework for evaluating and leading generative-AI integration in healthcare organizations.",
+     "evidence": "understand, evaluate, and lead the integration of Generative AI solutions within organizations",
+     "taught_with": [],
+     "placed": "Spring 2027 Spring-2 2027",
+     "fits": true,
+     "expected": false
+    },
+    {
+     "rank": 10,
+     "number": "MGT 554",
+     "title": "AI for Business Decisions",
+     "tier": "strong",
+     "why": "Builds practical understanding of how predictive and generative AI can inform repeatable business decisions.",
+     "evidence": "how organizations use predictive AI to make repeatable, data-informed decisions at scale",
+     "taught_with": [],
+     "placed": "Spring 2028 Spring full term 2028",
+     "fits": true,
+     "expected": true
+    },
+    {
+     "rank": 11,
+     "number": "MGT 634",
+     "title": "Empirical Strategy with AI",
+     "tier": "strong",
+     "why": "Adds hands-on practice applying AI-enabled quantitative methods to real business problems and strategic choices.",
+     "evidence": "hands-on experience applying quantitative methods to real-world business problems",
+     "taught_with": [],
+     "placed": "Fall 2027 Fall full term 2027",
+     "fits": true,
+     "expected": true
+    },
+    {
+     "rank": 12,
+     "number": "MGT 809",
+     "title": "Analytics in the Age of AI",
+     "tier": "worth a look",
+     "why": "Sharpens your ability to structure ambiguous AI-era business decisions around objectives, constraints, and tradeoffs.",
+     "evidence": "how to structure decisions",
+     "taught_with": [],
+     "placed": "Fall 2027 Fall-2 2027",
+     "fits": true,
+     "expected": true
+    }
+   ],
+   "trace": [
+    {
+     "kind": "retrieve",
+     "t_ms": 7,
+     "agent": "Retriever (code)",
+     "eligible": 159,
+     "shortlist": 36,
+     "approx_tokens_saved": 47672,
+     "terms": [
+      "Fall 2026",
+      "Spring 2027",
+      "Fall 2027",
+      "Spring 2028"
+     ]
+    },
+    {
+     "kind": "agent_start",
+     "t_ms": 7,
+     "agent": "Elihu"
+    },
+    {
+     "kind": "agent_done",
+     "t_ms": 11637,
+     "agent": "Elihu",
+     "tool_calls": [
+      "final_result"
+     ],
+     "usage": {
+      "agent": "Elihu",
+      "requests": 1,
+      "input_tokens": 7534,
+      "cached_tokens": 1826,
+      "output_tokens": 1405,
+      "web_searches": 0,
+      "cost_usd": 0.001292,
+      "seconds": 11.625971
+     }
+    },
+    {
+     "kind": "validate",
+     "t_ms": 11637,
+     "agent": "Validator (code)",
+     "kept": 12,
+     "dropped": [],
+     "quotes_removed": 0
+    },
+    {
+     "kind": "place",
+     "t_ms": 11638,
+     "agent": "Placer (code)",
+     "placed": {
+      "Fall 2026": 19.5,
+      "Spring 2027": 19.0,
+      "Fall 2027": 18.0,
+      "Spring 2028": 8.0
+     },
+     "clashing": []
+    }
+   ]
+  },
+  "desk": {
+   "status": 200,
+   "seconds": 3.42,
+   "brief": {
+    "text": "By Jan 26, add 3 Spring 2027 units to reach the 16-unit minimum; you currently have 13, including your cohort core. Next, choose a Global Studies path by Mar 8\u2014you still have all 10 funded days, enough for an International Experience\u2014and plan one approved leadership elective before graduation.",
+    "cached": false,
+    "run_id": "e6ee63736420",
+    "cost_usd": 0.000181
+   },
+   "cards": [
+    {
+     "title": "Add 3 more units to Spring 2027",
+     "due": "2027-01-26",
+     "source": "programs.MBA min_units (Yale Bulletin 2026-27)"
+    },
+    {
+     "title": "Pick a Global Studies path",
+     "due": "2027-03-08",
+     "source": "rules.GSR_OPTIONS + planning.gsa_check"
+    },
+    {
+     "title": "Plan a Leadership (LDR) course",
+     "due": null,
+     "source": "rules.LDR (MGLD flag, inferred)"
+    }
+   ]
+  },
+  "inject": {
+   "status": 200,
+   "seconds": 0.01,
+   "blocked": true,
+   "safety": [
+    "asks the assistant to ignore its instructions",
+    "asks for the hidden system prompt",
+    "asks for keys or secrets"
+   ],
+   "usage": {
+    "run_id": "b99ddca5ba00",
+    "model": "gpt-6-luna",
+    "agents": [],
+    "total": {
+     "requests": 0,
+     "input_tokens": 0,
+     "cached_tokens": 0,
+     "output_tokens": 0,
+     "web_searches": 0,
+     "cost_usd": 0
+    },
+    "run_budget_usd": 0.05,
+    "spent_today_usd": 0.003758,
+    "daily_budget_usd": 0.5
+   },
+   "answer": "I can't help with that one. It looks like an attempt to change my rules or get at private data (asks the assistant to ignore its instructions; asks for the hidden system prompt; asks for keys or secrets). I only help with your own SOM planning, courses and AI news. Try asking me something like \u201cfind me a spring elective on healthcare strategy\u201d.",
+   "trace": [
+    {
+     "kind": "safety",
+     "t_ms": 2,
+     "check": "input_blocked",
+     "reasons": [
+      "asks the assistant to ignore its instructions",
+      "asks for the hidden system prompt",
+      "asks for keys or secrets"
+     ],
+     "length": 85
+    }
+   ]
+  },
+  "news": {
+   "status": 200,
+   "seconds": 16.02,
+   "agent": "AI News Desk",
+   "blocked": false,
+   "safety": [],
+   "usage": {
+    "run_id": "fff78e98faf5",
+    "model": "gpt-6-luna",
+    "agents": [
+     {
+      "agent": "AI News Desk",
+      "requests": 2,
+      "input_tokens": 22455,
+      "cached_tokens": 6150,
+      "output_tokens": 935,
+      "web_searches": 2,
+      "cost_usd": 0.022159,
+      "seconds": 16.014791
+     }
+    ],
+    "total": {
+     "requests": 2,
+     "input_tokens": 22455,
+     "cached_tokens": 6150,
+     "output_tokens": 935,
+     "web_searches": 2,
+     "cost_usd": 0.022159
+    },
+    "run_budget_usd": 0.05,
+    "spent_today_usd": 0.025917,
+    "daily_budget_usd": 0.5
+   },
+   "answer": "My pick this week: **AI cybersecurity is moving from a theoretical concern to an operational one.**\n\n- A weekly roundup highlighted AI-enabled vulnerability discovery as a risk affecting real websites, not just a lab problem. ([AI Portal, Oct 25](https://ai-portal.si/whats-new/week-in-ai-2026-10-25))\n- The same week, the UK reportedly announced more than \u00a3600 million for AI security. I\u2019d treat that figure cautiously: the source I found is a secondary report, not a government announcement. ([note.com, Oct 24](https://note.com/ripe_crab6964/n/ncdb36497faed?hl=en))\n\n**Learn this at SOM:** MGT 554 AI for Business Decisions covers how organizations use predictive and generative AI to create value\u2014useful context for judging how AI could reshape healthcare businesses.",
+   "trace": [
+    {
+     "kind": "agent_start",
+     "t_ms": 2,
+     "agent": "AI News Desk"
+    },
+    {
+     "kind": "tool",
+     "t_ms": 10341,
+     "tool": "search_catalog",
+     "args": {
+      "query": "AI cybersecurity safety governance",
+      "term": "any"
+     },
+     "allowed": true
+    },
+    {
+     "kind": "agent_done",
+     "t_ms": 16018,
+     "agent": "AI News Desk",
+     "tool_calls": [
+      "search_catalog"
+     ],
+     "usage": {
+      "agent": "AI News Desk",
+      "requests": 2,
+      "input_tokens": 22455,
+      "cached_tokens": 6150,
+      "output_tokens": 935,
+      "web_searches": 2,
+      "cost_usd": 0.022159,
+      "seconds": 16.014791
+     }
+    }
+   ]
+  }
+ }
+}

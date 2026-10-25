@@ -4,12 +4,12 @@
 
 <h1 align="center">Plan with Dan 🐶</h1>
 <p align="center"><b>An AI chief of staff for Yale SOM students.</b><br>
-Every day it surfaces the few planning decisions that matter (with real SOM deadlines), ranks real courses against your goals, keeps your timetable clash-free, plans Global Studies, coaches your bids and syncs your calendar. Nothing changes until you click, and every change can be undone.</p>
+Tell Dan what you want from SOM and Elihu, his course-picking owl, ranks real courses for it across every quarter you have left (through Spring 2028). Keep your timetable clash-free, track Global Studies, Leadership and your Pass/Fail budget, plan bids and swaps, add courses from other Yale schools, and sync your calendar. Nothing changes until you click, and every change can be undone.</p>
 
 <p align="center">
-  <b>Live app:</b> <i>(Render link added at deploy time)</i> ·
-  <b>Report:</b> <code>submission/report.html</code> ·
-  <b>Slides:</b> <code>submission/slides.html</code>
+  <b>Live app: <a href="https://plan-with-dan.onrender.com">plan-with-dan.onrender.com</a></b> (free hosting: the first load can take ~1 minute while it wakes up) ·
+  <b>Report:</b> <code>Final Project Submission/report.html</code> ·
+  <b>Slides:</b> <code>Final Project Submission/slides.html</code>
 </p>
 
 ---
@@ -73,7 +73,7 @@ Sessions last 30 days and renew while in use. App updates that add database fiel
 ```bash
 python -m pytest -q
 ```
-There are 61 tests covering:
+There are 136 tests covering:
 - safety: injection blocking, invented-course removal and spend caps
 - accounts and web security: login enumeration, CSRF and the CSP header
 - planning rules: clash logic, spring core units, the 16-unit window, non-MBA programs, Global Studies data, the make-up day, and planned-vs-done requirements
@@ -87,6 +87,11 @@ There are 61 tests covering:
 - Yale facts lookup
 - program rules for EMBA, MAM and all MMS tracks
 - database migrations
+- Course picks (ranking across quarters, apply, undo), moving courses between years, the Pass/Fail budget, screenshot import, outside-SOM courses, swap checks, cross-listed tags, other-Yale course search, the owner dashboard's privacy
+
+**Course data**
+- SOM courses: SOM's public course feed (`backend/som_feed.py`), snapshot in `data/yale_som_classes.json` (451 sections, 2026–27). SOM hasn't published 2027–28 yet, so Fall 2027 and Spring 2028 plans use this year's offering in the same quarter, and the app says so.
+- Courses at other Yale schools: `python scripts/fetch_yale_courses.py` rebuilds `data/yale_other_courses.json` from the public Yale Bulletin (Graduate School, Jackson, Environment, Public Health; ~1,100 courses, no meeting times). Yale Course Search answers automated requests with a bot challenge, so we don't use it.
 
 **Frontend development (optional, needs Node 20+)**
 ```bash

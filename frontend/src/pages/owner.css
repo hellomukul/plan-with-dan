@@ -1,0 +1,50 @@
+/* Owner dashboard (shared stat tiles, tables and callouts live in pages-b.css). */
+.ow-head { align-items: flex-end; }
+.ow-refresh { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ow-num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.ow-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: stretch; }
+@media (max-width: 900px) { .ow-grid { grid-template-columns: 1fr; } }
+
+/* Funnel and breakdown lists */
+.ow-funnel { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
+.ow-funnel li { display: flex; flex-direction: column; gap: 6px; }
+.ow-sub { font-size: 12px; color: var(--faint); margin-bottom: 4px; }
+.ow-list { list-style: none; margin: 0; padding: 0; }
+.ow-list li { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+.ow-list li:last-child { border-bottom: 0; }
+
+/* 30-day chart: one metric, one axis, thin bars with a 2px gap and 4px rounded tops.
+   The chart and its table view share one fixed height, so switching never moves the page. */
+.ow-chart-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.ow-chart-box { height: 236px; }
+.ow-chart-table { overflow-y: auto; overscroll-behavior: contain; }
+.ow-plot { position: relative; height: 210px; margin-left: 44px; }
+.ow-grid-line { position: absolute; left: 0; right: 0; border-top: 1px solid var(--line); }
+.ow-grid-line span { position: absolute; right: calc(100% + 8px); top: -8px; font-family: var(--mono); font-size: 11px; color: var(--faint); white-space: nowrap; }
+.ow-bars { position: absolute; inset: 0; display: flex; align-items: stretch; gap: 2px; }
+.ow-col { position: relative; flex: 1 1 0; min-width: 0; display: flex; align-items: flex-end; cursor: default; }
+.ow-bar { display: block; width: 100%; background: var(--accent-fill); border-radius: 4px 4px 0 0; }
+.ow-col.hover .ow-bar { background: var(--accent-fill-hover); }
+.ow-col.hover::before { content: ''; position: absolute; inset: 0; background: rgba(255, 255, 255, 0.04); border-radius: 4px; pointer-events: none; }
+.ow-tip { position: absolute; top: 4px; left: 50%; transform: translateX(-50%); z-index: 3; display: flex; flex-direction: column; gap: 2px;
+  padding: 6px 9px; background: var(--card-2); border: 1px solid var(--line-2); border-radius: 8px; font-size: 12px; color: var(--muted); white-space: nowrap; pointer-events: none; }
+.ow-tip b { color: var(--text); font-weight: 500; }
+.ow-tip.left { left: auto; right: 0; transform: none; }
+.ow-col:nth-child(-n + 4) .ow-tip { left: 0; transform: none; }
+.ow-x { display: flex; gap: 2px; margin-left: 44px; margin-top: 6px; height: 20px; }
+.ow-x span { flex: 1 1 0; min-width: 0; overflow: visible; white-space: nowrap; font-size: 11px; color: var(--faint); }
+.ow-x span:last-child { text-align: right; direction: rtl; }
+
+.ow-recent td { vertical-align: middle; }
+.ow-recent th, .ow-recent td { white-space: nowrap; }
+
+/* Loading skeleton, roughly the loaded page's shape */
+.ow-skel { display: block; border-radius: var(--radius); }
+.ow-skel-tiles { height: 86px; }
+.ow-skel-chart { height: 330px; }
+.ow-skel-card { height: 320px; }
+
+@media (max-width: 640px) {
+  .ow-head .btn, .ow-chart-head .tabs button, .ow-chart-head .btn { min-height: 44px; }
+  .ow-plot, .ow-x { margin-left: 36px; }
+}

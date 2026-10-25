@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Compass, Ellipsis, LogOut, Search, Shield, UserRound } from 'lucide-react'
+import { ChartLine, Compass, Ellipsis, LogOut, Search, Shield, UserRound } from 'lucide-react'
 import { api } from './api'
 import CommandPalette from './components/CommandPalette'
 import CourseDrawer from './components/CourseDrawer'
@@ -21,6 +21,7 @@ import Privacy from './pages/Privacy'
 import Shortlist from './pages/Shortlist'
 import Help from './pages/Help'
 import Usage from './pages/Usage'
+import Owner from './pages/Owner'
 import { useFocusTrap } from './components/ui'
 import { AppProvider, isRoute, useApp, type Route } from './state'
 
@@ -37,6 +38,7 @@ function Page({ route }: { route: Route }) {
     case 'global': return <Global />
     case 'bids': return <Bids />
     case 'usage': return <Usage />
+    case 'owner': return <Owner />
     case 'privacy': return <Privacy />
     case 'profile': return <Onboarding editing />
     case 'home': return <Home />
@@ -140,6 +142,7 @@ function Shell() {
         <div className="nav-spacer" />
         <a href="#/profile" className={`nav-item ${route === 'profile' ? 'active' : ''}`} aria-current={route === 'profile' ? 'page' : undefined}><UserRound className="icon" /><span>Profile and goals</span></a>
         <a href="#/privacy" className={`nav-item ${route === 'privacy' ? 'active' : ''}`} aria-current={route === 'privacy' ? 'page' : undefined}><Shield className="icon" /><span>Privacy and data</span></a>
+        {user.owner && <a href="#/owner" className={`nav-item ${route === 'owner' ? 'active' : ''}`} aria-current={route === 'owner' ? 'page' : undefined}><ChartLine className="icon" /><span>Owner dashboard</span></a>}
         <button className="nav-item" onClick={logout}><LogOut className="icon" /><span>Sign out</span></button>
         <div className="faint small" style={{ padding: '8px 10px' }}>{user.email}</div>
       </aside>
@@ -167,6 +170,7 @@ function Shell() {
             ))}
             <a href="#/profile" className="nav-item"><UserRound className="icon" /><span>Profile and goals</span></a>
             <a href="#/privacy" className="nav-item"><Shield className="icon" /><span>Privacy and data</span></a>
+            {user.owner && <a href="#/owner" className="nav-item"><ChartLine className="icon" /><span>Owner dashboard</span></a>}
             <button className="nav-item" onClick={logout}><LogOut className="icon" /><span>Sign out</span></button>
           </div>
         </div>

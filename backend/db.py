@@ -34,6 +34,8 @@ class User(SQLModel, table=True):
     created_at: datetime = Field(default_factory=utcnow)
     # True once Google or Microsoft has vouched for this email (password sign-up never verifies it).
     email_verified: bool = False
+    # Last signed-in request (written at most every few minutes): powers "active now" on the owner dashboard.
+    last_seen_at: Optional[datetime] = None
 
 
 class OAuthIdentity(SQLModel, table=True):
@@ -283,8 +285,17 @@ class PersonalEvent(SQLModel, table=True):
     created_at: datetime = Field(default_factory=utcnow)
 
 
+class ActivityDay(SQLModel, table=True):
+    """One row per student per New York day they used the app signed in: daily/weekly active counts for the owner."""
+
+    __table_args__ = (UniqueConstraint("user_id", "day", name="uq_activity_user_day"),)
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(index=True, foreign_key="user.id")
+    day: str = Field(index=True)  # ISO date, New York time
+
+
 USER_TABLES = (AuthSession, OAuthIdentity, Profile, PlanItem, GlobalChoice, ChatMessage, ChatMemory, AuditEvent, RecommendationRun,
-               DeskState, DeskBrief, FitDismissal, ActionLog, ShortlistItem, PersonalEvent)
+               DeskState, DeskBrief, FitDismissal, ActionLog, ShortlistItem, PersonalEvent, ActivityDay)
 
 
 def _make_engine():

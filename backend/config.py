@@ -58,6 +58,12 @@ MICROSOFT_CLIENT_SECRET = os.getenv("MICROSOFT_CLIENT_SECRET", "").strip()
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "").strip().rstrip("/")
 
 
+def owner_emails() -> set[str]:
+    """Who may open the owner dashboard: OWNER_EMAILS, comma-separated. Unset means nobody.
+    List only emails that already have an account here (sign-up doesn't verify email ownership)."""
+    return {e.strip().lower() for e in os.getenv("OWNER_EMAILS", "").split(",") if e.strip()}
+
+
 def api_key() -> tuple[str, str]:
     """Return (key, kind). PORTKEY_API_KEY is preferred; OPENAI_API_KEY also works."""
     portkey = os.getenv("PORTKEY_API_KEY", "").strip()

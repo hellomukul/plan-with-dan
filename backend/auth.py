@@ -17,18 +17,20 @@ import secrets
 import time
 import threading
 from datetime import timedelta
+from zoneinfo import ZoneInfo
 
 from email_validator import EmailNotValidError, validate_email
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pwdlib import PasswordHash
 from pydantic import BaseModel
+from sqlalchemy.exc import IntegrityError
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlmodel import Session, select
 
 import config
 from config import SECURE_COOKIES, SESSION_DAYS
-from db import AuthSession, Profile, User, aware, get_db, log_audit, utcnow
+from db import ActivityDay, AuthSession, Profile, User, aware, get_db, log_audit, utcnow
 from safety import screen_input
 
 COOKIE = "pwd_session"
@@ -118,7 +120,7 @@ def public_user(user: User) -> dict:
     db = object_session(user)
     providers = sorted({i.provider for i in db.exec(select(OAuthIdentity).where(OAuthIdentity.user_id == user.id))}) if db else []
     return {"id": user.id, "email": user.email, "name": user.name, "providers": providers,
-            "has_password": bool(user.password_hash)}
+            "has_password": bool(user.password_hash), "owner": user.email.lower() in config.owner_emails()}
 
 
 def current_user(request: Request, response: Response, db: Session = Depends(get_db)) -> User:
@@ -137,7 +139,34 @@ def current_user(request: Request, response: Response, db: Session = Depends(get
         db.add(session)
         db.commit()
         _set_cookie(request, response, token)
+    _note_activity(db, user)
     return user
+
+
+NEW_YORK = ZoneInfo("America/New_York")
+SEEN_EVERY = timedelta(minutes=5)
+
+
+def _note_activity(db: Session, user: User) -> None:
+    """Record that this student is using the app: last_seen_at (at most every 5 minutes) and one
+    ActivityDay row per New York day. Counts only, for the owner dashboard; nothing about what they did."""
+    now = utcnow()
+    last = aware(user.last_seen_at) if user.last_seen_at else None
+    if last and now - last < SEEN_EVERY:
+        return
+    today = now.astimezone(NEW_YORK).date().isoformat()
+    new_day = last is None or last.astimezone(NEW_YORK).date().isoformat() != today
+    user.last_seen_at = now
+    db.add(user)
+    if new_day and not db.exec(select(ActivityDay).where(ActivityDay.user_id == user.id, ActivityDay.day == today)).first():
+        db.add(ActivityDay(user_id=user.id, day=today))
+    try:
+        db.commit()
+    except IntegrityError:  # two tabs on the same first request of the day: the other one already logged it
+        db.rollback()
+        user.last_seen_at = now
+        db.add(user)
+        db.commit()
 
 
 def optional_user(request: Request, response: Response, db: Session = Depends(get_db)) -> User | None:

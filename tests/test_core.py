@@ -1319,3 +1319,47 @@ def test_admits_keep_their_year_and_plan_2027_28_only(client):
     assert c.put("/api/profile", json={"program": "MBA", "year": "admit"}).status_code == 200
     assert c.get("/api/profile").json()["profile"]["year"] == "admit"
     assert [t["code"] for t in c.get("/api/plan").json()["planning_terms"]] == ["202703", "202801"]
+
+
+# ---------------------------------------------------------------- owner dashboard
+
+def test_owner_dashboard_is_private_and_counts_without_leaking(client, monkeypatch):
+    monkeypatch.setenv("OWNER_EMAILS", "Boss@Yale.edu, other@yale.edu")
+    stranger = client.__class__(client.app)
+    assert stranger.get("/api/owner/stats").status_code == 401  # signed out
+    stranger.post("/api/auth/signup", json={"email": "nosy.student@yale.edu", "password": "a long enough phrase"})
+    assert stranger.get("/api/owner/stats").status_code == 404  # signed in, not an owner: the page doesn't exist
+    assert stranger.get("/api/auth/me").json()["user"]["owner"] is False
+
+    boss = client.__class__(client.app)
+    boss.post("/api/auth/signup", json={"email": "boss@yale.edu", "password": "a long enough phrase"})
+    assert boss.get("/api/auth/me").json()["user"]["owner"] is True
+    boss.put("/api/profile", json={"program": "MBA", "year": "1", "cohort": "Gold", "onboarded": True})
+    r = boss.get("/api/owner/stats")
+    assert r.status_code == 200
+    d = r.json()
+    t = d["totals"]
+    assert t["users"] >= 2 and t["new_today"] >= 2 and t["active_today"] >= 2 and t["active_now"] >= 2
+    assert len(d["daily"]) == 30 and d["daily"][-1]["signups"] >= 2
+    assert [f["key"] for f in d["funnel"]] == ["signed_up", "onboarded", "planned", "used_ai", "returned"]
+    assert d["funnel"][0]["count"] == t["users"]
+    assert d["methods"]["email"] >= 2
+    assert any(f["key"] == "plan_next" for f in d["features"])
+    assert any(row["you"] for row in d["recent"])
+    body = r.text.lower()
+    assert "@yale.edu" not in body and "nosy" not in body  # counts and anonymous rows only
+
+
+def test_activity_is_logged_once_per_day(client):
+    import db as dbmod
+    from sqlmodel import Session, select
+    c = client.__class__(client.app)
+    c.post("/api/auth/signup", json={"email": "daily.user@yale.edu", "password": "a long enough phrase"})
+    for _ in range(3):
+        c.get("/api/auth/me")
+        c.get("/api/plan")
+    with Session(dbmod.engine) as s:
+        u = s.exec(select(dbmod.User).where(dbmod.User.email == "daily.user@yale.edu")).one()
+        assert u.last_seen_at is not None
+        assert len(s.exec(select(dbmod.ActivityDay).where(dbmod.ActivityDay.user_id == u.id)).all()) == 1
+    assert c.post("/api/account/delete", json={"password": "a long enough phrase"}).status_code == 200  # cleans it up

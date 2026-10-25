@@ -165,6 +165,8 @@ async def guard_requests(request: Request, call_next):
 app.include_router(auth.router)
 import oauth  # noqa: E402  (Continue with Google / Microsoft)
 app.include_router(oauth.router)
+import owner  # noqa: E402  (owner-only dashboard: sign-ups, active students, spend)
+app.include_router(owner.router)
 
 
 # ------------------------------------------------------------------ health + catalog

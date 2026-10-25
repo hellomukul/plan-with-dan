@@ -4,9 +4,9 @@ import { api, type PlanResponse, type Profile, type Section, type User } from '.
 import { forgetVisitorChat } from './lib/danChat'
 
 export type Route =
-  | 'home' | 'find' | 'explore' | 'faculty' | 'plan' | 'shortlist' | 'help' | 'global' | 'bids' | 'calendar' | 'chat' | 'usage' | 'profile' | 'privacy'
+  | 'home' | 'find' | 'explore' | 'faculty' | 'plan' | 'shortlist' | 'help' | 'global' | 'bids' | 'calendar' | 'chat' | 'usage' | 'profile' | 'privacy' | 'owner'
 
-export const ROUTES: readonly Route[] = ['home', 'find', 'explore', 'faculty', 'plan', 'shortlist', 'help', 'global', 'bids', 'calendar', 'chat', 'usage', 'profile', 'privacy']
+export const ROUTES: readonly Route[] = ['home', 'find', 'explore', 'faculty', 'plan', 'shortlist', 'help', 'global', 'bids', 'calendar', 'chat', 'usage', 'profile', 'privacy', 'owner']
 export const isRoute = (r: string): r is Route => (ROUTES as readonly string[]).includes(r)
 
 export interface Toast { id: number; text: string; tone?: 'good' | 'bad'; action?: { label: string; run: () => void } }

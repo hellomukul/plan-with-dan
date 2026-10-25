@@ -59,6 +59,8 @@ Render's free disk is wiped on every deploy, restart or idle spin-down. A SQLite
 
 To check the app against Postgres, run the whole test suite on an **empty** database: `TEST_DATABASE_URL=<url> python -m pytest -q`. It passed 58/58 on Neon (PostgreSQL 18) on Oct 24, 2026.
 
+**Owner dashboard.** Set `OWNER_EMAILS` (comma-separated) in Render to the email of your own account. That account then sees **Owner dashboard** in the sidebar (`#/owner`): sign-ups, finished setup, active today / this week / this month, a 30-day chart, feature use, AI spend and the newest accounts. It refreshes every minute and shows no emails or names. Everyone else gets "page doesn't exist". List only emails that already have an account, since sign-up doesn't verify email ownership.
+
 Owner tools (`scripts/db_tools.py`):
 - `stats`: row counts.
 - `backup`: a JSON snapshot. Keep these private, since they contain emails and password hashes.

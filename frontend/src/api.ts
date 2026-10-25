@@ -1,7 +1,23 @@
 /** Typed client for the Plan with Dan API. Same origin, cookie session. */
 
-export interface User { id: number; email: string; name: string; providers?: OAuthProvider[]; has_password?: boolean }
+export interface User { id: number; email: string; name: string; providers?: OAuthProvider[]; has_password?: boolean; owner?: boolean }
 export type OAuthProvider = 'google' | 'microsoft'
+
+/** Owner dashboard: live counts (no emails or names). */
+export interface OwnerStats {
+  generated_at: string
+  timezone: string
+  window_days: number
+  totals: { users: number; onboarded: number; new_today: number; new_7d: number; active_now: number; active_today: number; active_7d: number; active_30d: number }
+  funnel: { key: string; label: string; count: number }[]
+  methods: Record<'email' | 'google' | 'microsoft', number>
+  programs: { key: string; label: string; count: number }[]
+  years: { key: string; label: string; count: number }[]
+  features: { key: string; label: string; count: number; users: number | null }[]
+  spend: Record<'today' | 'd7' | 'd30' | 'all', { usd: number; runs: number }> & { daily_cap_per_student_usd: number }
+  daily: { date: string; signups: number; active: number; questions: number; cost_usd: number }[]
+  recent: { label: string; you: boolean; joined: string; method: string; program: string; year: string; onboarded: boolean; last_active: string | null; active_days: number; plan_items: number; questions: number }[]
+}
 /** Full-page link that starts "Continue with Google / Microsoft" (a redirect, not a fetch). */
 export const oauthStartUrl = (p: OAuthProvider, intent: 'signup' | 'login' | 'calendar' | 'link') => `/api/auth/oauth/${p}/start?intent=${intent}`
 
@@ -500,6 +516,7 @@ export const api = {
   latestRecommendation: () => request<{ result: RecResult | null }>('GET', '/api/recommend/latest'),
 
   usage: () => request<UsageResponse>('GET', '/api/usage'),
+  ownerStats: () => request<OwnerStats>('GET', '/api/owner/stats'),
   usageAll: () => request<{ by_feature: { feature: string; runs: number; input_tokens: number; cached_tokens: number; output_tokens: number; web_searches: number; cost_usd: number; avg_cost_per_run: number }[] }>('GET', '/api/usage/all'),
   safetyEvents: () => request<{ events: SafetyEvent[] }>('GET', '/api/safety/events'),
 }

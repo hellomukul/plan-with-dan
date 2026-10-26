@@ -2,16 +2,17 @@
 
 MGT 409 · AI Foundations for Managers · due **Monday, Oct 26, 2026, 6:00 PM** on Canvas.
 
-## What to submit on Canvas
+## What to submit on Canvas (per Prof. Zaman's announcement, Oct 25)
 
-| Item | What to upload or paste |
+Canvas takes files only. Upload **exactly these**, nothing else (extra files are penalised):
+
+| Item | File |
 |---|---|
-| GitHub repo (website URL) | https://github.com/hellomukul/plan-with-dan (public, or private with `zlisto` added as a collaborator) |
-| Report | `report.html` from this folder: one self-contained file, images embedded |
-| Slide deck | `slides.html` from this folder: reveal.js from a CDN, 10 slides, images embedded |
+| Report | `report.html` from this folder: one self-contained file, images embedded. The public repo link (https://github.com/hellomukul/plan-with-dan) and a `git clone` command are at the top. |
+| Slide deck | `slides.html` from this folder: reveal.js from a CDN, 10 slides, images embedded. The public repo link is on slides 1 and 10. |
 | Demo video (optional) | A 2–3 minute screen recording of a real run (goal → Course picks → My plan → Ask Dan) |
 
-**Live app:** https://plan-with-dan.onrender.com (free tier: open it the day you submit; the first load can take up to a minute).
+The repo is **public**, so no collaborator invite is needed. **Live app:** https://plan-with-dan.onrender.com (free tier: open it the day you submit; the first load can take up to a minute).
 
 Don't upload `src/`, `img/`, `evidence/`, `build.py` or the notes: they're here to rebuild and check the two HTML files.
 
